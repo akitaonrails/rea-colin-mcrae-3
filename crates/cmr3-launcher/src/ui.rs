@@ -7,6 +7,12 @@
 //! like a door decal. Three tabs keep it short: Play (the game folder and
 //! one choice of look), Picture and Controls.
 
+//! Look: the CMR3-era crimson branding — this launcher's own colour next
+//! to the 1998 game's rally blue, both with the one gold accent for
+//! whatever is chosen and a condensed italic title like a door decal, so
+//! the two read as one collection. Three tabs keep it short: Play (the
+//! game folder and one choice of look), Picture and Controls.
+
 use std::path::{Path, PathBuf};
 
 use cmr3_launcher::config::{self, Gamepad, Settings};
@@ -19,13 +25,16 @@ use eframe::egui::{
 
 use crate::win32;
 
-const BLUE: Color32 = Color32::from_rgb(0x0f, 0x2e, 0x6e);
-const PANEL: Color32 = Color32::from_rgb(0x16, 0x3a, 0x85);
-const LINE: Color32 = Color32::from_rgb(0x2b, 0x4f, 0x9e);
+/// The family palette: CMR1 is the 555 Impreza's rally blue, this one the
+/// CMR3-era crimson; the gold accent, ink and muted roles are shared so
+/// the launchers read as one collection.
+const BASE: Color32 = Color32::from_rgb(0x54, 0x10, 0x1c);
+const PANEL: Color32 = Color32::from_rgb(0x69, 0x18, 0x2a);
+const LINE: Color32 = Color32::from_rgb(0x8a, 0x2a, 0x42);
 const GOLD: Color32 = Color32::from_rgb(0xf5, 0xc4, 0x00);
-const INK: Color32 = Color32::from_rgb(0xee, 0xf2, 0xfb);
-const MUTED: Color32 = Color32::from_rgb(0xa7, 0xb6, 0xd9);
-const ON_GOLD: Color32 = Color32::from_rgb(0x10, 0x24, 0x4f);
+const INK: Color32 = Color32::from_rgb(0xf7, 0xf0, 0xf2);
+const MUTED: Color32 = Color32::from_rgb(0xd6, 0xaa, 0xb6);
+const ON_GOLD: Color32 = Color32::from_rgb(0x2b, 0x0d, 0x18);
 const ERROR: Color32 = Color32::from_rgb(0xff, 0x8a, 0x80);
 
 const SIZE: Vec2 = vec2(form::WINDOW.0, form::WINDOW.1);
@@ -121,7 +130,7 @@ fn set_style(ctx: &egui::Context) {
     ctx.all_styles_mut(|style| {
         let v = &mut style.visuals;
         *v = egui::Visuals::dark();
-        v.panel_fill = BLUE;
+        v.panel_fill = BASE;
         v.extreme_bg_color = PANEL;
         v.text_edit_bg_color = Some(PANEL);
         v.override_text_color = Some(INK);
@@ -359,7 +368,7 @@ impl eframe::App for Window<'_> {
             self.fit_screen(&ctx);
         }
         let full = ui.max_rect();
-        ui.painter().rect_filled(full, 0.0, BLUE);
+        ui.painter().rect_filled(full, 0.0, BASE);
         self.draw_photo(ui, full);
         draw_decal(ui, full);
 
@@ -777,11 +786,11 @@ impl Window<'_> {
 /// downwards.
 fn gradient(p: &egui::Painter, rect: Rect, horizontal: bool) {
     let mut mesh = Mesh::default();
-    let clear = Color32::from_rgba_unmultiplied(BLUE.r(), BLUE.g(), BLUE.b(), 0);
+    let clear = Color32::from_rgba_unmultiplied(BASE.r(), BASE.g(), BASE.b(), 0);
     let (a, b, c, d) = if horizontal {
-        (clear, BLUE, BLUE, clear)
+        (clear, BASE, BASE, clear)
     } else {
-        (clear, clear, BLUE, BLUE)
+        (clear, clear, BASE, BASE)
     };
     mesh.colored_vertex(rect.left_top(), a);
     mesh.colored_vertex(rect.right_top(), b);
