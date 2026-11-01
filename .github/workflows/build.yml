@@ -67,9 +67,10 @@ jobs:
           tar -xzf dxvk.tar.gz --strip-components=2 -C thirdparty/dxvk dxvk-3.1.1/x32/d3d9.dll
           echo "$(pins | awk '$1 == "dxvk-d3d9-sha256" { print $2 }')  thirdparty/dxvk/d3d9.dll" \
             | sha256sum -c -
-          cp packaging/licenses/* thirdparty/ 2>/dev/null || true
           cp packaging/licenses/DXVK-LICENSE thirdparty/dxvk/LICENSE
           cp packaging/licenses/SilentPatchCMR3-LICENSE thirdparty/silentpatch/LICENSE
+          cp packaging/licenses/xdelta3-LICENSE thirdparty/patcher/LICENSE
+          cp packaging/licenses/Xidi-LICENSE packaging/licenses/Xidi-Hookshot-LICENSE thirdparty/xidi/
 
       - name: Package
         run: |
