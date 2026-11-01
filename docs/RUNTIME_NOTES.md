@@ -49,3 +49,29 @@ no post-creation resize commands. Verified on this box: hyprctl lists
 crimson window with the gold Play plate, photo panel and text fields in
 place. (CMR1's launcher still does the resize dance; worth porting this
 fix there.)
+
+## 2026-11-01 — display modes under Wine, measured
+
+Controlled runs (this box: XWayland on Hyprland, scale 1.5, portrait +
+landscape monitors; DXVK swapchain and on-screen content width measured
+per run):
+
+| path | swapchain | content |
+| --- | --- | --- |
+| exclusive fullscreen, raw Wine | 2160×3840 (the portrait monitor!) | 56% — cropped |
+| exclusive fullscreen, ADAPTER overridden | unchanged | 56% |
+| borderless, raw Wine | 3840×2160 | 100% |
+| wine virtual desktop `explorer /desktop=W,H` | 3840×2160 | 100% |
+| fullscreen inside gamescope | correct | full (user-confirmed) |
+
+Wine's exclusive-fullscreen chases the desktop's monitor list and lands
+on the wrong display (portrait neighbours included); the game also
+rewrites WIDTH/HEIGHT/ADAPTER in the ini from that bad enumeration.
+Conclusions, now policy (`DisplayMode::effective`): Windows keeps the
+choice; Wine inside gamescope keeps true fullscreen; Wine anywhere else
+plays fullscreen as borderless at the same size — the game sizes that
+window itself, so display enumeration never runs. The launcher rewrites
+its keys before every launch, which also heals whatever the game saved.
+cmr3-play additionally found its settings next to the launcher exe
+(portable installs) before this round and defaulted gamescope to
+1920×1080; fixed and covered by tests.

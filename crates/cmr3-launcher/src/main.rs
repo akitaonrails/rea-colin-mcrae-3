@@ -249,6 +249,12 @@ mod app {
             log_line("executable: already DRM-free");
         }
 
+        // What we're running on, decided once: DXVK only helps under Wine,
+        // and the display mode the game can honour depends on whether
+        // gamescope already gives it a single screen.
+        let wine = win32::is_wine();
+        let gamescope = std::env::var_os("GAMESCOPE_WAYLAND_DISPLAY").is_some();
+
         // The bundled parts.
         match components::install_silentpatch(&rt, &bundle) {
             Ok(true) => log_line("SilentPatch installed"),
@@ -265,7 +271,7 @@ mod app {
             ),
             Err(e) => log_line(&format!("warning: Xidi: {e}")),
         }
-        let dxvk_on = settings.dxvk != Some(false) && win32::is_wine();
+        let dxvk_on = settings.dxvk != Some(false) && wine;
         match components::install_dxvk(&rt, &bundle, dxvk_on) {
             Ok(true) => log_line(if dxvk_on {
                 "DXVK installed (d3d9 through Vulkan)"
@@ -288,7 +294,26 @@ mod app {
             // screen that is what the settings window would have picked.
             win32::screen_size().filter(|_| settings.resolution.is_none())
         });
-        match components::apply_settings(&rt, &settings, resolution) {
+        // The display mode the game can actually honour here (see
+        // `DisplayMode::effective`): exclusive fullscreen under raw Wine
+        // chases the desktop's monitor list, so it plays borderless
+        // instead — same size, no mode switch, no wrong display.
+        let chosen = settings
+            .display_mode
+            .unwrap_or(config::DisplayMode::Fullscreen);
+        let mode = chosen.effective(wine, gamescope);
+        if mode != chosen {
+            log_line(&format!(
+                "display mode: {} plays borderless under Wine{} (exclusive fullscreen picks \
+                 the wrong display when the desktop has several; install gamescope — cmr3-play \
+                 uses it — for true fullscreen)",
+                chosen.key(),
+                if gamescope { " inside gamescope" } else { "" },
+            ));
+        }
+        let mut ini_settings = settings.clone();
+        ini_settings.display_mode = Some(mode);
+        match components::apply_settings(&rt, &ini_settings, resolution) {
             Ok(log) => log_line(&format!("SilentPatchCMR3.ini: {}", log.join(", "))),
             Err(e) => log_line(&format!("warning: cannot write the settings: {e}")),
         }
@@ -304,7 +329,7 @@ mod app {
             }
         }
 
-        if !win32::is_wine() {
+        if !wine {
             match win32::prefer_fast_gpu(&rt.join(EXE)) {
                 Ok(true) => log_line("Windows: high-performance GPU for the game"),
                 Ok(false) => {}

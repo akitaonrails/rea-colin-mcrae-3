@@ -29,13 +29,22 @@ RUN=${CMR3_RUN:-}
 STATE=$HOME/.config/cmr3-launcher
 mkdir -p "$STATE" "$PREFIX"
 
-# launcher.cfg is in the prefix user's AppData\Local\CMR3Launcher.
+# launcher.cfg is the one the launcher itself uses: next to its exe (a
+# portable install or the AppImage), or in the prefix user's
+# AppData\Local\CMR3Launcher.
 CFG=
-for d in "$PREFIX"/drive_c/users/*/AppData/Local/CMR3Launcher; do
-  case "$d" in */users/Public/*|*'*'*) continue ;; esac
-  [ -d "$d" ] && CFG=$d/launcher.cfg
-done
-[ -z "$CFG" ] && CFG=$PREFIX/drive_c/users/$USER/AppData/Local/CMR3Launcher/launcher.cfg
+if [ -n "$LAUNCHER" ]; then
+  for p in "$(dirname "$LAUNCHER")/launcher.cfg" "$(dirname "$(dirname "$LAUNCHER")")/launcher.cfg"; do
+    [ -f "$p" ] && CFG=$(readlink -f "$p")
+  done
+fi
+if [ -z "$CFG" ]; then
+  for d in "$PREFIX"/drive_c/users/*/AppData/Local/CMR3Launcher; do
+    case "$d" in */users/Public/*|*'*'*) continue ;; esac
+    [ -d "$d" ] && CFG=$d/launcher.cfg
+  done
+  [ -z "$CFG" ] && CFG=$PREFIX/drive_c/users/$USER/AppData/Local/CMR3Launcher/launcher.cfg
+fi
 
 get_key() { [ -f "$CFG" ] && sed -n "s|^$1 *= *||p" "$CFG" | tail -1; }
 LOCK=$STATE/running.pid

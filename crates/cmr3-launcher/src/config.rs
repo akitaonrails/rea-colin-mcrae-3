@@ -73,6 +73,24 @@ impl DisplayMode {
         }
     }
 
+    /// The mode to actually run: exclusive fullscreen under Wine (outside
+    /// gamescope's single-screen world) picks its display by enumerating
+    /// the desktop's monitors, and whatever that finds first — a rotated
+    /// or portrait neighbour included — is what the game renders into,
+    /// cropped, on every compositor that scales or reorders screens
+    /// (measured: a portrait monitor first in the list got the game a
+    /// 2160×3840 swapchain inside a landscape window). Borderless sizes
+    /// the game's own window to the chosen resolution instead: no
+    /// enumeration, the right pixels, everywhere. Inside gamescope there
+    /// is exactly one screen, so fullscreen stays fullscreen; on Windows
+    /// the game's own exclusive mode is the right thing.
+    pub fn effective(self, wine: bool, gamescope: bool) -> DisplayMode {
+        match (self, wine && !gamescope) {
+            (DisplayMode::Fullscreen, true) => DisplayMode::Borderless,
+            _ => self,
+        }
+    }
+
     fn parse(v: &str) -> Option<DisplayMode> {
         let v = v.trim().to_ascii_lowercase();
         DisplayMode::ALL.into_iter().find(|m| m.key() == v)
@@ -509,6 +527,23 @@ mod tests {
 
     fn args(a: &[&str]) -> Result<Settings, String> {
         Settings::parse_args(a.iter().map(|s| s.to_string()))
+    }
+
+    #[test]
+    fn fullscreen_under_raw_wine_plays_borderless() {
+        use DisplayMode as M;
+        // Windows native, and Wine inside gamescope's single screen: the
+        // choice stands, exclusive fullscreen included.
+        assert_eq!(M::Fullscreen.effective(false, false), M::Fullscreen);
+        assert_eq!(M::Fullscreen.effective(false, true), M::Fullscreen);
+        assert_eq!(M::Fullscreen.effective(true, true), M::Fullscreen);
+        // Raw Wine (any compositor): borderless, whose window the game
+        // sizes itself — display enumeration never runs.
+        assert_eq!(M::Fullscreen.effective(true, false), M::Borderless);
+        // The other modes are always fine as they are.
+        assert_eq!(M::Windowed.effective(true, false), M::Windowed);
+        assert_eq!(M::Borderless.effective(true, false), M::Borderless);
+        assert_eq!(M::Windowed.effective(false, false), M::Windowed);
     }
 
     #[test]
