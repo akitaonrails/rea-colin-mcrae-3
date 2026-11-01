@@ -39,11 +39,22 @@ BOXLOG=$(mktemp)
 $BOX sh -c "CMR3_PREFIX='$PREFIX' CMR3_LAUNCHER='$KIT/CMR3Launcher.exe' '$PLAY' --play" \
   > "$BOXLOG" 2>&1 &
 
-sleep "$ALIVE_AT"
+# Wait for the game (a fresh prefix boots Wine first; that can take a
+# while), then give it a moment to get past the launcher's own setup.
+boot=${CMR3_E2E_BOOT:-180}
+waited=0
+while [ "$waited" -lt "$boot" ]; do
+  pgrep -x Rally_3PC.exe >/dev/null && break
+  sleep 5
+  waited=$((waited + 5))
+done
 if pgrep -x Rally_3PC.exe >/dev/null; then
-  ok "game alive at ${ALIVE_AT}s"
+  ok "game running after ${waited}s"
+  sleep "${CMR3_E2E_ALIVE_AT:-10}"
+  pgrep -x Rally_3PC.exe >/dev/null && ok "still alive ${ALIVE_AT:=10}s later" \
+    || bad "game died right after starting"
 else
-  bad "game not running at ${ALIVE_AT}s; cmr3-play said: $(tail -5 "$BOXLOG" | tr '\n' ' ')"
+  bad "game never started within ${boot}s; cmr3-play said: $(tail -5 "$BOXLOG" | tr '\n' ' ')"
 fi
 
 # A quartz fault must not freeze the game: with winedbg disabled it ends
@@ -68,6 +79,8 @@ section | grep -q "runtime: " && ok "runtime synced" || bad "no runtime line"
 section | grep -q "SilentPatch installed" && ok "SilentPatch installed" || bad "no SilentPatch"
 section | grep -q "Xidi installed" && ok "Xidi installed" || bad "no Xidi"
 section | grep -q "DXVK installed" && ok "DXVK installed" || bad "no DXVK"
+# After the kill below, the launcher (which waits on the game) records the
+# exit — checked at the end, once the log has settled.
 section | grep -q "game exited with" && ok "launcher saw the game exit" \
   || bad "launcher never saw the game exit"
 
