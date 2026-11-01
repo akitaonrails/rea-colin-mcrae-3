@@ -35,3 +35,17 @@ Not yet run: a real pad through Xidi in-game, gamescope via `cmr3-play`
 protected 1.1 executable (the refusal path on a mismatched file passed
 in tests; no wine-free host check of a real patch yet), and the settings
 window itself (skipped with `--no-window`).
+
+## 2026-11-01 — the settings window under Wine (XWayland, scale 1.5)
+
+First builds resized the window after creation (egui viewport commands),
+which on XWayland at fractional scaling leaves the surface bigger than
+winit thinks — the picture sat squashed in the top left, white where the
+theme should be, and clicks landed on the wrong widgets (a pressed Play
+did nothing). Fix: create the window at its final size (`SIZE × zoom`,
+zoom worked out once up front) and only set egui's zoom factor after —
+no post-creation resize commands. Verified on this box: hyprctl lists
+`cmr3launcher.exe` at 880×640 logical, and a DP-1 capture shows the full
+crimson window with the gold Play plate, photo panel and text fields in
+place. (CMR1's launcher still does the resize dance; worth porting this
+fix there.)

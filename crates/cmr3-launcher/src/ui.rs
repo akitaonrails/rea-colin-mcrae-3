@@ -55,18 +55,32 @@ pub enum Outcome {
 /// without it.
 pub fn show(settings_path: &Path, text: &str, linux: bool) -> Result<Outcome, String> {
     let mut outcome = Outcome::Closed;
+    // The window is created at its final size: resizing after creation
+    // (min/max/inner size commands) leaves an XWayland window under Wine
+    // with a surface that no longer matches what winit thinks it asked
+    // for — the picture lands in the top left and clicks map to the wrong
+    // places. Under Wine nothing scales the window for us, so the design
+    // size is multiplied up front instead; on Windows the system's own
+    // DPI scaling does that, and winit sizes in points.
+    let wine = win32::is_wine();
+    let zoom = if wine {
+        form::window_zoom(win32::screen_size(), 1.0)
+    } else {
+        1.0
+    };
+    let size = SIZE * zoom;
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Colin McRae Rally 3")
-            .with_inner_size(SIZE)
-            .with_min_inner_size(SIZE)
-            .with_max_inner_size(SIZE)
+            .with_inner_size(size)
+            .with_min_inner_size(size)
+            .with_max_inner_size(size)
             .with_resizable(false)
             .with_maximize_button(false),
         // Under Wine the desktop's window manager places it (on the
         // monitor in use); Wine's idea of the main screen can be another
         // monitor.
-        centered: !win32::is_wine(),
+        centered: !wine,
         ..Default::default()
     };
     let path = settings_path.to_path_buf();
@@ -81,6 +95,7 @@ pub fn show(settings_path: &Path, text: &str, linux: bool) -> Result<Outcome, St
                 path,
                 text,
                 linux,
+                zoom,
                 &mut outcome,
             )))
         }),
@@ -226,7 +241,10 @@ struct Window<'a> {
     path: PathBuf,
     text: String,
     error: Option<String>,
-    /// The size for this screen is set on the first frame.
+    /// The drawing scale chosen in `show` (1.0 on Windows, where the
+    /// system's DPI scaling sizes the window).
+    zoom: f32,
+    /// Whether the scale has been set (first frame).
     sized: bool,
     /// The gamepad buttons held at the last look, and what pressing them
     /// asks of this frame.
@@ -241,6 +259,7 @@ impl<'a> Window<'a> {
         path: PathBuf,
         text: String,
         linux: bool,
+        zoom: f32,
         outcome: &'a mut Outcome,
     ) -> Window<'a> {
         let screen = win32::screen_size();
@@ -263,6 +282,7 @@ impl<'a> Window<'a> {
             path,
             text,
             error: None,
+            zoom,
             sized: false,
             pad_held: 0,
             pad_actions: Vec::new(),
@@ -270,29 +290,18 @@ impl<'a> Window<'a> {
         }
     }
 
-    /// Draws everything larger on a large screen (1.5x at 4K), as the
-    /// desktop's own scaling often doesn't reach programs under Wine, and
-    /// centres the larger window.
+    /// Sets the drawing scale on the first frame (the window itself was
+    /// created at its final size — no resizing after creation, which
+    /// breaks the surface on XWayland under Wine; see `show`).
     fn fit_screen(&mut self, ctx: &egui::Context) {
         self.sized = true;
-        let native = ctx.native_pixels_per_point().unwrap_or(1.0);
-        let zoom = form::window_zoom(self.screen, native);
-        if zoom == 1.0 {
-            return;
+        if self.zoom != 1.0 {
+            ctx.set_zoom_factor(self.zoom);
         }
-        ctx.set_zoom_factor(zoom);
-        let size = SIZE * zoom;
-        for cmd in [
-            egui::ViewportCommand::MinInnerSize(size),
-            egui::ViewportCommand::MaxInnerSize(size),
-            egui::ViewportCommand::InnerSize(size),
-        ] {
-            ctx.send_viewport_cmd(cmd);
-        }
-        if win32::is_wine() {
-            return;
-        }
-        if let Some(monitor) = ctx.input(|i| i.viewport().monitor_size) {
+        if !win32::is_wine()
+            && let Some(monitor) = ctx.input(|i| i.viewport().monitor_size)
+        {
+            let size = SIZE * self.zoom;
             let at = ((monitor - size) / 2.0).max(Vec2::ZERO);
             ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(at.to_pos2()));
         }
