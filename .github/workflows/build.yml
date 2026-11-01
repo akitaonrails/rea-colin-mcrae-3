@@ -1,0 +1,117 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-binaries:
+    name: Test and build the Windows package
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install the 32-bit MinGW toolchain
+        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-i686 zip
+
+      - name: Install Rust (with the 32-bit Windows target)
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy,rustfmt
+          rustup target add i686-pc-windows-gnu
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Unit tests (host)
+        run: cargo test --workspace
+
+      - name: Linux helper tests (GPU choice, gamescope args)
+        run: sh linux/tests/gpu-env.sh && sh linux/tests/scaler.sh
+
+      - name: Lint (Windows target)
+        run: cargo clippy --release --target i686-pc-windows-gnu --workspace -- -D warnings
+
+      - name: Build CMR3Launcher.exe
+        run: cargo build --release --target i686-pc-windows-gnu --workspace
+
+      - name: Fetch and verify the bundled components
+        run: |
+          pins() { grep -v '^#' packaging/third-party.txt | grep .; }
+          url_of() { pins | awk -v n="$1" '$1 == n { print $2 }'; }
+          sha_of() { pins | awk -v n="$1" '$1 == n { print $3 }'; }
+          fetch() { # name file
+            curl -fsSL "$(url_of "$1")" -o "$2"
+            echo "$(sha_of "$1")  $2" | sha256sum -c -
+          }
+          mkdir -p thirdparty/silentpatch thirdparty/xidi thirdparty/patcher thirdparty/dxvk
+          fetch silentpatch SilentPatch.zip
+          fetch patcher CMR3Patcher.zip
+          fetch xidi Xidi.zip
+          fetch hd-ui hd-ui.zip
+          fetch dxvk dxvk.tar.gz
+          unzip -qo SilentPatch.zip -d sp
+          unzip -qo CMR3Patcher.zip -d patcher-x
+          unzip -qo Xidi.zip -d xidi-x
+          unzip -qo hd-ui.zip -d thirdparty/hd-ui
+          cp sp/SilentPatchCMR3.asi sp/dinput8.dll sp/ReadMe.txt thirdparty/silentpatch/
+          cp patcher-x/patcher/xdelta.exe patcher-x/patcher/efigs.xdelta \
+             patcher-x/patcher/polish.xdelta patcher-x/ReadMe-Patcher.txt thirdparty/patcher/
+          cp xidi-x/Xidi-v4.3.1/Win32/dinput8.dll thirdparty/xidi/
+          cp xidi-x/Xidi-v4.3.1/LICENSE thirdparty/xidi/LICENSE
+          tar -xzf dxvk.tar.gz --strip-components=2 -C thirdparty/dxvk dxvk-3.1.1/x32/d3d9.dll
+          echo "$(pins | awk '$1 == "dxvk-d3d9-sha256" { print $2 }')  thirdparty/dxvk/d3d9.dll" \
+            | sha256sum -c -
+          cp packaging/licenses/* thirdparty/ 2>/dev/null || true
+          cp packaging/licenses/DXVK-LICENSE thirdparty/dxvk/LICENSE
+          cp packaging/licenses/SilentPatchCMR3-LICENSE thirdparty/silentpatch/LICENSE
+
+      - name: Package
+        run: |
+          name=CMR3Launcher-${GITHUB_REF_NAME//\//-}
+          mkdir -p "dist/$name"
+          cp target/i686-pc-windows-gnu/release/CMR3Launcher.exe \
+             README.md THIRD_PARTY.md LICENSE-MIT LICENSE-APACHE "dist/$name/"
+          cp -r thirdparty "dist/$name/thirdparty"
+          cp -r linux "dist/$name/linux"
+          (cd dist && zip -r "$name.zip" "$name")
+          echo "PACKAGE=dist/$name.zip" >> "$GITHUB_ENV"
+          echo "PACKAGE_DIR=dist/$name" >> "$GITHUB_ENV"
+          echo "APPIMAGE=dist/$name-x86_64.AppImage" >> "$GITHUB_ENV"
+
+      - name: Build the Linux AppImage (with a portable Wine)
+        run: |
+          packaging/appimage/build.sh "$PACKAGE_DIR" dist/appimage
+          mv dist/appimage/CMR3Launcher-x86_64.AppImage "$APPIMAGE"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: CMR3Launcher-windows
+          path: ${{ env.PACKAGE }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: CMR3Launcher-linux
+          path: ${{ env.APPIMAGE }}
+
+  release:
+    name: Publish a release for version tags
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: windows-binaries
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: CMR3Launcher-*
+          merge-multiple: true
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes ./*.zip ./*.AppImage

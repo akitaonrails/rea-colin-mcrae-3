@@ -1,0 +1,23 @@
+# The bundled components: fetched and checksummed when the package is
+# built (see .github/workflows/build.yml and packaging/appimage/build.sh).
+# One download per line: name url sha256
+
+# SilentPatch for Colin McRae Rally 3 (MIT) — the widescreen, compatibility
+# and quality-of-life fixes, and the ASI loader it ships with.
+silentpatch https://github.com/CookiePLMonster/SilentPatchCMR3/releases/latest/download/SilentPatchCMR3.zip 927cc81b377a33fbe8450dfc01d22d7a37ab9ece44c45ba479205e890693b131
+
+# Xidi (BSD-3-Clause) — DirectInput for XInput controllers; Win32 build.
+xidi https://github.com/samuelgr/Xidi/releases/download/v4.3.1/Xidi-v4.3.1.zip 78120f44baa816fc264fb722495776aab437a36be515e42345428b7f32ac17ff
+
+# DRM-free patcher (MIT distribution; xdelta3 is Apache-2.0) — turns an
+# official 1.1 executable with disc protection into the DRM-free one.
+patcher https://github.com/CookiePLMonster/SilentPatchCMR3/releases/latest/download/CMR3Patcher.zip 661008fa5ca0f25a306dfd230e8e35ef044c11601d5b38b1bbb8890464d1c913
+
+# DXVK (Zlib) — the d3d9.dll that draws through Vulkan under Wine; only
+# the 32-bit file from the release tarball goes into the package.
+dxvk https://github.com/doitsujin/dxvk/releases/download/v3.1.1/dxvk-3.1.1.tar.gz 40565b4a724aadc4433fa4e010b4b23916d9b1f1baeee64e17186db94f54e608
+dxvk-d3d9-sha256 265888c31ca78dffa290c39cb7e50bfb02762590e41927906e46fb32f01497fa
+
+# HD UI by Bekoha — fonts and race graphics redrawn for 4K (owner
+# decision, like the 1998 game's HD art pack; credited in THIRD_PARTY.md).
+hd-ui https://github.com/bekoha/bekoha.github.io/releases/download/cmr3-hdui-1.0.1/CMR3_HD_UI_v1.0.1.zip b3193f037fe4d0a22d9700f561be56774f8c296b6e3a221eb6f2bb79b6eda3b7

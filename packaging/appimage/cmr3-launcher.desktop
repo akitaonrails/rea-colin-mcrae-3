@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Colin McRae Rally 3
+Comment=Play your own copy of Colin McRae Rally 3 (widescreen, gamepads, HD UI)
+Exec=cmr3-play
+Icon=cmr3-launcher
+Terminal=false
+Categories=Game;

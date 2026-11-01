@@ -1,0 +1,15 @@
+#!/bin/sh
+# The AppImage entry: the bundled Wine first on the PATH, then cmr3-play
+# (the settings window, then the game in gamescope when it is installed).
+HERE=$(dirname "$(readlink -f "$0")")
+export PATH="$HERE/usr/lib/wine/bin:$PATH"
+export CMR3_LAUNCHER="$HERE/usr/lib/cmr/CMR3Launcher.exe"
+export CMR3_THIRDPARTY="$HERE/usr/lib/cmr/thirdparty"
+# The AppImage is unmounted when this script ends: cmr3-play waits for the
+# game.
+export CMR3_WAIT=1
+# No prompts to download Wine's .NET and HTML engines; the game needs
+# neither.
+export WINEDLLOVERRIDES="mscoree,mshtml=${WINEDLLOVERRIDES:+;$WINEDLLOVERRIDES}"
+export WINEDEBUG="${WINEDEBUG:--all}"
+exec "$HERE/usr/lib/cmr/cmr3-play" "$@"

@@ -1,0 +1,172 @@
+#!/bin/sh
+# Plays Colin McRae Rally 3 on Linux through Wine and gamescope.
+#
+#   cmr3-play           show the settings window, then start the game
+#   cmr3-play --play    start the game with the saved settings (no window)
+#   cmr3-play stop      end the game
+#   cmr3-play status    running or idle
+#
+# The settings window is CMR3Launcher.exe's own (the same as on Windows),
+# shown through Wine before gamescope starts. Settings live in launcher.cfg
+# inside the Wine prefix, the gamescope scaler included.
+#
+# Optional environment:
+#   CMR3_PREFIX    Wine prefix       (default ~/.local/share/cmr3-launcher/prefix)
+#   CMR3_LAUNCHER  CMR3Launcher.exe  (default: next to this script, or one folder up)
+#   CMR3_RUN       a wrapper that runs wine and gamescope, e.g.
+#                  "distrobox enter gaming --" when they live in a container
+#   CMR3_WAIT      set: wait for the game to end (the AppImage sets it)
+set -u
+HERE=$(dirname "$(readlink -f "$0")")
+PREFIX=${CMR3_PREFIX:-$HOME/.local/share/cmr3-launcher/prefix}
+LAUNCHER=${CMR3_LAUNCHER:-}
+if [ -z "$LAUNCHER" ]; then
+  for p in "$HERE/CMR3Launcher.exe" "$HERE/../CMR3Launcher.exe"; do
+    [ -f "$p" ] && LAUNCHER=$(readlink -f "$p") && break
+  done
+fi
+RUN=${CMR3_RUN:-}
+STATE=$HOME/.config/cmr3-launcher
+mkdir -p "$STATE" "$PREFIX"
+
+# launcher.cfg is in the prefix user's AppData\Local\CMR3Launcher.
+CFG=
+for d in "$PREFIX"/drive_c/users/*/AppData/Local/CMR3Launcher; do
+  case "$d" in */users/Public/*|*'*'*) continue ;; esac
+  [ -d "$d" ] && CFG=$d/launcher.cfg
+done
+[ -z "$CFG" ] && CFG=$PREFIX/drive_c/users/$USER/AppData/Local/CMR3Launcher/launcher.cfg
+
+get_key() { [ -f "$CFG" ] && sed -n "s|^$1 *= *||p" "$CFG" | tail -1; }
+LOCK=$STATE/running.pid
+# Running, or still starting: Rally_3PC.exe exists, or the gamescope
+# session we started is alive (the launcher copies files before the game
+# appears).
+running() {
+  pgrep -x Rally_3PC.exe >/dev/null && return 0
+  [ -f "$LOCK" ] && kill -0 "$(cat "$LOCK")" 2>/dev/null
+}
+
+# The best GPU for the game, as environment assignments (none: the
+# default GPU). A player's own DRI_PRIME / __NV_PRIME_RENDER_OFFLOAD wins.
+# - NVIDIA with its driver and OpenGL library: NVIDIA's render offload,
+#   which picks it over an integrated GPU (harmless when it drives the
+#   screen anyway). The Vulkan layer matters too: DXVK draws through it.
+# - Several Mesa GPUs, the screen's one integrated (Intel, or less video
+#   memory than another): DRI_PRIME=1, the other one.
+# CMR3_SYSFS replaces /sys (tests).
+gpu_env() {
+  [ -n "${DRI_PRIME:-}${__NV_PRIME_RENDER_OFFLOAD:-}" ] && return
+  sys=${CMR3_SYSFS:-/sys}
+  n=0 nvidia= boot= boot_vram=0 other_vram=0
+  for d in "$sys"/class/drm/card*; do
+    case "${d##*/}" in *-*) continue ;; esac  # connectors (card0-DP-1)
+    [ -r "$d/device/vendor" ] || continue
+    n=$((n + 1))
+    vram=$(cat "$d/device/mem_info_vram_total" 2>/dev/null || echo 0)
+    [ "$(basename "$(readlink "$d/device/driver")")" = nvidia ] && nvidia=1
+    if [ "$(cat "$d/device/boot_vga" 2>/dev/null)" = 1 ]; then
+      boot=$(cat "$d/device/vendor"); boot_vram=$vram
+    elif [ "$vram" -gt "$other_vram" ]; then
+      other_vram=$vram
+    fi
+  done
+  if [ -n "$nvidia" ] && $RUN sh -c 'ldconfig -p 2>/dev/null | grep -q libGLX_nvidia.so.0'; then
+    echo "__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia __VK_LAYER_NV_optimus=NVIDIA_only"
+  elif [ "$n" -ge 2 ] && { [ "$boot" = 0x8086 ] || [ "$other_vram" -gt "$boot_vram" ]; }; then
+    echo "DRI_PRIME=1"
+  fi
+}
+
+# The game's window mode from launcher.cfg: gamescope only makes sense for
+# the fullscreen one (windowed and borderless sizes themselves).
+display_mode() { get_key display_mode; }
+
+start() {
+  if [ -z "$LAUNCHER" ] || [ ! -f "$LAUNCHER" ]; then
+    echo "CMR3Launcher.exe not found next to cmr3-play (or set CMR3_LAUNCHER)"; exit 1
+  fi
+  res=$(get_key resolution); W=1920; H=1080
+  case "$res" in
+    original) W=640; H=480 ;;
+    *x*) W=${res%x*}; H=${res#*x} ;;
+  esac
+  F=$(get_key scaler); F=${F:-linear}
+  inner=$STATE/inner.sh
+  cat > "$inner" <<INNER
+#!/bin/sh
+trap 'wineserver -k; exit' INT TERM HUP
+wine '$LAUNCHER' --no-window
+sleep 3; while pgrep -x Rally_3PC.exe >/dev/null; do sleep 1; done
+wineserver -k
+INNER
+  chmod +x "$inner"
+  # The launcher installs Xidi and the ASI loader into its own copy of the
+  # game (native, then Wine's builtin when they misbehave), and DXVK's
+  # d3d9.dll for the Vulkan path; nothing here needs a system-wide DLL
+  # override.
+  export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-dinput8,dsound,d3d9=n,b}"
+  export SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS="${SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS:-1}"
+  # Already inside gamescope (a Steam Deck in Game Mode), a windowed mode,
+  # or no gamescope installed: the game runs directly (a second gamescope
+  # inside one fails).
+  case "$(display_mode)" in windowed|borderless) windowed=1 ;; *) windowed= ;; esac
+  if [ -n "$windowed" ] \
+     || [ -n "${GAMESCOPE_WAYLAND_DISPLAY:-}" ] \
+     || ! $RUN sh -c "command -v gamescope" >/dev/null 2>&1; then
+    echo "starting without a gamescope of our own"
+    launch sh "$inner"
+  else
+    echo "starting at ${W}x${H}, scaler $F"
+    launch gamescope -W "$W" -H "$H" -w "$W" -h "$H" -f -S fit -F "$F" -- "$inner"
+  fi
+}
+
+# Runs a command in the prefix: in the background, or with CMR3_WAIT (the
+# AppImage, unmounted when its script ends) until it exits.
+launch() {
+  if [ -n "${CMR3_WAIT:-}" ]; then
+    $RUN env WINEPREFIX="$PREFIX" $GPU "$@" > "$STATE/play.log" 2>&1
+  else
+    setsid $RUN env WINEPREFIX="$PREFIX" $GPU "$@" > "$STATE/play.log" 2>&1 < /dev/null &
+    echo $! > "$LOCK"
+  fi
+}
+
+# The settings window; its exit code says what to do next.
+settings() {
+  $RUN env WINEPREFIX="$PREFIX" $GPU wine "$LAUNCHER" --settings --linux 2>/dev/null
+  rc=$?
+  # The window ran on the desktop. Its wineserver lingers for a few seconds
+  # and is tied to the desktop's display; a game started meanwhile would
+  # join it and open there instead of in gamescope. Wait for it to end.
+  $RUN env WINEPREFIX="$PREFIX" wineserver -w 2>/dev/null
+  case $rc in
+    0|4) return 0 ;;  # Play pressed, or no window could be shown
+    *) return 1 ;;    # closed
+  esac
+}
+
+# Tests load the functions above without running anything.
+[ -n "${CMR3_PLAY_FUNCTIONS_ONLY:-}" ] && return 0
+GPU=$(gpu_env)
+[ -n "$GPU" ] && echo "GPU: $GPU"
+
+case "${1:-}" in
+  "")
+    if running; then echo "already running"; exit 0; fi
+    if [ -z "$LAUNCHER" ] || [ ! -f "$LAUNCHER" ]; then
+      echo "CMR3Launcher.exe not found next to cmr3-play (or set CMR3_LAUNCHER)"; exit 1
+    fi
+    settings || exit 0
+    start ;;
+  --play|start)
+    if running; then echo "already running"; else start; fi ;;
+  status) if running; then echo running; else echo idle; fi ;;
+  stop)
+    $RUN env WINEPREFIX="$PREFIX" wineserver -k 2>/dev/null
+    [ -f "$LOCK" ] && kill "$(cat "$LOCK")" 2>/dev/null
+    rm -f "$LOCK"
+    echo stopped ;;
+  *) echo "usage: $0 [--play|stop|status]"; exit 2 ;;
+esac
