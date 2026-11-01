@@ -222,6 +222,7 @@ game =
 # translator — the difference between native speed and ~10 FPS at 4K.
 #dxvk = on
 
+
 # Linux (cmr3-play) only: how gamescope enlarges the picture. nearest
 # (sharp pixels), pixel (sharp, all pixels the same size), fsr (smooth,
 # then sharpened) or linear (smooth).

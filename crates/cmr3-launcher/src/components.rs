@@ -169,10 +169,17 @@ pub fn apply_settings(
     runtime: &Path,
     settings: &Settings,
     resolution: Option<(u32, u32)>,
+    movies: bool,
 ) -> io::Result<Vec<String>> {
     let ini = runtime.join("SilentPatchCMR3.ini");
     let text = fs::read_to_string(&ini).unwrap_or_default();
-    let (text, log) = crate::sp::apply_picture(&text, settings, resolution);
+    let (mut text, mut log) = crate::sp::apply_picture(&text, settings, resolution);
+    // The game's own MOVIE_QUALITY key: 0 turns the intro and menu
+    // background videos off, which under Wine also sidesteps a crash in
+    // its WMV decoder.
+    let value = u8::from(movies).to_string();
+    text = crate::sp::set(&text, crate::sp::REGISTRY, "MOVIE_QUALITY", &value);
+    log.push(format!("MOVIE_QUALITY={value}"));
     runtime::install(&ini, text.as_bytes())?;
     Ok(log)
 }

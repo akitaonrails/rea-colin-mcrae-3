@@ -112,10 +112,15 @@ INNER
   chmod +x "$inner"
   # The launcher installs Xidi and the ASI loader into its own copy of the
   # game (native, then Wine's builtin when they misbehave), and DXVK's
-  # d3d9.dll for the Vulkan path; nothing here needs a system-wide DLL
-  # override.
-  export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-dinput8,dsound,d3d9=n,b}"
+  # d3d9.dll for the Vulkan path. winedbg is disabled so a crash in Wine's
+  # parts (a video-decoder regression, say) ends the game instead of
+  # freezing it in a hidden debugger.
+  export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-dinput8,dsound,d3d9=n,b;winedbg=d}"
   export SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS="${SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS:-1}"
+  export SDL_JOYSTICK_HIDAPI="${SDL_JOYSTICK_HIDAPI:-0}"
+  if [ -z "${SDL_JOYSTICK_DEVICE:-}" ] && [ -e /dev/input/js0 ]; then
+    export SDL_JOYSTICK_DEVICE=/dev/input/js0
+  fi
   # Already inside gamescope (a Steam Deck in Game Mode), a windowed mode,
   # or no gamescope installed: the game runs directly (a second gamescope
   # inside one fails).

@@ -313,7 +313,17 @@ mod app {
         }
         let mut ini_settings = settings.clone();
         ini_settings.display_mode = Some(mode);
-        match components::apply_settings(&rt, &ini_settings, resolution) {
+        // Videos: on for Windows; off under Wine, whose WMV decoder can
+        // crash the game minutes in (a page fault in the video path,
+        // reproduced on independent prefixes; `MOVIE_QUALITY=0` is the
+        // game's own switch for it). A setting forces either way.
+        let movies = settings.movies.unwrap_or(!wine);
+        if settings.movies.is_none() && !movies {
+            log_line(
+                "videos off under Wine (its WMV decoder can crash the game; set movies = on to try them)",
+            );
+        }
+        match components::apply_settings(&rt, &ini_settings, resolution, movies) {
             Ok(log) => log_line(&format!("SilentPatchCMR3.ini: {}", log.join(", "))),
             Err(e) => log_line(&format!("warning: cannot write the settings: {e}")),
         }
