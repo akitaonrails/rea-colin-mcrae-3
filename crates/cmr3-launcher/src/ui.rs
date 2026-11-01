@@ -491,7 +491,7 @@ impl Window<'_> {
     fn status(&self, ui: &mut egui::Ui) {
         let (text, color) = match (&self.error, &self.check) {
             (Some(e), _) => (e.clone(), ERROR),
-            (None, Check::Found(name)) => (format!("Ready. Press Play or Enter. ({name})"), MUTED),
+            (None, Check::Found(_)) => ("Ready. Press Play or Enter.".to_string(), MUTED),
             (None, Check::Unknown) => (
                 "Executable not one of the known DRM-free builds; the bundled patcher will try."
                     .to_string(),
@@ -577,7 +577,7 @@ impl Window<'_> {
         heading(ui, "Look");
         ui.add_space(6.0);
         let enhanced_note = match Picture::enhanced(self.screen).resolution {
-            Some((w, h)) => format!("Your screen's {w}×{h}, widescreen, HD UI."),
+            Some((w, h)) => format!("{w}×{h}, widescreen, HD UI."),
             None => "Widescreen at the desktop size, HD UI.".to_string(),
         };
         let best = form::recommended(self.screen);
@@ -640,67 +640,75 @@ impl Window<'_> {
 
     fn picture_tab(&mut self, ui: &mut egui::Ui) {
         let before = self.form.picture;
-        let p = &mut self.form.picture;
-        let resolutions = &self.resolutions;
-        let row = |ui: &mut egui::Ui, name: &str, add: &mut dyn FnMut(&mut egui::Ui)| {
-            ui.horizontal_top(|ui| {
-                field(ui, name);
-                ui.vertical(|ui| add(ui));
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            let p = &mut self.form.picture;
+            let resolutions = &self.resolutions;
+            let row = |ui: &mut egui::Ui, name: &str, add: &mut dyn FnMut(&mut egui::Ui)| {
+                ui.horizontal_top(|ui| {
+                    field(ui, name);
+                    ui.vertical(|ui| add(ui));
+                });
+            };
+            row(ui, "Resolution", &mut |ui| {
+                chips(ui, resolutions, &mut p.resolution);
+                if p.resolution == Some((640, 480)) {
+                    p.original = true;
+                } else if p.resolution.is_some() {
+                    p.original = false;
+                }
             });
-        };
-        row(ui, "Resolution", &mut |ui| {
-            chips(ui, resolutions, &mut p.resolution);
-            if p.resolution == Some((640, 480)) {
-                p.original = true;
-            } else if p.resolution.is_some() {
-                p.original = false;
-            }
-        });
-        row(ui, "Display mode", &mut |ui| {
-            chips(ui, &form::DISPLAY_MODES, &mut p.display_mode);
-        });
-        row(ui, "Vsync", &mut |ui| {
-            chips(ui, &form::VSYNCS, &mut p.vsync);
-        });
-        row(ui, "Anisotropic", &mut |ui| {
-            chips(ui, &form::ANISOTROPICS, &mut p.anisotropic);
-        });
-        row(ui, "Field of view", &mut |ui| {
-            chips(ui, &form::FOVS, &mut p.fov);
-        });
-        row(ui, "", &mut |ui| {
-            toggle(
-                ui,
-                &mut p.hd_ui,
-                "HD UI: fonts and race graphics redrawn for 4K (Bekoha)",
-            );
-            let mut fsaa = p.fsaa.unwrap_or(false);
-            toggle(
-                ui,
-                &mut fsaa,
-                "Anti-aliasing (its rendering bugs are fixed)",
-            );
-            p.fsaa = Some(fsaa);
-        });
-        if self.linux {
-            let scaler = &mut self.form.scaler;
-            row(ui, "Scaler", &mut |ui| {
-                let options: Vec<_> = form::SCALERS.iter().map(|s| (s.0, s.1)).collect();
-                chips(ui, &options, scaler);
-                let note = form::SCALERS
-                    .iter()
-                    .find(|s| s.0 == *scaler)
-                    .map_or("", |s| s.2);
-                ui.label(egui::RichText::new(note).font(font(13.0)).color(MUTED));
+            row(ui, "Display mode", &mut |ui| {
+                chips(ui, &form::DISPLAY_MODES, &mut p.display_mode);
+            });
+            row(ui, "Vsync", &mut |ui| {
+                chips(ui, &form::VSYNCS, &mut p.vsync);
+            });
+            row(ui, "Anisotropic", &mut |ui| {
+                chips(ui, &form::ANISOTROPICS, &mut p.anisotropic);
+            });
+            row(ui, "Field of view", &mut |ui| {
+                chips(ui, &form::FOVS, &mut p.fov);
+            });
+            row(ui, "Shadows", &mut |ui| {
+                chips(ui, &form::SHADOWS, &mut p.shadows);
             });
             row(ui, "", &mut |ui| {
                 toggle(
                     ui,
-                    &mut self.form.dxvk,
-                    "DXVK: draw through Vulkan instead of Wine's OpenGL translator",
+                    &mut p.hd_ui,
+                    "HD UI: fonts and race graphics redrawn for 4K (Bekoha)",
                 );
+                let mut fsaa = p.fsaa.unwrap_or(false);
+                toggle(
+                    ui,
+                    &mut fsaa,
+                    "Anti-aliasing (its rendering bugs are fixed)",
+                );
+                p.fsaa = Some(fsaa);
             });
-        }
+            if self.linux {
+                let scaler = &mut self.form.scaler;
+                row(ui, "Scaler", &mut |ui| {
+                    let options: Vec<_> = form::SCALERS.iter().map(|s| (s.0, s.1)).collect();
+                    chips(ui, &options, scaler);
+                    let note = form::SCALERS
+                        .iter()
+                        .find(|s| s.0 == *scaler)
+                        .map_or("", |s| s.2);
+                    ui.label(egui::RichText::new(note).font(font(13.0)).color(MUTED));
+                });
+                row(ui, "Post-processing", &mut |ui| {
+                    chips(ui, &form::POSTFX, &mut self.form.picture.postfx);
+                });
+                row(ui, "", &mut |ui| {
+                    toggle(
+                        ui,
+                        &mut self.form.dxvk,
+                        "DXVK: draw through Vulkan instead of Wine's OpenGL translator",
+                    );
+                });
+            }
+        });
         if self.form.picture != before {
             self.form.look = Form::look_of(&self.form.picture, self.screen);
         }
@@ -941,9 +949,8 @@ fn chips<T: PartialEq + Copy, S: AsRef<str>>(
 
 /// A switch: knob left and outlined is off, knob right on gold is on.
 fn toggle(ui: &mut egui::Ui, on: &mut bool, text: &str) {
-    let galley = ui
-        .painter()
-        .layout(text.to_string(), font(15.0), INK, 480.0);
+    let wrap = (ui.available_width() - 58.0).max(100.0);
+    let galley = ui.painter().layout(text.to_string(), font(15.0), INK, wrap);
     let size = vec2(46.0 + 12.0 + galley.size().x, 30.0_f32.max(galley.size().y));
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
     if resp.clicked() {

@@ -54,7 +54,6 @@ SaturationPercentTriggerRT = 100\n\
 \n\
 [Log]\n\
 Enabled = {log_enabled}\n\
-Append = no\n\
 Level = 3\n\
 \n\
 [Import]\n\

@@ -25,6 +25,7 @@ built.
 | Xidi v4.3.1 Win32 (`dinput8.dll`) and its `Xidi.ini`: DirectInput for XInput controllers, by samuelgr | BSD-3-Clause (bundles Hookshot, BSD-3) | https://github.com/samuelgr/Xidi |
 | The DRM-free patcher from the SilentPatch project: `xdelta.exe` (an xdelta3 release binary) and its `efigs`/`polish` patches that turn the official 1.1 executables into the DRM-free ones the late re-releases shipped | xdelta3: Apache-2.0; the patcher's scripts: MIT | https://github.com/jmacd/xdelta-gpl , https://github.com/CookiePLMonster/SilentPatchCMR3 |
 | DXVK v3.1.1, `x32/d3d9.dll` only: draws the game's Direct3D 9 through Vulkan under Wine (never installed on Windows, where the system's own Direct3D is used) | Zlib | https://github.com/doitsujin/dxvk |
+| vkBasalt 0.3.2.10, built as 32/64-bit Vulkan layers: optional CAS sharpening and ReShade FX post-processing under Linux (`cmr3-play`) | Zlib | https://github.com/DadSchoorse/vkBasalt |
 | HD UI v1.0.1 by Bekoha: font atlases and interface art redrawn for 4K (owner decision, 2026-11-01 — the same call as the 1998 game's HD art pack; redistributed unmodified from the author's release) | the author's release carries no licence text; credited here and in the README | https://bekoha.github.io/cmr3/ |
 
 License texts for the bundled components are in `packaging/licenses/` and

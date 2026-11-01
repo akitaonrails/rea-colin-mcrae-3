@@ -147,6 +147,87 @@ launch() {
   fi
 }
 
+# Post-processing over the finished frame (postfx = color|cinematic in
+# launcher.cfg): the vkBasalt layer over DXVK's Vulkan. The layer comes
+# from the kit's thirdparty/vkbasalt, CMR3_VKBASALT, or a system install;
+# without one, the game runs as it was.
+postfx_env() {
+  fx=$(get_key postfx)
+  case "$fx" in color|cinematic) ;; *) return 0 ;; esac
+  lib=""
+  for p in "$(dirname "$LAUNCHER")/thirdparty/vkbasalt/libvkbasalt.so" \
+           "$HERE/thirdparty/vkbasalt/libvkbasalt.so" \
+           "${CMR3_VKBASALT:-}/libvkbasalt.so" \
+           /usr/lib/vkbasalt/libvkbasalt.so \
+           /usr/lib32/libvkbasalt.so /usr/lib/libvkbasalt.so; do
+    [ -n "$p" ] && [ -f "$p" ] && lib=$p && break
+  done
+  if [ -z "$lib" ]; then
+    echo "postfx: no vkBasalt layer found (bundle thirdparty/vkbasalt, set CMR3_VKBASALT, or install one); continuing without"
+    return 0
+  fi
+  kbdir=$(dirname "$lib")
+  mkdir -p "$STATE/vkbasalt"
+  rm -f "$STATE/vkbasalt/layer.json" \
+        "$STATE/vkbasalt/layer64.json" \
+        "$STATE/vkbasalt/layer32.json"
+  # One manifest per library bitness, each under its own layer name, both
+  # requested: whichever matches the process (a WoW64 prefix loads the
+  # 64-bit loader even for its 32-bit game) is the one that loads. The
+  # paths are absolute because Wine drops LD_LIBRARY_PATH on its children.
+  names=""
+  for bits in 64 32; do
+    case $bits in
+      64) l="$kbdir/libvkbasalt.so" ;;
+      32) l="$kbdir/lib32/libvkbasalt.so" ;;
+    esac
+    [ -f "$l" ] || continue
+    name="VK_LAYER_VKBASALT_post_processing$([ "$bits" = 32 ] && echo 32)"
+    cat > "$STATE/vkbasalt/layer$bits.json" <<JSON
+{
+  "file_format_version": "1.0.0",
+  "layer": {
+    "name": "$name",
+    "type": "GLOBAL",
+    "library_path": "$l",
+    "api_version": "1.3.223",
+    "implementation_version": "1",
+    "description": "vkBasalt post processing (CMR3Launcher)",
+    "functions": {
+      "vkGetInstanceProcAddr": "vkBasalt_GetInstanceProcAddr",
+      "vkGetDeviceProcAddr": "vkBasalt_GetDeviceProcAddr"
+    }
+  }
+}
+JSON
+    names="$names${names:+:}$name"
+  done
+  if [ -z "$names" ]; then
+    echo "postfx: no vkBasalt library beside $lib; continuing without"
+    return 0
+  fi
+  effects=cas
+  extra=""
+  if [ "$fx" = cinematic ] && [ -f "$STATE/vkbasalt/shaders/MxAO.fx" ]; then
+    # The depth pass: only when the player supplied MxAO (licences keep
+    # us from shipping it; docs/ENHANCEMENTS.md explains where from).
+    effects="mxao cas"
+    extra="reshadeIncludePath = $STATE/vkbasalt/shaders
+reshadeTexturePath = $STATE/vkbasalt/shaders"
+  fi
+  {
+    echo "effects = $effects"
+    [ -n "$extra" ] && echo "$extra"
+    echo "casSharpness = 0.65"
+    echo "executeAt = end"
+  } > "$STATE/vkbasalt/vkBasalt.conf"
+  export VK_LAYER_PATH="$STATE/vkbasalt"
+  export VK_INSTANCE_LAYERS="$names"
+  export VKBASALT_CONFIG_FILE="$STATE/vkbasalt/vkBasalt.conf"
+  echo "postfx: $fx via $lib ($names)"
+  return 0
+}
+
 # The settings window; its exit code says what to do next.
 settings() {
   $RUN env WINEPREFIX="$PREFIX" $GPU wine "$LAUNCHER" --settings --linux 2>/dev/null
@@ -165,6 +246,7 @@ settings() {
 [ -n "${CMR3_PLAY_FUNCTIONS_ONLY:-}" ] && return 0
 GPU=$(gpu_env)
 [ -n "$GPU" ] && echo "GPU: $GPU"
+postfx_env
 
 case "${1:-}" in
   "")

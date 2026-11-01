@@ -15,6 +15,12 @@ You point the launcher at your installed game and press **Play**. The rest
 Vulkan renderer — is bundled and configured for you. Your game folder is
 never changed: the launcher works on its own private copy.
 
+## The launcher
+
+| Play | Picture | Controls |
+| --- | --- | --- |
+| ![The Play tab with game folder and look presets](docs/images/launcher-play.png) | ![The Picture tab with display and rendering options](docs/images/launcher-picture.png) | ![The Controls tab with the Rally gamepad preset](docs/images/launcher-controls.png) |
+
 ## What it adds to the original game
 
 **Runs on today's computers**
@@ -39,6 +45,8 @@ never changed: the launcher works on its own private copy.
   reflections, sun rendering that no longer flickers or hitches with
   anti-aliasing.
 - Field-of-view control for the chase and interior cameras.
+
+![Colin McRae Rally 3 running at 4K with the widescreen HD interface](docs/images/gameplay-4k.png)
 
 **Gamepads**
 
@@ -129,14 +137,17 @@ edit by hand. Starting `CMR3Launcher.exe` with any option (for example
 | `anisotropic = 16` | `off`, 2, 4, 8 or 16; sharpens the road at a distance. | 16 (Enhanced) |
 | `fsaa = off` | Anti-aliasing (its rendering bugs are fixed by SilentPatch). | off |
 | `fov = 75` | Field of view for both cameras, 30–150 in steps of 5. | 75 |
+| `shadows = sharp` | `sharp` or `soft` car shadows; unset keeps the game's choice. | unset |
 | `hd_ui = on` | The 4K interface pack. | on (Enhanced) |
 | `gamepad = rally` | `rally` (the triggers are the pedals, the d-pad and Start work the menus), `standard`, or `off`. | rally |
 | `dxvk = on` | Linux only: draw through Vulkan instead of Wine's OpenGL translator. | on |
 | `scaler = linear` | Linux only: how gamescope enlarges the picture. | linear |
+| `postfx = color` | Linux `cmr3-play` only: `color` for CAS sharpening, or `cinematic` to add ambient occlusion when the shaders are supplied. | off |
 
 Flags: `--game`, `--saves`, `--runtime`, `--resolution`, `--display-mode`,
-`--vsync on|off`, `--anisotropic`, `--fsaa on|off`, `--fov`, `--hd-ui
-on|off`, `--gamepad`, `--dxvk on|off`. Only `--game` is remembered; the
+`--vsync on|off`, `--anisotropic`, `--fsaa on|off`, `--fov`, `--shadows`,
+`--hd-ui on|off`, `--postfx`, `--gamepad`, `--gamepad-log`, `--dxvk on|off`.
+Only `--game` is remembered; the
 others override `launcher.cfg` for one run. `CMR3Launcher.exe --help`
 lists them, and `CMR3Launcher.exe --check --game <folder>` checks a game
 folder.
@@ -198,6 +209,19 @@ components from `packaging/third-party.txt`) and the Linux AppImage on
 every push, and publishes a release for tags named `v…`. How it all fits
 together, the research behind it and what's left: [docs/PLAN.md](docs/PLAN.md).
 Rules for contributors are in [AGENTS.md](AGENTS.md).
+
+## Credits
+
+The launcher is a small integration layer over other people's work:
+[SilentPatchCMR3](https://github.com/CookiePLMonster/SilentPatchCMR3) by
+CookiePLMonster (widescreen, display and compatibility fixes),
+[Bekoha's HD UI](https://bekoha.github.io/cmr3/),
+[Xidi](https://github.com/samuelgr/Xidi) by samuelgr,
+[DXVK](https://github.com/doitsujin/dxvk), and
+[vkBasalt](https://github.com/DadSchoorse/vkBasalt). The settings window's
+Colin McRae photo is by Carolyn Williams (CC BY 2.0); its Barlow fonts are
+by Jeremy Tribby (SIL OFL). See [THIRD_PARTY.md](THIRD_PARTY.md) for the
+full component and licence list.
 
 ## Legal
 

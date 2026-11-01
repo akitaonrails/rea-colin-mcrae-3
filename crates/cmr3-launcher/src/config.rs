@@ -31,6 +31,9 @@ pub struct Settings {
     pub fov: Option<u32>,
     /// The HD UI overlay pack (by Bekoha) for 4K-sharp menus.
     pub hd_ui: Option<bool>,
+    /// Car shadows: `sharp` (2005-style, SilentPatch's default) or `soft`
+    /// (the 2003 blur). Unset keeps the game's.
+    pub shadows: Option<ShadowStyle>,
     /// Xidi's own log (`gamepad_log`): what the game asks of DirectInput
     /// and what every pad control sent — the file to read when a button
     /// doesn't arrive.
@@ -42,6 +45,69 @@ pub struct Settings {
     pub dxvk: Option<bool>,
     /// Linux only: how `cmr3-play`'s gamescope enlarges the picture.
     pub scaler: Option<Scaler>,
+    /// Post-processing over the whole frame (vkBasalt under Wine):
+    /// colour grading and sharpening, or the same with depth-based
+    /// ambient occlusion when the shaders are available. Opt-in.
+    pub postfx: Option<Postfx>,
+}
+
+/// Post-processing over the finished frame (opt-in; Linux, via
+/// `cmr3-play`'s vkBasalt layer).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Postfx {
+    /// Grade, bloom and CAS sharpening — no depth buffer needed.
+    Color,
+    /// The colour pass plus depth-based ambient occlusion (needs the AO
+    /// shaders; see docs/ENHANCEMENTS.md).
+    Cinematic,
+}
+
+impl Postfx {
+    pub const ALL: [Postfx; 2] = [Postfx::Color, Postfx::Cinematic];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Postfx::Color => "color",
+            Postfx::Cinematic => "cinematic",
+        }
+    }
+
+    fn parse(v: &str) -> Option<Postfx> {
+        let v = v.trim().to_ascii_lowercase();
+        Postfx::ALL.into_iter().find(|m| m.key() == v)
+    }
+}
+
+/// The car-shadow style (SilentPatch's `SHARPER_SHADOWS`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShadowStyle {
+    Sharp,
+    Soft,
+}
+
+impl ShadowStyle {
+    pub const ALL: [ShadowStyle; 2] = [ShadowStyle::Sharp, ShadowStyle::Soft];
+
+    /// The value in launcher.cfg.
+    pub fn key(self) -> &'static str {
+        match self {
+            ShadowStyle::Sharp => "sharp",
+            ShadowStyle::Soft => "soft",
+        }
+    }
+
+    /// The SilentPatchCMR3.ini `[Advanced]` `SHARPER_SHADOWS` value.
+    pub fn ini(self) -> u8 {
+        match self {
+            ShadowStyle::Sharp => 1,
+            ShadowStyle::Soft => 0,
+        }
+    }
+
+    fn parse(v: &str) -> Option<ShadowStyle> {
+        let v = v.trim().to_ascii_lowercase();
+        ShadowStyle::ALL.into_iter().find(|m| m.key() == v)
+    }
 }
 
 /// The game's display mode (SilentPatch's Advanced Graphics option).
@@ -217,6 +283,10 @@ game =
 # The HD UI pack (by Bekoha): fonts, banners and race UI redrawn for 4K.
 #hd_ui = on
 
+# Car shadows: sharp (the sharper 2005 look, SilentPatch's default) or
+# soft (the blurrier 2003 one).
+#shadows = sharp
+
 # Xidi's log: what the game asks of DirectInput and what every pad
 # control sent — turn it on when a button doesn't arrive.
 #gamepad_log = off
@@ -235,6 +305,13 @@ game =
 # (sharp pixels), pixel (sharp, all pixels the same size), fsr (smooth,
 # then sharpened) or linear (smooth).
 #scaler = linear
+
+# Linux (cmr3-play) only: post-processing over the finished frame, on
+# top of the game's own picture. color: grade and CAS sharpening.
+# cinematic: the same plus depth-based ambient occlusion, which lifts
+# the flat look (needs the AO shaders; docs/ENHANCEMENTS.md). Off by
+# default: the faithful picture.
+#postfx = cinematic
 ";
 
 pub const USAGE: &str = concat!(
@@ -254,6 +331,8 @@ CMR3Launcher [options]
   --fsaa on|off            anti-aliasing
   --fov <30-150>           field of view for both cameras
   --hd-ui on|off           the HD UI pack
+  --shadows <style>        sharp or soft car shadows
+  --postfx <style>         off, color or cinematic (Linux)
   --gamepad <preset>       rally, standard or off
   --gamepad-log on|off     Xidi's log of what the game and the pad exchange
   --dxvk on|off            DXVK under Wine (Linux only)
@@ -374,6 +453,10 @@ impl Settings {
                     Some(f) => s.fov = Some(f),
                     None => bad("fov needs a number from 30 to 150, not"),
                 },
+                "shadows" => match ShadowStyle::parse(value) {
+                    Some(m) => s.shadows = Some(m),
+                    None => bad("shadows needs sharp or soft, not"),
+                },
                 "hd_ui" => match parse_bool(value) {
                     Some(b) => s.hd_ui = Some(b),
                     None => bad("hd_ui needs on or off, not"),
@@ -389,6 +472,10 @@ impl Settings {
                 "dxvk" => match parse_bool(value) {
                     Some(b) => s.dxvk = Some(b),
                     None => bad("dxvk needs on or off, not"),
+                },
+                "postfx" => match Postfx::parse(value) {
+                    Some(m) => s.postfx = Some(m),
+                    None => bad("postfx needs off, color or cinematic, not"),
                 },
                 "scaler" => match Scaler::parse(value) {
                     Some(f) => s.scaler = Some(f),
@@ -414,10 +501,12 @@ impl Settings {
             fsaa: over.fsaa.or(self.fsaa),
             fov: over.fov.or(self.fov),
             hd_ui: over.hd_ui.or(self.hd_ui),
+            shadows: over.shadows.or(self.shadows),
             gamepad: over.gamepad.or(self.gamepad),
             gamepad_log: over.gamepad_log.or(self.gamepad_log),
             dxvk: over.dxvk.or(self.dxvk),
             scaler: over.scaler.or(self.scaler),
+            postfx: over.postfx.or(self.postfx),
         }
     }
 

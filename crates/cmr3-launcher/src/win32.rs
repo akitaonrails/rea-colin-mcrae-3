@@ -147,7 +147,7 @@ pub fn is_wine() -> bool {
 /// reaches the GPU. The settings window is the only OpenGL thing here
 /// (the game draws through DXVK's Vulkan), but a software window is
 /// visibly sluggish.
-pub fn prefer_gpu_opengl() -> Result<bool, String> {
+pub fn prefer_glx() -> Result<bool, String> {
     set_user_value_if_missing(r"Software\Wine\X11 Driver", "UseEGL", "N")
 }
 
@@ -303,7 +303,7 @@ fn run_process(exe: &Path, args: &[OsString], workdir: &Path, hidden: bool) -> R
         "\"{}\"{}",
         exe.display(),
         args.iter()
-            .map(|a| format!(" {}", a.to_string_lossy()))
+            .map(|a| format!(" {}", cmr3_launcher::args::quote_windows(a)))
             .collect::<String>()
     ));
     let dir = wide(workdir);

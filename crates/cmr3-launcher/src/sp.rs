@@ -154,6 +154,15 @@ pub fn apply_picture(
         settings.fsaa.map(|b| u8::from(b).to_string()),
         &mut log,
     );
+    match settings.shadows {
+        Some(style) => {
+            t = set(&t, "Advanced", "SHARPER_SHADOWS", &style.ini().to_string());
+            log.push(format!("SHARPER_SHADOWS={}", style.ini()));
+        }
+        None => {
+            t = remove(&t, "Advanced", "SHARPER_SHADOWS");
+        }
+    }
     if let Some(fov) = settings.fov {
         t = set(&t, GRAPHICS, "EXTERIOR_FOV", &fov.to_string());
         t = set(&t, GRAPHICS, "INTERIOR_FOV", &fov.to_string());
@@ -169,7 +178,7 @@ pub fn apply_picture(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{DisplayMode, Settings};
+    use crate::config::{DisplayMode, Settings, ShadowStyle};
 
     const GAME_WRITTEN: &str = "[Registry]\n\
 LANGUAGE=E\n\
@@ -232,6 +241,27 @@ DIGITAL_TACHO=0\n";
         assert!(t.contains("EXTERIOR_FOV=75\n"));
         assert!(t.contains("GAMMA=1"), "the game's keys stay");
         assert!(log.contains(&"WIDTH=3840".to_string()));
+    }
+
+    #[test]
+    fn shadows_switch_writes_the_advanced_key() {
+        let sharp = Settings {
+            shadows: Some(ShadowStyle::Sharp),
+            ..Settings::default()
+        };
+        let (t, log) = apply_picture(GAME_WRITTEN, &sharp, None);
+        assert!(t.contains("[Advanced]\nSHARPER_SHADOWS=1\n"));
+        assert!(log.iter().any(|l| l == "SHARPER_SHADOWS=1"));
+        let soft = Settings {
+            shadows: Some(ShadowStyle::Soft),
+            ..Settings::default()
+        };
+        let (t, log) = apply_picture(&t, &soft, None);
+        assert!(t.contains("SHARPER_SHADOWS=0"));
+        assert!(log.iter().any(|l| l == "SHARPER_SHADOWS=0"));
+        // Unset: the game's choice again.
+        let (t, _) = apply_picture(&t, &Settings::default(), None);
+        assert!(!t.contains("SHARPER_SHADOWS"));
     }
 
     #[test]

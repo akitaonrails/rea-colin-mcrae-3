@@ -16,20 +16,21 @@ jobs:
     name: Refresh the thirdparty release
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Fetch every component exactly as the build does
         run: |
           pins() { grep -v '^#' packaging/third-party.txt | grep .; }
           sha_of() { pins | awk -v n="$1" '$1 == n { print $3 }'; }
           mkdir -p mirror
-          for name in silentpatch patcher xidi dxvk hd-ui; do
+          for name in silentpatch patcher xidi dxvk vkbasalt hd-ui; do
             sha=$(sha_of "$name")
             case $name in
               silentpatch) file=SilentPatch.zip ;;
               patcher) file=CMR3Patcher.zip ;;
               xidi) file=Xidi-v4.3.1.zip ;;
               dxvk) file=dxvk-3.1.1.tar.gz ;;
+              vkbasalt) file=vkBasalt-0.3.2.10.tar.gz ;;
               hd-ui) file=CMR3_HD_UI_v1.0.1.zip ;;
             esac
             for url in $(pins | awk -v n="$name" '$1 == n { for (i = 2; i <= NF; i++) if (i != 3) print $i }'); do

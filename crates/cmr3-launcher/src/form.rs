@@ -7,7 +7,7 @@
 //! command line and older launchers read them) and the look is worked out
 //! from them when the window opens.
 
-use crate::config::{self, DisplayMode, Gamepad, Scaler, Settings};
+use crate::config::{self, DisplayMode, Gamepad, Postfx, Scaler, Settings, ShadowStyle};
 
 /// The picture settings the look presets cover.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,6 +25,10 @@ pub struct Picture {
     pub fsaa: Option<bool>,
     pub fov: Option<u32>,
     pub hd_ui: bool,
+    /// Unset keeps the game's shadow style.
+    pub shadows: Option<ShadowStyle>,
+    /// Linux only, opt-in: the post-processing pass.
+    pub postfx: Option<Postfx>,
 }
 
 impl Picture {
@@ -38,6 +42,8 @@ impl Picture {
         fsaa: None,
         fov: None,
         hd_ui: false,
+        shadows: None,
+        postfx: None,
     };
 
     /// The recommended look for a screen: its own size, fullscreen,
@@ -53,6 +59,8 @@ impl Picture {
             fsaa: Some(false),
             fov: Some(75),
             hd_ui: true,
+            shadows: None,
+            postfx: None,
         }
     }
 
@@ -66,6 +74,8 @@ impl Picture {
         fsaa: Some(false),
         fov: Some(75),
         hd_ui: true,
+        shadows: None,
+        postfx: None,
     };
 }
 
@@ -132,6 +142,16 @@ pub const ANISOTROPICS: [(Option<u32>, &str); 5] = [
     (Some(2), "2×"),
     (Some(8), "8×"),
     (Some(16), "16×"),
+];
+pub const SHADOWS: [(Option<ShadowStyle>, &str); 3] = [
+    (None, "As the game"),
+    (Some(ShadowStyle::Sharp), "Sharp"),
+    (Some(ShadowStyle::Soft), "Soft"),
+];
+pub const POSTFX: [(Option<Postfx>, &str); 3] = [
+    (None, "Off"),
+    (Some(Postfx::Color), "Colour"),
+    (Some(Postfx::Cinematic), "Cinematic"),
 ];
 pub const GAMEPADS: [(Gamepad, &str); 3] = [
     (Gamepad::Rally, "Rally"),
@@ -204,7 +224,7 @@ pub fn pad_actions(before: u16, now: u16) -> Vec<PadAction> {
 }
 
 /// The settings window's design size in points.
-pub const WINDOW: (f32, f32) = (880.0, 640.0);
+pub const WINDOW: (f32, f32) = (880.0, 704.0);
 
 /// How much larger to draw the window on a screen (`screen` in pixels,
 /// `native` the system's own scale, 1.0 under Wine unless its DPI is set):
@@ -263,6 +283,8 @@ impl Form {
             fsaa: s.fsaa,
             fov: s.fov,
             hd_ui: s.hd_ui == Some(true),
+            shadows: s.shadows,
+            postfx: s.postfx,
         };
         Form {
             game: path(&s.game),
@@ -351,6 +373,8 @@ impl Form {
             "fsaa",
             p.fsaa.map(|b| if b { "on".into() } else { "off".into() }),
         );
+        put("shadows", p.shadows.map(|m| m.key().into()));
+        put("postfx", p.postfx.map(|m| m.key().into()));
         put("fov", p.fov.map(|f| f.to_string()));
         put(
             "hd_ui",
@@ -442,6 +466,8 @@ mod tests {
             fsaa: Some(true),
             fov: Some(90),
             hd_ui: false,
+            shadows: Some(crate::config::ShadowStyle::Soft),
+            postfx: Some(Postfx::Cinematic),
         };
         f.gamepad = Gamepad::Standard;
         f.dxvk = false;

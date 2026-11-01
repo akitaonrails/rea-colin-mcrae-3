@@ -8,6 +8,7 @@
 //! user's folder stays read-only; everything happens in the runtime copy
 //! (see `runtime`).
 
+pub mod args;
 pub mod components;
 pub mod config;
 pub mod edition;
