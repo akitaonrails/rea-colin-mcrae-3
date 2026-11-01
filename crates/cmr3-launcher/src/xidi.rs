@@ -11,8 +11,11 @@
 
 use crate::config::Gamepad;
 
-/// The Xidi.ini text for a preset, or `None` when Xidi is off.
-pub fn ini(preset: Gamepad) -> Option<String> {
+/// The Xidi.ini text for a preset, or `None` when Xidi is off. `log`
+/// turns Xidi's own logger on (`gamepad_log`): it writes what the game
+/// asks of DirectInput and what every pad control sent — the file to read
+/// when an axis or a button doesn't arrive.
+pub fn ini(preset: Gamepad, log: bool) -> Option<String> {
     let mapper = match preset {
         Gamepad::Off => return None,
         // The plain wrapper: every axis and button passes through as the
@@ -50,14 +53,16 @@ SaturationPercentTriggerLT = 100\n\
 SaturationPercentTriggerRT = 100\n\
 \n\
 [Log]\n\
-Enabled = no\n\
-Level = 1\n\
+Enabled = {log_enabled}\n\
+Append = no\n\
+Level = 3\n\
 \n\
 [Import]\n\
 dinput8.dll = C:\\Windows\\system32\\dinput8.dll\n\
 \n\
 [Workarounds]\n\
-ActiveVirtualControllerMask = 0x01\n"
+ActiveVirtualControllerMask = 0x01\n",
+        log_enabled = if log { "yes" } else { "no" },
     ))
 }
 
@@ -79,7 +84,7 @@ mod tests {
 
     #[test]
     fn rally_keeps_the_validated_mapping() {
-        let t = ini(Gamepad::Rally).unwrap();
+        let t = ini(Gamepad::Rally, false).unwrap();
         assert!(t.contains("Type = CMR3Gamepad"));
         assert!(t.contains("StickLeftY = Null"));
         assert!(t.contains("TriggerRT = Axis(Y, -)"));
@@ -89,11 +94,13 @@ mod tests {
         assert!(t.contains("ButtonBack = Keyboard(Esc)"));
         assert!(t.contains("DeadzonePercentStickLeft = 5"));
         assert!(t.contains("dinput8.dll = C:\\Windows\\system32\\dinput8.dll"));
+        assert!(t.contains("Enabled = no"));
+        assert!(ini(Gamepad::Rally, true).unwrap().contains("Enabled = yes"));
     }
 
     #[test]
     fn standard_has_no_custom_mapper() {
-        let t = ini(Gamepad::Standard).unwrap();
+        let t = ini(Gamepad::Standard, false).unwrap();
         assert!(t.contains("Type = StandardGamepad"));
         assert!(!t.contains("CustomMapper"));
         assert!(!t.contains("Keyboard"));
@@ -101,7 +108,7 @@ mod tests {
 
     #[test]
     fn off_installs_nothing() {
-        assert!(ini(Gamepad::Off).is_none());
+        assert!(ini(Gamepad::Off, false).is_none());
     }
 
     #[test]

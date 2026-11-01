@@ -77,7 +77,8 @@ fn syncs_a_runtime_and_installs_everything() {
         cmr3_launcher::components::install_xidi(
             &rt,
             &bundle,
-            cmr3_launcher::config::Gamepad::Rally
+            cmr3_launcher::config::Gamepad::Rally,
+            false
         )
         .unwrap()
     );

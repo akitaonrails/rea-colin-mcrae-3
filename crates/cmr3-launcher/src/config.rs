@@ -31,6 +31,10 @@ pub struct Settings {
     pub fov: Option<u32>,
     /// The HD UI overlay pack (by Bekoha) for 4K-sharp menus.
     pub hd_ui: Option<bool>,
+    /// Xidi's own log (`gamepad_log`): what the game asks of DirectInput
+    /// and what every pad control sent — the file to read when a button
+    /// doesn't arrive.
+    pub gamepad_log: Option<bool>,
     /// The Xidi gamepad mapping (see `xidi`).
     pub gamepad: Option<Gamepad>,
     /// Linux only: put DXVK's d3d9.dll next to the game (Vulkan instead of
@@ -213,6 +217,10 @@ game =
 # The HD UI pack (by Bekoha): fonts, banners and race UI redrawn for 4K.
 #hd_ui = on
 
+# Xidi's log: what the game asks of DirectInput and what every pad
+# control sent — turn it on when a button doesn't arrive.
+#gamepad_log = off
+
 # Gamepad through Xidi: rally maps the triggers to the game's pedal axis
 # and the d-pad and Start to the menu keys; standard passes the pad through
 # as it reports itself; off runs the game's own DirectInput handling.
@@ -247,6 +255,7 @@ CMR3Launcher [options]
   --fov <30-150>           field of view for both cameras
   --hd-ui on|off           the HD UI pack
   --gamepad <preset>       rally, standard or off
+  --gamepad-log on|off     Xidi's log of what the game and the pad exchange
   --dxvk on|off            DXVK under Wine (Linux only)
 
 These override launcher.cfg for one run (only --game is remembered).
@@ -369,6 +378,10 @@ impl Settings {
                     Some(b) => s.hd_ui = Some(b),
                     None => bad("hd_ui needs on or off, not"),
                 },
+                "gamepad_log" => match parse_bool(value) {
+                    Some(b) => s.gamepad_log = Some(b),
+                    None => bad("gamepad_log needs on or off, not"),
+                },
                 "gamepad" => match Gamepad::parse(value) {
                     Some(g) => s.gamepad = Some(g),
                     None => bad("gamepad needs rally, standard or off, not"),
@@ -402,6 +415,7 @@ impl Settings {
             fov: over.fov.or(self.fov),
             hd_ui: over.hd_ui.or(self.hd_ui),
             gamepad: over.gamepad.or(self.gamepad),
+            gamepad_log: over.gamepad_log.or(self.gamepad_log),
             dxvk: over.dxvk.or(self.dxvk),
             scaler: over.scaler.or(self.scaler),
         }

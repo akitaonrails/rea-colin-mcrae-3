@@ -74,11 +74,12 @@ pub fn install_silentpatch(runtime: &Path, bundle: &Path) -> io::Result<bool> {
     Ok(true)
 }
 
-/// Installs Xidi as `dinput8.dll` with the preset's `Xidi.ini`; the `off`
-/// preset removes both (the game then loads the system DirectInput).
-pub fn install_xidi(runtime: &Path, bundle: &Path, preset: Gamepad) -> io::Result<bool> {
+/// Installs Xidi as `dinput8.dll` with the preset's `Xidi.ini` (its
+/// logger on when `log`); the `off` preset removes both (the game then
+/// loads the system DirectInput).
+pub fn install_xidi(runtime: &Path, bundle: &Path, preset: Gamepad, log: bool) -> io::Result<bool> {
     let dll = bundle.join("xidi/dinput8.dll");
-    match xidi::ini(preset) {
+    match xidi::ini(preset, log) {
         Some(ini) => {
             if !dll.is_file() {
                 return Ok(false);
@@ -164,22 +165,17 @@ pub fn runtime_needs_patch(runtime_exe: &Path) -> bool {
 }
 
 /// Writes the launcher's picture settings into the runtime folder's
-/// SilentPatchCMR3.ini (creating it when the game has none yet).
+/// SilentPatchCMR3.ini (creating it when the game has none yet). Only the
+/// launcher's own keys are touched; everything the game saved (gamma,
+/// detail, its video quality, adapters) stays as the player left it.
 pub fn apply_settings(
     runtime: &Path,
     settings: &Settings,
     resolution: Option<(u32, u32)>,
-    movies: bool,
 ) -> io::Result<Vec<String>> {
     let ini = runtime.join("SilentPatchCMR3.ini");
     let text = fs::read_to_string(&ini).unwrap_or_default();
-    let (mut text, mut log) = crate::sp::apply_picture(&text, settings, resolution);
-    // The game's own MOVIE_QUALITY key: 0 turns the intro and menu
-    // background videos off, which under Wine also sidesteps a crash in
-    // its WMV decoder.
-    let value = u8::from(movies).to_string();
-    text = crate::sp::set(&text, crate::sp::REGISTRY, "MOVIE_QUALITY", &value);
-    log.push(format!("MOVIE_QUALITY={value}"));
+    let (text, log) = crate::sp::apply_picture(&text, settings, resolution);
     runtime::install(&ini, text.as_bytes())?;
     Ok(log)
 }
@@ -223,7 +219,7 @@ mod tests {
         assert_eq!(fs::read(rt.join("dsound.dll")).unwrap(), b"loader");
         assert!(!rt.join("dinput8.dll").is_file());
 
-        assert!(install_xidi(&rt, &bundle, Gamepad::Rally).unwrap());
+        assert!(install_xidi(&rt, &bundle, Gamepad::Rally, false).unwrap());
         assert_eq!(fs::read(rt.join("dinput8.dll")).unwrap(), b"xidi");
         let ini = fs::read_to_string(rt.join("Xidi.ini")).unwrap();
         assert!(ini.contains("CMR3Gamepad"));
@@ -232,7 +228,7 @@ mod tests {
         assert_eq!(fs::read(rt.join("d3d9.dll")).unwrap(), b"dxvk9");
 
         // Off takes Xidi back out.
-        assert!(install_xidi(&rt, &bundle, Gamepad::Off).unwrap());
+        assert!(install_xidi(&rt, &bundle, Gamepad::Off, false).unwrap());
         assert!(!rt.join("dinput8.dll").is_file());
         assert!(!rt.join("Xidi.ini").is_file());
         assert!(install_dxvk(&rt, &bundle, false).unwrap());
@@ -248,7 +244,7 @@ mod tests {
         let bundle = temp("empty-bundle");
         let rt = temp("rt-missing");
         assert!(!install_silentpatch(&rt, &bundle).unwrap());
-        assert!(!install_xidi(&rt, &bundle, Gamepad::Rally).unwrap());
+        assert!(!install_xidi(&rt, &bundle, Gamepad::Rally, false).unwrap());
         assert!(!install_dxvk(&rt, &bundle, true).unwrap());
         assert_eq!(install_hd_ui(&rt, &bundle).unwrap(), 0);
         fs::remove_dir_all(&bundle).unwrap();

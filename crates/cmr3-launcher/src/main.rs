@@ -264,7 +264,8 @@ mod app {
             Err(e) => log_line(&format!("warning: SilentPatch: {e}")),
         }
         let gamepad = settings.gamepad.unwrap_or_default();
-        match components::install_xidi(&rt, &bundle, gamepad) {
+        let gamepad_log = settings.gamepad_log == Some(true);
+        match components::install_xidi(&rt, &bundle, gamepad, gamepad_log) {
             Ok(true) => log_line(&format!("Xidi installed ({gamepad:?})")),
             Ok(false) => log_line(
                 "warning: Xidi not bundled; the gamepad runs through the game's own DirectInput",
@@ -313,17 +314,7 @@ mod app {
         }
         let mut ini_settings = settings.clone();
         ini_settings.display_mode = Some(mode);
-        // Videos: on for Windows; off under Wine, whose WMV decoder can
-        // crash the game minutes in (a page fault in the video path,
-        // reproduced on independent prefixes; `MOVIE_QUALITY=0` is the
-        // game's own switch for it). A setting forces either way.
-        let movies = settings.movies.unwrap_or(!wine);
-        if settings.movies.is_none() && !movies {
-            log_line(
-                "videos off under Wine (its WMV decoder can crash the game; set movies = on to try them)",
-            );
-        }
-        match components::apply_settings(&rt, &ini_settings, resolution, movies) {
+        match components::apply_settings(&rt, &ini_settings, resolution) {
             Ok(log) => log_line(&format!("SilentPatchCMR3.ini: {}", log.join(", "))),
             Err(e) => log_line(&format!("warning: cannot write the settings: {e}")),
         }
