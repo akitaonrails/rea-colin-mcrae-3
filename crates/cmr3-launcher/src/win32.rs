@@ -141,6 +141,16 @@ pub fn is_wine() -> bool {
     }
 }
 
+/// Under Wine: draw OpenGL through GLX (`UseEGL` = N). Wine 11 draws
+/// through EGL by default, and where the GPU driver has no EGL for X11
+/// (NVIDIA without egl-x11) that falls back to software rendering; GLX
+/// reaches the GPU. The settings window is the only OpenGL thing here
+/// (the game draws through DXVK's Vulkan), but a software window is
+/// visibly sluggish.
+pub fn prefer_gpu_opengl() -> Result<bool, String> {
+    set_user_value_if_missing(r"Software\Wine\X11 Driver", "UseEGL", "N")
+}
+
 /// On Windows with two GPUs (a laptop's integrated and discrete ones): the
 /// high-performance one for the game (the per-program choice of Settings >
 /// Display > Graphics). Under Wine this is cmr3-play's job instead.
@@ -201,6 +211,69 @@ pub fn prefer_fast_gpu(exe: &Path) -> Result<bool, String> {
             Ok(true)
         } else {
             Err(format!("cannot write the GPU preference (error {rc})"))
+        }
+    })();
+    // SAFETY: the key was opened above.
+    unsafe { RegCloseKey(key) };
+    result
+}
+
+fn set_user_value_if_missing(path: &str, name: &str, data: &str) -> Result<bool, String> {
+    use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
+    use windows_sys::Win32::System::Registry::{
+        KEY_QUERY_VALUE, KEY_SET_VALUE, REG_OPTION_NON_VOLATILE, REG_SZ, RegCloseKey,
+        RegCreateKeyExW, RegQueryValueExW, RegSetValueExW,
+    };
+    let mut key = std::ptr::null_mut();
+    let rc = unsafe {
+        RegCreateKeyExW(
+            HKEY_CURRENT_USER,
+            wide(path).as_ptr(),
+            0,
+            std::ptr::null(),
+            REG_OPTION_NON_VOLATILE,
+            KEY_QUERY_VALUE | KEY_SET_VALUE,
+            std::ptr::null(),
+            &mut key,
+            std::ptr::null_mut(),
+        )
+    };
+    if rc != ERROR_SUCCESS {
+        return Err(format!("cannot open HKCU\\{path} (error {rc})"));
+    }
+    let result = (|| {
+        let vname = wide(name);
+        // SAFETY: an open key and a NUL-terminated name; nothing is read
+        // back on the query.
+        let present = unsafe {
+            RegQueryValueExW(
+                key,
+                vname.as_ptr(),
+                std::ptr::null(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        };
+        if present != ERROR_FILE_NOT_FOUND {
+            return Ok(false);
+        }
+        let data = wide(data);
+        // SAFETY: an open key and NUL-terminated strings.
+        let rc = unsafe {
+            RegSetValueExW(
+                key,
+                vname.as_ptr(),
+                0,
+                REG_SZ,
+                data.as_ptr().cast(),
+                (data.len() * 2) as u32,
+            )
+        };
+        if rc == ERROR_SUCCESS {
+            Ok(true)
+        } else {
+            Err(format!("cannot write {name} (error {rc})"))
         }
     })();
     // SAFETY: the key was opened above.

@@ -131,6 +131,15 @@ mod app {
         let linux = take_flag(&mut cli, "--linux");
         let no_window = take_flag(&mut cli, "--no-window");
         if settings_only || (cli.is_empty() && !no_window) {
+            // A window under Wine draws through OpenGL: GLX, not Wine 11's
+            // default EGL (software on NVIDIA boxes without egl-x11).
+            if win32::is_wine() {
+                match win32::prefer_gpu_opengl() {
+                    Ok(true) => log_line("Wine: OpenGL through GLX (UseEGL=N)"),
+                    Ok(false) => {}
+                    Err(e) => log_line(&format!("warning: {e}")),
+                }
+            }
             let text =
                 fs::read_to_string(&settings_path).unwrap_or_else(|_| config::TEMPLATE.into());
             match ui::show(&settings_path, &text, linux) {
