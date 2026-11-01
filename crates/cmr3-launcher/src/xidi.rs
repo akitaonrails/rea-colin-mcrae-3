@@ -118,3 +118,18 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod golden {
+    use super::*;
+
+    /// The rally mapping, byte for byte as validated on real hardware
+    /// (the distrobox-gaming setup, carried into this launcher). If this
+    /// test fails, the mapping changed — play a stage with a pad before
+    /// shipping the change, and update the fixture deliberately.
+    #[test]
+    fn rally_matches_the_validated_mapping_byte_for_byte() {
+        let expected = include_str!("../tests/fixtures/xidi-rally.ini");
+        assert_eq!(ini(Gamepad::Rally, false).unwrap(), expected);
+    }
+}
