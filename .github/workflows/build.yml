@@ -42,12 +42,23 @@ jobs:
 
       - name: Fetch and verify the bundled components
         run: |
+          # A component's line in packaging/third-party.txt is
+          # `name sha256-checked-url sha256 fallback-url…`: the first url
+          # whose download matches the checksum wins, so a moved or
+          # deleted upstream never breaks a build once the mirror exists.
           pins() { grep -v '^#' packaging/third-party.txt | grep .; }
-          url_of() { pins | awk -v n="$1" '$1 == n { print $2 }'; }
           sha_of() { pins | awk -v n="$1" '$1 == n { print $3 }'; }
-          fetch() { # name file
-            curl -fsSL "$(url_of "$1")" -o "$2"
-            echo "$(sha_of "$1")  $2" | sha256sum -c -
+          fetch() { # name file — every url on the line, in order
+            sha=$(sha_of "$1")
+            for url in $(pins | awk -v n="$1" '$1 == n { for (i = 2; i <= NF; i++) if (i != 3) print $i }'); do
+              echo "::group::$1 from ${url##*/}"
+              if curl -fsSL --retry 2 "$url" -o "$2.part" \
+                 && echo "$sha  $2.part" | sha256sum -c -; then
+                mv "$2.part" "$2"; echo "::endgroup::"; return 0
+              fi
+              echo "unavailable or checksum mismatch: $url"; echo "::endgroup::"
+            done
+            echo "no source for $1 matched sha256 $sha"; return 1
           }
           mkdir -p thirdparty/silentpatch thirdparty/xidi thirdparty/patcher thirdparty/dxvk
           fetch silentpatch SilentPatch.zip
@@ -65,7 +76,7 @@ jobs:
           cp xidi-x/Xidi-v4.3.1/Win32/dinput8.dll thirdparty/xidi/
           cp xidi-x/Xidi-v4.3.1/LICENSE thirdparty/xidi/LICENSE
           tar -xzf dxvk.tar.gz --strip-components=2 -C thirdparty/dxvk dxvk-3.1.1/x32/d3d9.dll
-          echo "$(pins | awk '$1 == "dxvk-d3d9-sha256" { print $2 }')  thirdparty/dxvk/d3d9.dll" \
+          echo "$(sha_of dxvk-d3d9-sha256)  thirdparty/dxvk/d3d9.dll" \
             | sha256sum -c -
           cp packaging/licenses/DXVK-LICENSE thirdparty/dxvk/LICENSE
           cp packaging/licenses/SilentPatchCMR3-LICENSE thirdparty/silentpatch/LICENSE

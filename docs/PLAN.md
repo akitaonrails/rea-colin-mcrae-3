@@ -177,3 +177,33 @@ linux/cmr3-play           Wine + gamescope wrapper (AppImage: + portable Wine)
 - No language-pack or official-patch redistribution (original game
   content).
 - No rumble plumbing (the game has no force feedback on PC).
+
+### Third-party robustness (policy)
+
+The components are outside our control, so the build treats them as
+untrusted inputs and the project keeps its own copy of everything it ever
+shipped:
+
+- **Exact pins.** `packaging/third-party.txt` names the exact release
+  (tag urls, not `latest`) and its SHA-256. A build never takes whatever
+  is newest; an upstream mistake cannot ship silently, because a changed
+  upstream breaks the checksum and the build stops.
+- **Adoption is deliberate.** `watch-upstream.yml` resolves each
+  repository's latest release weekly (manual runs too) and opens an issue
+  on any difference. Moving a pin happens in a PR, after someone played a
+  stage with the new build.
+- **Our own mirror.** `mirror.yml` republishes the exact validated
+  downloads to this repository's `thirdparty` release, and the pins list
+  those urls as fallbacks — a deleted or renamed upstream asset stops
+  mattering once the mirror exists. Every release zip and AppImage also
+  embeds the components it was built with, so old releases stay
+  installable forever.
+- **Why not a git submodule?** A submodule pays off only when we build
+  the component from source. SilentPatch needs MSVC + premake + WIL (a
+  Windows runner and a second toolchain to keep green), Xidi the same,
+  the DRM-free patcher's xdelta is a 2016 binary, and the HD UI is not in
+  a repository at all — the sources cover barely half of what we bundle.
+  Pins + checksum gate + mirror + watcher give the same protection (and a
+  stronger "we shipped exactly this" record) for a fraction of the
+  maintenance. If we ever need to fork and build SilentPatch ourselves,
+  the submodule is the natural next step.

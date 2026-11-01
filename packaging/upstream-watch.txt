@@ -1,0 +1,10 @@
+# What to watch upstream, one per line: name repo asset-name-prefix.
+# .github/workflows/watch-upstream.yml resolves each repository's latest
+# release, finds the asset whose name starts with the prefix, and compares
+# its checksum with the pin in packaging/third-party.txt.
+
+silentpatch CookiePLMonster/SilentPatchCMR3 SilentPatchCMR3.zip
+patcher CookiePLMonster/SilentPatchCMR3 CMR3Patcher.zip
+xidi samuelgr/Xidi Xidi-
+dxvk doitsujin/dxvk dxvk-
+hd-ui bekoha/bekoha.github.io CMR3_HD_UI
