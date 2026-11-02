@@ -220,4 +220,64 @@ mod tests {
             assert!(ini.contains(want), "{want} in {ini}");
         }
     }
+
+    /// Each flag, through the same parser as launcher.cfg, to what it
+    /// changes in the game's files or the launch.
+    #[test]
+    fn every_flag_reaches_what_it_changes() {
+        let run = |flags: &[&str]| {
+            let (s, _) = Settings::parse_args(flags.iter().map(|f| f.to_string())).unwrap();
+            let p = plan(&s, &WINE);
+            let (ini, _) = p.ini(b"", &mut rea_launcher::ini::Owned::default());
+            (s, p, String::from_utf8(ini).unwrap())
+        };
+        let (s, _, _) = run(&["--game", r"C:\G", "--saves", r"D:\S", "--runtime", r"E:\R"]);
+        assert_eq!(
+            (s.game.unwrap(), s.saves.unwrap(), s.runtime.unwrap()),
+            (
+                r"C:\G".into(),
+                r"D:\S".into(),
+                std::path::PathBuf::from(r"E:\R")
+            )
+        );
+        let (_, _, ini) = run(&["--resolution", "original"]);
+        assert!(ini.contains("WIDTH=640\nHEIGHT=480\n"), "{ini}");
+        let (_, _, ini) = run(&["--display-mode", "windowed"]);
+        assert!(ini.contains("DISPLAY_MODE=1"));
+        let (_, _, ini) = run(&["--vsync", "off"]);
+        assert!(ini.contains("VSYNC=0"));
+        let (_, _, ini) = run(&["--anisotropic", "16"]);
+        assert!(ini.contains("ANISOTROPIC=4"));
+        let (_, _, ini) = run(&["--fsaa", "on"]);
+        assert!(ini.contains("FSAA=1"));
+        let (_, _, ini) = run(&["--fov", "100"]);
+        assert!(ini.contains("EXTERIOR_FOV=100") && ini.contains("INTERIOR_FOV=100"));
+        let (_, _, ini) = run(&["--shadows", "sharp"]);
+        assert!(ini.contains("[Advanced]\nSHARPER_SHADOWS=1"));
+        let (_, p, _) = run(&["--hd-ui", "on"]);
+        assert!(p.hd_ui);
+        let (_, p, _) = run(&["--gamepad", "standard"]);
+        assert!(p.xidi_ini.unwrap().contains("Type = StandardGamepad"));
+        let (_, p, _) = run(&["--gamepad", "off"]);
+        assert_eq!(p.xidi_ini, None);
+        let (_, p, _) = run(&["--gamepad-log", "on"]);
+        assert!(p.xidi_ini.unwrap().contains("Enabled = yes"));
+        let (_, p, _) = run(&["--dxvk", "off"]);
+        assert_eq!(p.wine_overrides.as_deref(), Some("dsound,dinput8=n,b"));
+        let (_, p, _) = run(&["--scaler", "pixel", "--postfx", "cinematic"]);
+        assert_eq!((p.scaler, p.postfx), (Scaler::Pixel, Postfx::Cinematic));
+    }
+
+    #[test]
+    fn the_players_overrides_are_kept_after_ours() {
+        let env = Env {
+            overrides: Some("winedbg=d;d3d9=b".into()),
+            ..WINE
+        };
+        let p = plan(&settings(""), &env);
+        assert_eq!(
+            p.wine_overrides.as_deref(),
+            Some("dsound,dinput8,d3d9=n,b;winedbg=d")
+        );
+    }
 }

@@ -308,4 +308,28 @@ mod tests {
             fs::remove_dir_all(d).unwrap();
         }
     }
+
+    #[test]
+    fn hostile_paths_sync_and_mirror() {
+        // Spaces, apostrophes and accents in every folder the player picks.
+        let root = temp("José");
+        let game = root.join("Jogos d'Ação").join("Colin McRae Rally 3");
+        let rt = root.join("Runtime d'Ação");
+        let saves = root.join("Saved Games").join("Colin McRae Rally 3");
+        fs::create_dir_all(game.join("Data")).unwrap();
+        fs::write(game.join("Rally_3PC.exe"), b"exe").unwrap();
+        fs::write(game.join("Data/ação.dat"), b"data").unwrap();
+        rea_launcher::paths::check_separate(&game, &rt).unwrap();
+        let r = sync(&game, &rt).unwrap();
+        assert_eq!(r.brought, 2);
+        assert_eq!(fs::read(rt.join("Data/ação.dat")).unwrap(), b"data");
+        let (rt_profile, saved) = (rt.join(PROFILE), saves.join(PROFILE));
+        let state = rt.join(PROFILE_STATE);
+        let mirror = profile_mirror(&rt_profile, &saved, &state);
+        mirror.before().unwrap();
+        put_profile(&rt_profile, b"played", 0);
+        mirror.after().unwrap();
+        assert_eq!(fs::read(&saved).unwrap(), b"played");
+        fs::remove_dir_all(root).unwrap();
+    }
 }
