@@ -13,6 +13,7 @@
 - The runtime copy no longer touches the game folder's files through hard
   links: it used to clear their read-only attribute before replacing a
   linked file and to reset their modification time on every sync.
+  Read-only originals (a CD or ISO copy) are now copied, never linked.
 - A runtime folder inside the game folder is refused even when it does
   not exist yet and is named through `..`, a relative path or a symlink.
 - Files the launcher puts in the runtime copy are written beside it and

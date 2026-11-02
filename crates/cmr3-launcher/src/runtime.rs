@@ -246,7 +246,10 @@ fn make_writable(path: &Path) -> io::Result<()> {
 /// static data when both sit on one volume (falling back to a copy), a
 /// plain copy otherwise. Returns how the file arrived.
 fn bring_over(from: &Path, to: &Path, rel: &str) -> io::Result<&'static str> {
-    if is_static(rel) {
+    // A read-only original (a CD or ISO copy) is copied: a link would
+    // share its attribute, and replacing a read-only file later needs a
+    // fallback that is unreliable under Wine.
+    if is_static(rel) && fs::metadata(from).is_ok_and(|m| !m.permissions().readonly()) {
         let linked = put_in_place(to, |tmp| fs::hard_link(from, tmp));
         if linked.is_ok() {
             return Ok("linked");
@@ -503,21 +506,47 @@ mod tests {
         let f = fs::OpenOptions::new().write(true).open(&original).unwrap();
         f.set_modified(when).unwrap();
         drop(f);
-        fs::set_permissions(&original, fs::Permissions::from_mode(0o444)).unwrap();
         let mode = |p: &Path| fs::metadata(p).unwrap().permissions().mode() & 0o777;
 
         assert_eq!(sync(&game, &rt).unwrap(), (1, 1));
         assert_eq!(fs::metadata(&original).unwrap().modified().unwrap(), when);
+        // A runtime from before read-only originals were copied: the link
+        // shares the original's read-only mode.
+        fs::set_permissions(&original, fs::Permissions::from_mode(0o444)).unwrap();
         install(&rt.join("Data/a.dat"), b"replaced").unwrap();
         assert_eq!(mode(&original), 0o444, "install over the link");
         fs::remove_file(rt.join("Data/a.dat")).unwrap();
-        sync(&game, &rt).unwrap();
+        fs::hard_link(&original, rt.join("Data/a.dat")).unwrap();
         remove(&rt.join("Data/a.dat")).unwrap();
         assert_eq!(mode(&original), 0o444, "remove of the link");
         assert_eq!(fs::read(&original).unwrap(), b"data");
         assert_eq!(fs::metadata(&original).unwrap().modified().unwrap(), when);
 
         fs::set_permissions(&original, fs::Permissions::from_mode(0o644)).unwrap();
+        for d in [game, rt] {
+            fs::remove_dir_all(d).unwrap();
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_only_originals_are_copied_not_linked() {
+        use std::os::unix::fs::PermissionsExt;
+        let game = temp("ro-game");
+        let rt = temp("ro-rt");
+        fs::create_dir_all(game.join("Data")).unwrap();
+        fs::write(game.join("Data/a.dat"), b"data").unwrap();
+        fs::write(game.join("Data/b.dat"), b"more").unwrap();
+        fs::set_permissions(game.join("Data/a.dat"), fs::Permissions::from_mode(0o444)).unwrap();
+        assert_eq!(sync(&game, &rt).unwrap(), (2, 1), "only b.dat is linked");
+        assert_eq!(fs::read(rt.join("Data/a.dat")).unwrap(), b"data");
+        assert!(
+            !fs::metadata(rt.join("Data/a.dat"))
+                .unwrap()
+                .permissions()
+                .readonly()
+        );
+        fs::set_permissions(game.join("Data/a.dat"), fs::Permissions::from_mode(0o644)).unwrap();
         for d in [game, rt] {
             fs::remove_dir_all(d).unwrap();
         }

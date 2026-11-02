@@ -280,8 +280,10 @@ next release.
   longer sets the time on linked files (it shares the original's inode).
   Removal of a read-only file relies on Rust's `remove_file`, which on
   Windows retries with `FILE_DISPOSITION_FLAG_IGNORE_READONLY_ATTRIBUTE`.
-  Not yet verified: a game folder whose files are read-only (a copied CD
-  install) on Windows and under Wine, with the HD UI on (it replaces
+  Read-only originals are copied rather than linked, so a new runtime
+  never has to replace a read-only file; the fallback remains for older
+  runtimes. Not yet verified: a game folder whose files are read-only (a
+  copied CD install) on Windows and under Wine, with the HD UI on (it replaces
   linked `Data\` files) and the DRM-free patch (it replaces the linked
   exe).
 - **HD UI off restores the game's files** (recorded in `.cmr3-hd-ui` in
