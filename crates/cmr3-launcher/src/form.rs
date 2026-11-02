@@ -297,13 +297,29 @@ impl Form {
         }
     }
 
-    /// The form for a first run (no settings file yet): the Enhanced look
-    /// fitted to the screen, with the Steam Deck look on a Deck (owner
-    /// decision — the goal is a modern, widescreen, HD experience with no
-    /// settings touched).
-    pub fn first_run(screen: Option<(u32, u32)>) -> Form {
-        let (settings, _) = Settings::parse_file(config::TEMPLATE);
-        let mut form = Form::new(&settings, screen);
+    /// True until the window has saved once: it always writes the scaler,
+    /// and a first run has no picture value either. The launcher may
+    /// already have stored `game` (`--game`, a `--no-window` run); that
+    /// does not count.
+    pub fn is_first_run(s: &Settings) -> bool {
+        s.resolution.is_none()
+            && s.display_mode.is_none()
+            && s.vsync.is_none()
+            && s.anisotropic.is_none()
+            && s.fsaa.is_none()
+            && s.fov.is_none()
+            && s.hd_ui.is_none()
+            && s.shadows.is_none()
+            && s.postfx.is_none()
+            && s.scaler.is_none()
+    }
+
+    /// The form for a first run: the stored settings (the game folder,
+    /// say) with the Enhanced look fitted to the screen, the Steam Deck
+    /// look on a Deck (owner decision — the goal is a modern, widescreen,
+    /// HD experience with no settings touched).
+    pub fn first_run(settings: &Settings, screen: Option<(u32, u32)>) -> Form {
+        let mut form = Form::new(settings, screen);
         form.set_look(recommended(screen), screen);
         form
     }
@@ -403,18 +419,38 @@ mod tests {
         Form::new(&Settings::parse_file(text).0, SCREEN)
     }
 
+    fn first_run(screen: Option<(u32, u32)>) -> Form {
+        Form::first_run(&Settings::parse_file(config::TEMPLATE).0, screen)
+    }
+
+    #[test]
+    fn a_first_run_is_any_file_the_window_never_saved() {
+        let first = |text: &str| Form::is_first_run(&Settings::parse_file(text).0);
+        assert!(first(""));
+        assert!(first(config::TEMPLATE));
+        // `--game` (or a --no-window run) stored the folder first.
+        let with_game = config::set_key(config::TEMPLATE, "game", r"D:\CMR3");
+        assert!(first(&with_game));
+        let f = Form::first_run(&Settings::parse_file(&with_game).0, SCREEN);
+        assert_eq!(f.look, Look::Enhanced);
+        assert_eq!(f.game, r"D:\CMR3", "the stored folder is kept");
+        // Once the window saved, even all-default values, it is not.
+        let saved = form(&with_game).save(&with_game);
+        assert!(!first(&saved));
+        let mut original = form(&with_game);
+        original.set_look(Look::Original, SCREEN);
+        assert!(!first(&original.save(&with_game)));
+    }
+
     #[test]
     fn a_first_run_starts_with_the_enhanced_look() {
-        let f = Form::first_run(SCREEN);
+        let f = first_run(SCREEN);
         assert_eq!(f.look, Look::Enhanced);
         assert_eq!(f.picture.resolution, Some((2560, 1440)));
         assert_eq!(f.picture.anisotropic, Some(16));
         assert!(f.picture.hd_ui);
         assert_eq!(f.gamepad, Gamepad::Rally);
-        assert_eq!(
-            Form::first_run(Some(STEAM_DECK_SCREEN)).look,
-            Look::SteamDeck
-        );
+        assert_eq!(first_run(Some(STEAM_DECK_SCREEN)).look, Look::SteamDeck);
     }
 
     #[test]

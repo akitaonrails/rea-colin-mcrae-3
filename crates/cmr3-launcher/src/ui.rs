@@ -10,7 +10,7 @@
 
 use std::path::{Path, PathBuf};
 
-use cmr3_launcher::config::{self, Settings};
+use cmr3_launcher::config::Settings;
 use cmr3_launcher::edition;
 use cmr3_launcher::form::{self, Form, Look, PadAction, Picture};
 use cmr3_launcher::xidi;
@@ -259,10 +259,11 @@ impl<'a> Window<'a> {
         outcome: &'a mut Outcome,
     ) -> Window<'a> {
         let screen = win32::screen_size();
-        let form = if text == config::TEMPLATE {
-            Form::first_run(screen)
+        let settings = Settings::parse_file(&text).0;
+        let form = if Form::is_first_run(&settings) {
+            Form::first_run(&settings, screen)
         } else {
-            Form::new(&Settings::parse_file(&text).0, screen)
+            Form::new(&settings, screen)
         };
         let check = check_game(&form.game);
         Window {

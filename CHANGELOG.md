@@ -42,6 +42,10 @@
   given to the game only, no longer to gamescope as well.
 - `--resolution 1920x1080` on the command line now wins over a file's
   `resolution = original` completely, and `--help` lists `--scaler`.
+- The settings window recommends the Enhanced look until it has saved
+  once. It used to do so only for an untouched template, so a first
+  `--game` or `--no-window` run (which store the game folder) meant the
+  player never got the recommended look.
 
 ## [0.1.2] - 2026-11-02
 
