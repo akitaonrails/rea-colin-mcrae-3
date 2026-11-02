@@ -367,6 +367,55 @@ below was run in the real game yet.
   - gamescope being closed;
   - a second `CMR3Launcher.exe` on Windows while the window is open (the
     window comes forward) and while the game runs (the message).
+  (Under Wine all but the game's own Quit and Steam's Stop were verified
+  on 2026-11-02, below; native Windows is still pending.)
+
+## 2026-11-02 — real-game verification, headless (gaming box)
+
+The owner's install (DRM-free v1.1 variant B, read-only, on NFS) through
+a fresh release build (`cargo build --release --locked --target
+i686-pc-windows-gnu`, LLD, `check-imports.sh` clean) and this repo's
+`linux/cmr3-play --play`, with `CMR3_PREFIX`/`CMR3_LAUNCHER`, `HOME` and
+the XDG dirs all under `.work/realgame/` (a throwaway prefix). gamescope
+ran headless (`--backend headless`, added by a `gamescope` wrapper first
+in `PATH`: the SDK has no setting for it); audio went to a private
+PipeWire + WirePlumber + pipewire-pulse with a null sink in a private
+`XDG_RUNTIME_DIR` (Wine's winepulse played into it). A supervisor inside
+the box (`.work/realgame/run.sh NAME LOOK QUIT`) waited for
+`Rally_3PC.exe`, captured with `gamescopectl screenshot`, sent the quit,
+polled the session's processes, and killed anything left with our
+environment tag (`procs.sh kill`; gamescope by its command line, since
+its file capability hides its environment). Logs per run in
+`.work/realgame/logs/<run>/` (run.log, launcher.log, play.log, DXVK's
+`Rally_3PC_d3d9.log`, the written `SilentPatchCMR3.ini`/`Xidi.ini`).
+Every run ended with the process table clean; no leftover.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Enhanced (1920×1080 here) reaches the game | VERIFIED | `enhanced-stop`: runtime built (1565 files copied, 0 linked: NFS → local disk, 99 s before the game started; later starts 4–7 s), SilentPatch/Xidi/DXVK/HD UI installed, ini `WIDTH=1920 HEIGHT=1080 DISPLAY_MODE=0 VSYNC=1 ANISOTROPIC=4 FSAA=0 EXTERIOR_FOV=75 INTERIOR_FOV=75` (as `look-enhanced.txt`); DXVK swapchain 1920×1080 FIFO; title screen captured |
+| Original 2003 | VERIFIED | `original-taskkill`: ini `WIDTH=640 HEIGHT=480 DISPLAY_MODE=0`, VSync/anisotropy/FSAA/FOV keys the launcher had set removed ("back to the game's"), swapchain 640×480 |
+| Steam Deck look | VERIFIED (values) | `deck-gamescope`: ini 1280×800 VSYNC=1 ANISOTROPIC=4 FSAA=0 FOV 75; swapchain 1280×800. Not a Deck: the matrix row stays pending |
+| HD UI off restores the game's files | NOT CHECKABLE on this install | launcher: "HD UI off: 38 files back to the game's", but this repack already ships the HD UI in its own folder (34 of the 37 overlay files are byte-identical in it), so the game still shows it. Needs a retail/clean install |
+| `cmr3-play stop` | VERIFIED | everything gone 1.9 s after the command |
+| SIGTERM to a waiting `cmr3-play` (`CMR3_WAIT=1`) | VERIFIED | gone in 1.8 s, helper exit 143 |
+| Ctrl+C (SIGINT) to a waiting `cmr3-play` | VERIFIED | gone in 2.7 s, exit 143. Note for tests: a background job of a non-interactive shell starts with SIGINT ignored and a trap can't undo it, so the first attempt (`sh … &`) did nothing; the supervisor now restores SIGINT's default like a terminal's foreground job has |
+| gamescope closed (SIGTERM) | VERIFIED | everything gone in 1.8 s |
+| WM_CLOSE (`wine taskkill /im Rally_3PC.exe`, no `/f`) | VERIFIED | the game honours it: "game exited with 0", everything gone within 6 s |
+| WM_SYSCOMMAND SC_CLOSE (the close button's path) | VERIFIED | test helper `.work/realgame/tools/sendkeys.exe syscmd`: exit 0, gone in 4.1 s |
+| Alt+F4 as key presses (SendInput) | VERIFIED | `keep-altf4`: exit 0, gone in 4.1 s. No close hook needed for CMR3 |
+| The game's own Exit (main menu) | NOT CHECKABLE HEADLESS | injected Enter reaches the game (title → main menu → Championship) but neither SendInput nor XTest arrow keys move the menu, so EXIT can't be selected. A person: Main menu → Exit, then `cmr3-play status` says idle and no `Rally_3PC.exe`/`wineserver` is left |
+| Steam's Stop | NOT CHECKABLE here | no Steam in the box; needs the Deck/Steam run |
+| Second `cmr3-play --play` while playing | VERIFIED | "already running", exit 0, `status` running, no second game |
+| Second `CMR3Launcher.exe` while the game runs | FAILED, fixed | it raised the game's window and said nothing (`another launcher is running: WindowRaised`): the settings window had the game's own title. Fixed (window title "Colin McRae Rally 3 launcher"); rerun: "Colin McRae Rally 3 is already running…", `GameRunning`, exit 0 |
+| Second `CMR3Launcher.exe` while the window is open | VERIFIED | private Xvfb: exit 0, `WindowRaised`, still one launcher window |
+| One-run flags `--play --scaler fsr --resolution 1280x720` | VERIFIED | helper "starting at 1280x720, scaler fsr", ini 1280×720, swapchain 1280×720, launcher.cfg unchanged; the next plain `--play` went back to "1920x1080, scaler linear" |
+| `postfx = color` with the layer set inside gamescope | VERIFIED | play.log: "postfx: color via …/thirdparty/vkbasalt", vkBasalt read `effects = lut:cas`, its first load after gamescope was up (none during gamescope's own Vulkan start); picture: screenshot for the owner (`shots/postfx-color.jpg`) |
+| LLD-linked build starts the game under Wine | VERIFIED | every run above |
+| VSync on/off visible in frame timing | NOT MEASURED | gamescope's `-T` stats file stayed empty headless; DXVK presents FIFO in both cases (its interval follows the game). Needs a frame-time overlay on a real display |
+
+Screenshots for the owner (`.work/realgame/shots/`): `enhanced-1080p.jpg`
+(title, 1920×1080), `original-640x480.jpg`, `deck-1280x800.jpg`,
+`main-menu.jpg`, `postfx-color.jpg`.
 
 ## Platform matrix
 
