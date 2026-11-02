@@ -1,0 +1,57 @@
+# Custom: windowed 1920x1080, fov 90, 4x, soft shadows, FSAA, standard pad with its log, postfx cinematic, fsr
+
+## Wine in gamescope
+display_mode: windowed (plays windowed)
+resolution: 1920x1080
+components:
+  SilentPatchCMR3.asi + dsound.dll (ASI loader): on
+  Xidi dinput8.dll: on (gamepad standard, log on)
+  DXVK d3d9.dll: on
+  HD UI overlay: on
+  profile controller set to the pad when new: on
+patch sets: DRM-free xdelta (efigs, then polish) only for a protected official 1.1 Rally_3PC.exe
+WINEDLLOVERRIDES: dsound,dinput8,d3d9=n,b;winedbg=d
+game arguments: (none)
+cmr3-play (Linux): scaler fsr, postfx cinematic
+ini log: WIDTH=1920, HEIGHT=1080, DISPLAY_MODE=1, VSYNC=0, ANISOTROPIC=2, FSAA=1, SHARPER_SHADOWS=0, EXTERIOR_FOV=90, INTERIOR_FOV=90
+--- SilentPatchCMR3.ini
+[Registry]
+LANGUAGE=E
+GAMMA=1
+WIDTH=1920
+HEIGHT=1080
+VSYNC=0
+DISPLAY_MODE=1
+ANISOTROPIC=2
+FSAA=1
+[Graphics]
+DIGITAL_TACHO=0
+EXTERIOR_FOV=90
+INTERIOR_FOV=90
+
+[Advanced]
+SHARPER_SHADOWS=0
+--- Xidi.ini
+[Mapper]
+Type = StandardGamepad
+
+[Properties]
+UseBuiltInProperties = yes
+DeadzonePercentStickLeft = 5
+DeadzonePercentStickRight = 5
+DeadzonePercentTriggerLT = 0
+DeadzonePercentTriggerRT = 0
+SaturationPercentStickLeft = 100
+SaturationPercentStickRight = 100
+SaturationPercentTriggerLT = 100
+SaturationPercentTriggerRT = 100
+
+[Log]
+Enabled = yes
+Level = 3
+
+[Import]
+dinput8.dll = C:\Windows\system32\dinput8.dll
+
+[Workarounds]
+ActiveVirtualControllerMask = 0x01

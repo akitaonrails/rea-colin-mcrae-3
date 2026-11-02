@@ -4,6 +4,11 @@
 
 ### Added
 
+- Golden snapshots (`crates/cmr3-launcher/tests/snapshots/`) of `--help`,
+  the `launcher.cfg` template, and what each look and two option
+  combinations write (components, `SilentPatchCMR3.ini`, `Xidi.ini`,
+  `WINEDLLOVERRIDES`, patch sets, `cmr3-play` values), so an SDK upgrade
+  can't change them unnoticed.
 - README: the full settings table (window, file and flag names), exit
   codes, an Uninstall section, "built on rea-launcher-sdk", a developer
   section (shell tests, `wine-test`, `sdk-sync`) and where issues go

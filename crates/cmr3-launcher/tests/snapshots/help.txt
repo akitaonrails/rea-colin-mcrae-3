@@ -1,0 +1,36 @@
+CMR3Launcher 0.1.2
+
+CMR3Launcher [options]
+
+  --game <folder>                                Game folder
+  --saves <folder>                               Profile folder
+  --runtime <folder>                             Runtime folder
+  --resolution <WxH>                             Resolution
+  --display-mode fullscreen|windowed|borderless  Display mode
+  --vsync on|off                                 VSync
+  --anisotropic off|2|4|8|16                     Texture sharpness
+  --fsaa on|off                                  Smooth edges
+  --fov <30-150>                                 Field of view
+  --shadows sharp|soft                           Car shadows
+  --hd-ui on|off                                 HD menus
+  --gamepad rally|standard|off                   Gamepad
+  --gamepad-log on|off                           Gamepad log
+  --dxvk on|off                                  Vulkan (DXVK)
+  --scaler nearest|pixel|fsr|linear              Upscaling (Linux helper)
+  --postfx off|color|cinematic                   Post-processing (Linux helper)
+
+These override launcher.cfg for one run (only --game is remembered);
+every one is also a launcher.cfg key (--hd-ui is hd_ui) and a control
+in the settings window. Without options the settings window opens first.
+
+  --no-window              play with the saved settings, no window
+  --settings [--linux]     only the settings window (exit 0: Play pressed,
+                           3: closed without Play, 4: no window possible);
+                           --linux adds the Linux-only rows, for cmr3-play
+  --check                  checks the game folder, its Rally_3PC.exe and the
+                           bundled parts without playing; the report goes to
+                           the terminal and launcher.log (exit 0: ready,
+                           1: something is missing or unknown)
+  --help                   this text
+
+The log is %LOCALAPPDATA%\CMR3Launcher\launcher.log.

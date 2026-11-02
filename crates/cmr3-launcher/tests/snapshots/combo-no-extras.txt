@@ -1,0 +1,53 @@
+# No pad bridge, no DXVK, borderless, everything else the game's
+
+## Windows
+display_mode: borderless (plays borderless)
+resolution: 2560x1440
+components:
+  SilentPatchCMR3.asi + dsound.dll (ASI loader): on
+  Xidi dinput8.dll: off (gamepad off, log off)
+  DXVK d3d9.dll: off
+  HD UI overlay: off
+  profile controller set to the pad when new: off
+patch sets: DRM-free xdelta (efigs, then polish) only for a protected official 1.1 Rally_3PC.exe
+WINEDLLOVERRIDES: (not set: Windows)
+game arguments: (none)
+cmr3-play (Linux): scaler linear, postfx off
+ini log: WIDTH=2560, HEIGHT=1440, DISPLAY_MODE=2
+--- SilentPatchCMR3.ini
+[Registry]
+LANGUAGE=E
+GAMMA=1
+WIDTH=2560
+HEIGHT=1440
+VSYNC=0
+DISPLAY_MODE=2
+[Graphics]
+DIGITAL_TACHO=0
+--- Xidi.ini: (removed)
+
+## Wine, no gamescope
+display_mode: borderless (plays borderless)
+resolution: 2560x1440
+components:
+  SilentPatchCMR3.asi + dsound.dll (ASI loader): on
+  Xidi dinput8.dll: off (gamepad off, log off)
+  DXVK d3d9.dll: off
+  HD UI overlay: off
+  profile controller set to the pad when new: off
+patch sets: DRM-free xdelta (efigs, then polish) only for a protected official 1.1 Rally_3PC.exe
+WINEDLLOVERRIDES: dsound=n,b;winedbg=d
+game arguments: (none)
+cmr3-play (Linux): scaler linear, postfx off
+ini log: WIDTH=2560, HEIGHT=1440, DISPLAY_MODE=2
+--- SilentPatchCMR3.ini
+[Registry]
+LANGUAGE=E
+GAMMA=1
+WIDTH=2560
+HEIGHT=1440
+VSYNC=0
+DISPLAY_MODE=2
+[Graphics]
+DIGITAL_TACHO=0
+--- Xidi.ini: (removed)

@@ -1,0 +1,123 @@
+# Original 2003
+
+## Windows, 2560x1440
+display_mode: fullscreen (plays fullscreen)
+resolution: 640x480
+components:
+  SilentPatchCMR3.asi + dsound.dll (ASI loader): on
+  Xidi dinput8.dll: on (gamepad rally, log off)
+  DXVK d3d9.dll: off
+  HD UI overlay: off
+  profile controller set to the pad when new: on
+patch sets: DRM-free xdelta (efigs, then polish) only for a protected official 1.1 Rally_3PC.exe
+WINEDLLOVERRIDES: (not set: Windows)
+game arguments: (none)
+cmr3-play (Linux): scaler linear, postfx off
+ini log: WIDTH=640, HEIGHT=480, DISPLAY_MODE=0
+--- SilentPatchCMR3.ini
+[Registry]
+LANGUAGE=E
+GAMMA=1
+WIDTH=640
+HEIGHT=480
+VSYNC=0
+DISPLAY_MODE=0
+[Graphics]
+DIGITAL_TACHO=0
+--- Xidi.ini
+[Mapper]
+Type = CMR3Gamepad
+
+[CustomMapper:CMR3Gamepad]
+Template = StandardGamepad
+StickLeftX = Axis(X)
+StickLeftY = Null
+TriggerRT = Axis(Y, -)
+TriggerLT = Axis(Y, +)
+DpadUp = Keyboard(UpArrow)
+DpadDown = Keyboard(DownArrow)
+DpadLeft = Keyboard(LeftArrow)
+DpadRight = Keyboard(RightArrow)
+ButtonA = Compound(Button(4), Keyboard(Enter))
+
+[Properties]
+UseBuiltInProperties = yes
+DeadzonePercentStickLeft = 5
+DeadzonePercentStickRight = 5
+DeadzonePercentTriggerLT = 0
+DeadzonePercentTriggerRT = 0
+SaturationPercentStickLeft = 100
+SaturationPercentStickRight = 100
+SaturationPercentTriggerLT = 100
+SaturationPercentTriggerRT = 100
+
+[Log]
+Enabled = no
+Level = 3
+
+[Import]
+dinput8.dll = C:\Windows\system32\dinput8.dll
+
+[Workarounds]
+ActiveVirtualControllerMask = 0x01
+
+## Wine in gamescope
+display_mode: fullscreen (plays fullscreen)
+resolution: 640x480
+components:
+  SilentPatchCMR3.asi + dsound.dll (ASI loader): on
+  Xidi dinput8.dll: on (gamepad rally, log off)
+  DXVK d3d9.dll: on
+  HD UI overlay: off
+  profile controller set to the pad when new: on
+patch sets: DRM-free xdelta (efigs, then polish) only for a protected official 1.1 Rally_3PC.exe
+WINEDLLOVERRIDES: dsound,dinput8,d3d9=n,b;winedbg=d
+game arguments: (none)
+cmr3-play (Linux): scaler linear, postfx off
+ini log: WIDTH=640, HEIGHT=480, DISPLAY_MODE=0
+--- SilentPatchCMR3.ini
+[Registry]
+LANGUAGE=E
+GAMMA=1
+WIDTH=640
+HEIGHT=480
+VSYNC=0
+DISPLAY_MODE=0
+[Graphics]
+DIGITAL_TACHO=0
+--- Xidi.ini
+[Mapper]
+Type = CMR3Gamepad
+
+[CustomMapper:CMR3Gamepad]
+Template = StandardGamepad
+StickLeftX = Axis(X)
+StickLeftY = Null
+TriggerRT = Axis(Y, -)
+TriggerLT = Axis(Y, +)
+DpadUp = Keyboard(UpArrow)
+DpadDown = Keyboard(DownArrow)
+DpadLeft = Keyboard(LeftArrow)
+DpadRight = Keyboard(RightArrow)
+ButtonA = Compound(Button(4), Keyboard(Enter))
+
+[Properties]
+UseBuiltInProperties = yes
+DeadzonePercentStickLeft = 5
+DeadzonePercentStickRight = 5
+DeadzonePercentTriggerLT = 0
+DeadzonePercentTriggerRT = 0
+SaturationPercentStickLeft = 100
+SaturationPercentStickRight = 100
+SaturationPercentTriggerLT = 100
+SaturationPercentTriggerRT = 100
+
+[Log]
+Enabled = no
+Level = 3
+
+[Import]
+dinput8.dll = C:\Windows\system32\dinput8.dll
+
+[Workarounds]
+ActiveVirtualControllerMask = 0x01

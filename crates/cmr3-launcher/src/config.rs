@@ -420,7 +420,7 @@ pub fn usage() -> String {
     format!(
         "CMR3Launcher {}\n\n\
          CMR3Launcher [options]\n\n\
-         {}\n\
+         {}\n\n\
          These override launcher.cfg for one run (only --game is remembered);\n\
          every one is also a launcher.cfg key (--hd-ui is hd_ui) and a control\n\
          in the settings window. Without options the settings window opens first.\n\n\

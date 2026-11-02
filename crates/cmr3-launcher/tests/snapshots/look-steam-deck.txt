@@ -1,0 +1,66 @@
+# Steam Deck
+
+## Steam Deck Game Mode (Proton in gamescope)
+display_mode: fullscreen (plays fullscreen)
+resolution: 1280x800
+components:
+  SilentPatchCMR3.asi + dsound.dll (ASI loader): on
+  Xidi dinput8.dll: on (gamepad rally, log off)
+  DXVK d3d9.dll: on
+  HD UI overlay: on
+  profile controller set to the pad when new: on
+patch sets: DRM-free xdelta (efigs, then polish) only for a protected official 1.1 Rally_3PC.exe
+WINEDLLOVERRIDES: dsound,dinput8,d3d9=n,b;winedbg=d
+game arguments: (none)
+cmr3-play (Linux): scaler linear, postfx off
+ini log: WIDTH=1280, HEIGHT=800, DISPLAY_MODE=0, VSYNC=1, ANISOTROPIC=4, FSAA=0, EXTERIOR_FOV=75, INTERIOR_FOV=75
+--- SilentPatchCMR3.ini
+[Registry]
+LANGUAGE=E
+GAMMA=1
+WIDTH=1280
+HEIGHT=800
+VSYNC=1
+DISPLAY_MODE=0
+ANISOTROPIC=4
+FSAA=0
+[Graphics]
+DIGITAL_TACHO=0
+EXTERIOR_FOV=75
+INTERIOR_FOV=75
+--- Xidi.ini
+[Mapper]
+Type = CMR3Gamepad
+
+[CustomMapper:CMR3Gamepad]
+Template = StandardGamepad
+StickLeftX = Axis(X)
+StickLeftY = Null
+TriggerRT = Axis(Y, -)
+TriggerLT = Axis(Y, +)
+DpadUp = Keyboard(UpArrow)
+DpadDown = Keyboard(DownArrow)
+DpadLeft = Keyboard(LeftArrow)
+DpadRight = Keyboard(RightArrow)
+ButtonA = Compound(Button(4), Keyboard(Enter))
+
+[Properties]
+UseBuiltInProperties = yes
+DeadzonePercentStickLeft = 5
+DeadzonePercentStickRight = 5
+DeadzonePercentTriggerLT = 0
+DeadzonePercentTriggerRT = 0
+SaturationPercentStickLeft = 100
+SaturationPercentStickRight = 100
+SaturationPercentTriggerLT = 100
+SaturationPercentTriggerRT = 100
+
+[Log]
+Enabled = no
+Level = 3
+
+[Import]
+dinput8.dll = C:\Windows\system32\dinput8.dll
+
+[Workarounds]
+ActiveVirtualControllerMask = 0x01
