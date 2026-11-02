@@ -243,6 +243,19 @@ pub fn window_zoom(screen: Option<(u32, u32)>, native: f32) -> f32 {
     (zoom * 20.0).round() / 20.0
 }
 
+/// The zoom the settings window is created with. Under Wine it is the
+/// final one (XWayland can lose a resize sent after the window exists),
+/// with Wine's own DPI scale (`native`, 1.5 at 144 DPI) divided out, as
+/// Wine multiplies the window by it. On Windows the system's DPI scaling
+/// sizes the window, so it is 1x.
+pub fn creation_zoom(wine: bool, screen: Option<(u32, u32)>, native: f32) -> f32 {
+    if wine {
+        window_zoom(screen, native)
+    } else {
+        1.0
+    }
+}
+
 /// Display resolutions offered: the screen's, the common sizes, and the
 /// original 640×480.
 pub fn resolutions(screen: Option<(u32, u32)>) -> Vec<(Option<(u32, u32)>, String)> {
@@ -547,6 +560,24 @@ mod tests {
         assert_eq!(window_zoom(Some((3840, 2160)), 1.5), 1.0);
         assert_eq!(window_zoom(Some((1280, 800)), 1.0), 1.0);
         assert_eq!(window_zoom(None, 1.0), 1.0);
+    }
+
+    #[test]
+    fn under_wine_the_window_is_created_at_its_final_size() {
+        // Wine's default 96 DPI: as before, 1.5x at 4K.
+        assert_eq!(creation_zoom(true, Some((3840, 2160)), 1.0), 1.5);
+        assert_eq!(creation_zoom(true, Some((1920, 1080)), 1.0), 1.0);
+        // Wine at 144 or 192 DPI already scales the window: never zoomed
+        // on top of that (it was 2.25x and 3x, taller than a 4K screen).
+        assert_eq!(creation_zoom(true, Some((3840, 2160)), 1.5), 1.0);
+        assert_eq!(creation_zoom(true, Some((3840, 2160)), 2.0), 1.0);
+        for dpi in [96.0, 120.0, 144.0, 192.0] {
+            let native = dpi / 96.0;
+            let zoom = creation_zoom(true, Some((3840, 2160)), native);
+            assert!(WINDOW.1 * zoom * native <= 2160.0, "{dpi} DPI");
+        }
+        // Windows: the system's DPI scaling sizes the window.
+        assert_eq!(creation_zoom(false, Some((3840, 2160)), 1.5), 1.0);
     }
 
     #[test]

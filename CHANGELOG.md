@@ -68,6 +68,10 @@
   `cmr3-play` says so and skips it, and the settings window notes it.
 - `--resolution 1920x1080` on the command line now wins over a file's
   `resolution = original` completely, and `--help` lists `--scaler`.
+- Settings window under Wine with its DPI raised (`winecfg` → Graphics,
+  e.g. 144 or 192): Wine's own scaling is taken into account, so the
+  window is no longer enlarged twice (2.25x or 3x, taller than a 4K
+  screen). At Wine's default 96 DPI nothing changes.
 - The settings window recommends the Enhanced look until it has saved
   once. It used to do so only for an untouched template, so a first
   `--game` or `--no-window` run (which store the game folder) meant the

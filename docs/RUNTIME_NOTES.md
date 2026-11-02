@@ -309,3 +309,9 @@ next release.
   restoring an older `CMR3` backup into the saves folder loads it on the
   next launch; ending the game with `cmr3-play stop` (no write-back) and
   launching again keeps the progress.
+- **Settings window and Wine's DPI.** Under Wine the creation zoom now
+  divides out `LOGPIXELSY / 96` (the process is made DPI aware first). At
+  the default 96 DPI the zoom is exactly what the 2026-11-01 XWayland
+  notes above measured (1.5x on 4K). Not yet verified: with `winecfg` DPI
+  at 144 and 192 on a 4K screen the window fits the screen (about 1.5x
+  overall) and is fully drawn under XWayland with fractional scaling.

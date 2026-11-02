@@ -55,15 +55,13 @@ pub fn show(settings_path: &Path, text: &str, linux: bool) -> Result<Outcome, St
     // (min/max/inner size commands) leaves an XWayland window under Wine
     // with a surface that no longer matches what winit thinks it asked
     // for — the picture lands in the top left and clicks map to the wrong
-    // places. Under Wine nothing scales the window for us, so the design
-    // size is multiplied up front instead; on Windows the system's own
-    // DPI scaling does that, and winit sizes in points.
+    // places. Under Wine the design size is multiplied up front instead,
+    // with Wine's own DPI scale divided out (Wine multiplies the window by
+    // it; 1 at its default 96 DPI); on Windows the system's own DPI
+    // scaling does that, and winit sizes in points.
     let wine = win32::is_wine();
-    let zoom = if wine {
-        form::window_zoom(win32::screen_size(), 1.0)
-    } else {
-        1.0
-    };
+    let native = if wine { win32::wine_dpi_scale() } else { 1.0 };
+    let zoom = form::creation_zoom(wine, win32::screen_size(), native);
     let size = SIZE * zoom;
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
