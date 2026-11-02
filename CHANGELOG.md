@@ -138,6 +138,9 @@
 
 ### Fixed
 
+- The launcher reads `--scaler=fsr` and underscore spellings such as
+  `--display_mode windowed` again, as release 0.1 did (scripts used
+  them). A test runs the launcher's own parser on both.
 - The Windows builds link with LLD (`.cargo/config.toml`). GNU ld 2.47
   left 13 of the launcher's kernel32 imports (`CreateProcessW`,
   `GetModuleHandleW`, `CloseHandle`, …) outside every import table, so

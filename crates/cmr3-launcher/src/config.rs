@@ -618,6 +618,23 @@ mod tests {
         assert_eq!(s.game, Some(PathBuf::from("--check")));
     }
 
+    /// Scripts written for release 0.1 pass `--key=value` and the
+    /// underscore spelling of a hyphenated flag; both still read.
+    #[test]
+    fn equals_and_underscore_flag_spellings_still_read() {
+        let (s, switches) = Settings::parse_args(
+            ["--scaler=fsr", "--display_mode", "windowed", "--no-window"].map(String::from),
+        )
+        .unwrap();
+        assert_eq!(s.scaler, Some(Scaler::Fsr));
+        assert_eq!(s.display_mode, Some(DisplayMode::Windowed));
+        assert_eq!(switches, ["--no-window"]);
+        assert_eq!(
+            args(&["--fov=200"]).unwrap_err(),
+            "--fov needs 30 to 150, not 200"
+        );
+    }
+
     #[test]
     fn bad_flags_say_what_they_need() {
         assert_eq!(
