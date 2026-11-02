@@ -62,6 +62,8 @@
 
 ### Changed
 
+- Updated rea-launcher-sdk to v0.3.2. Nothing changes for players on its own;
+  the fixes below use what it adds.
 - Updated rea-launcher-sdk to v0.3.0. Screen readers now name the two
   folder fields by their headings ("Game folder", "Profile folder") and
   read the example path as their description.
