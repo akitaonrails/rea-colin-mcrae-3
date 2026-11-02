@@ -270,6 +270,11 @@ with a fresh prefix under `.work/`.
 Host-tested only; check each on Windows and under Proton/Wine before the
 next release.
 
+- **DRM-free patcher.** The xdelta arguments now decode a real patch on
+  the host (xdelta3 on Linux). Not yet verified: an official 1.1
+  `Rally_3PC.exe` (efigs and Polish) patched by the bundled `xdelta.exe`
+  on Windows and under Wine, then the game starting from it.
+
 - **Hard-linked originals are left alone.** Replacing or removing a
   runtime file no longer clears its read-only attribute first, and sync no
   longer sets the time on linked files (it shares the original's inode).
