@@ -262,10 +262,18 @@ fn hd_ui_files(runtime: &Path) -> std::collections::BTreeSet<String> {
     fs::read_to_string(runtime.join(HD_UI_FILES))
         .unwrap_or_default()
         .lines()
-        // Only plain relative paths below the runtime folder.
-        .filter(|r| !r.is_empty() && !r.starts_with('/') && !r.split('/').any(|p| p == ".."))
+        .filter(|r| is_plain_relative(r))
         .map(str::to_owned)
         .collect()
+}
+
+/// True for a plain relative `/`-separated path that stays below the
+/// folder it is joined to: no root, drive or `..`, on any host.
+fn is_plain_relative(rel: &str) -> bool {
+    !rel.is_empty()
+        && rel
+            .split(['/', '\\'])
+            .all(|part| !part.is_empty() && part != "." && part != ".." && !part.contains(':'))
 }
 
 /// Takes the HD UI overlay back out: every file it put in becomes the
@@ -432,6 +440,25 @@ mod tests {
         }
         for d in [bundle, game, rt] {
             fs::remove_dir_all(d).unwrap();
+        }
+    }
+
+    #[test]
+    fn only_plain_relative_overlay_paths_are_restored() {
+        assert!(is_plain_relative("Data/Boot/colin3.dds"));
+        assert!(is_plain_relative("fonts/hel_18pt.dds"));
+        for bad in [
+            "",
+            "/etc/passwd",
+            "../x",
+            "Data/../../x",
+            "C:/Windows/x.dll",
+            "C:x",
+            "\\\\server\\share\\x",
+            "\\Windows\\x",
+            "Data//x",
+        ] {
+            assert!(!is_plain_relative(bad), "{bad}");
         }
     }
 
