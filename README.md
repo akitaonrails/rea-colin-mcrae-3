@@ -15,6 +15,11 @@ You point the launcher at your installed game and press **Play**. The rest
 Vulkan renderer — is bundled and configured for you. Your game folder is
 never changed: the launcher works on its own private copy.
 
+[![Video: the settings window, then a gravel stage at 4K with a gamepad (1:51, click to play)](https://new-uploads-akitaonrails.s3.us-east-2.amazonaws.com/2026/11/02/rea-colin-mcrae-3-demo-poster.jpg)](https://new-uploads-akitaonrails.s3.us-east-2.amazonaws.com/2026/11/02/rea-colin-mcrae-3-demo.mp4)
+
+*Click to watch (1:51): the settings window, then a stage on Linux through
+the AppImage.*
+
 ## The launcher
 
 | Play | Picture | Controls |
