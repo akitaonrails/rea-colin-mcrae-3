@@ -286,7 +286,9 @@ pub fn runtime_needs_patch(runtime_exe: &Path) -> bool {
 /// Writes the launcher's picture settings into the runtime folder's
 /// SilentPatchCMR3.ini (creating it when the game has none yet). Only the
 /// launcher's own keys are touched; everything the game saved (gamma,
-/// detail, its video quality, adapters) stays as the player left it.
+/// detail, its video quality, adapters) stays as the player left it, and
+/// an unset option gives a key back only while it holds the launcher's
+/// value (recorded in [`crate::sp::OWNED`]).
 pub fn apply_settings(
     runtime: &Path,
     settings: &Settings,
@@ -298,8 +300,11 @@ pub fn apply_settings(
         Err(e) if e.kind() == io::ErrorKind::NotFound => Vec::new(),
         Err(e) => return Err(e),
     };
-    let (bytes, log) = crate::sp::apply_picture(&bytes, settings, resolution);
+    let record = runtime.join(crate::sp::OWNED);
+    let mut owned = rea_launcher::ini::Owned::load(&record)?;
+    let (bytes, log) = crate::sp::apply_picture(&bytes, settings, resolution, &mut owned);
     fsx::install(&ini, bytes)?;
+    owned.save(&record)?;
     Ok(log)
 }
 

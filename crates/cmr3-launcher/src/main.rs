@@ -5,12 +5,12 @@ mod ui;
 
 #[cfg(windows)]
 fn main() {
-    use rea_launcher_win32::dialog::{self, Icon};
+    use rea_launcher_win32::dialog::Icon;
     let code = match app::run() {
         Ok(code) => code,
         Err(err) => {
             app::log_line(&format!("error: {err}"));
-            dialog::message("Colin McRae Rally 3 launcher", &err, Icon::Error);
+            app::say(&err, Icon::Error);
             1
         }
     };
@@ -31,15 +31,17 @@ mod app {
     use std::path::{Path, PathBuf};
 
     use cmr3_launcher::components::{self, Installed};
-    use cmr3_launcher::config::{self, Gamepad, Settings};
+    use cmr3_launcher::config::{self, Settings};
     use cmr3_launcher::edition;
+    use cmr3_launcher::plan::{self, Env};
     use cmr3_launcher::profile;
     use cmr3_launcher::runtime;
+    use rea_launcher::cfg::ArgError;
     use rea_launcher::log::Log;
-    use rea_launcher::{cfg, fsx, identify, paths};
+    use rea_launcher::{cfg, fsx, paths};
     use rea_launcher_win32::dialog::{self, Icon};
     use rea_launcher_win32::process::Launch;
-    use rea_launcher_win32::{display, gpu, wine};
+    use rea_launcher_win32::{console, display, gpu, wine};
 
     use crate::ui;
 
@@ -55,6 +57,18 @@ mod app {
 
     pub fn log_line(line: &str) {
         Log::new(home().join("launcher.log")).line(line);
+    }
+
+    /// Shows `text` where the player started the launcher: the terminal
+    /// (or a redirected stdout, cmr3-play's log), else a message box.
+    pub fn say(text: &str, icon: Icon) {
+        let attached = console::attach_parent();
+        match console::output(attached, console::stdout_usable(), true) {
+            console::Output::Terminal if icon == Icon::Error => eprintln!("{text}"),
+            console::Output::Terminal => println!("{text}"),
+            console::Output::Dialog => dialog::message(TITLE, text, icon),
+            console::Output::Nowhere => {}
+        }
     }
 
     /// A `launcher.cfg` next to the exe wins (portable installs);
@@ -108,6 +122,10 @@ mod app {
     /// no window could be shown (play with the saved settings).
     const WINDOW_CLOSED: u32 = 3;
     const WINDOW_UNAVAILABLE: u32 = 4;
+    /// A flag the launcher doesn't know, or a value it can't use.
+    const BAD_ARGUMENTS: u32 = 2;
+    /// `--check` found a part missing or a build it doesn't know.
+    const CHECK_FAILED: u32 = 1;
 
     /// The settings file's text: `None` on a first run (no file yet).
     /// A file that cannot be read is never written over.
@@ -120,7 +138,18 @@ mod app {
         let settings_path = settings_path();
         let args: Vec<String> = std::env::args().skip(1).collect();
         let given = args.len();
-        let (cli, switches) = Settings::parse_args(args)?;
+        let (cli, switches) = match Settings::parse_args(args) {
+            Ok(parsed) => parsed,
+            Err(ArgError::Help(_)) => {
+                say(&config::usage(), Icon::Info);
+                return Ok(0);
+            }
+            Err(e) => {
+                log_line(&format!("error: {e}"));
+                say(&format!("{e}\n\n{}", config::usage()), Icon::Error);
+                return Ok(BAD_ARGUMENTS);
+            }
+        };
         let switch = |name: &str| switches.iter().any(|s| s == name);
         // The settings window: shown when started without options (a
         // double click), or alone with --settings (Linux: cmr3-play shows
@@ -142,7 +171,7 @@ mod app {
             let text = read_settings(&settings_path)
                 .ok()
                 .flatten()
-                .unwrap_or_else(|| config::TEMPLATE.into());
+                .unwrap_or_else(config::template);
             match ui::show(&settings_path, &text, linux) {
                 Ok(ui::Outcome::Play) => {
                     log_line("settings window: play");
@@ -173,47 +202,35 @@ mod app {
                 (None, false)
             }
         };
-        let file_text = existing.as_deref().unwrap_or(config::TEMPLATE);
+        let template = config::template();
+        let file_text = existing.as_deref().unwrap_or(&template);
         let (saved, warnings) = Settings::parse_file(file_text);
         for w in &warnings {
             log_line(&format!("warning: {w}"));
         }
         let settings = saved.clone().merged(cli);
 
+        if check_only {
+            return Ok(check(&settings));
+        }
         let game = find_game(&settings)?;
         let exe_path = game.join(EXE);
         let exe_bytes =
             fs::read(&exe_path).map_err(|e| format!("cannot read {}: {e}", exe_path.display()))?;
+        let exe_sha = edition::sha256_hex(&exe_bytes);
         let exe_name = match edition::identify(&exe_bytes) {
             edition::Edition::DrmFree(name) => name.to_string(),
             edition::Edition::NeedsPatching => {
-                "not one of the known DRM-free builds; the DRM-free patcher will try".into()
+                "not a known DRM-free build; the DRM-free patcher will try it".into()
             }
         };
         log_line(&format!(
             "game: {} ({}) [sha256 {}]",
             game.display(),
             exe_name,
-            identify::hex(&identify::sha256(&exe_bytes))
+            exe_sha
         ));
         let bundle = components::bundle_dir();
-        if check_only {
-            let parts: Vec<String> = components::present(&bundle)
-                .iter()
-                .map(|(name, there)| format!("{name}: {}", if *there { "yes" } else { "missing" }))
-                .collect();
-            dialog::message(
-                TITLE,
-                &format!(
-                    "Game folder: {}\nVersion: {}\n\nBundled parts:\n{}",
-                    game.display(),
-                    exe_name,
-                    parts.join("\n")
-                ),
-                Icon::Info,
-            );
-            return Ok(0);
-        }
 
         let rt = settings
             .runtime
@@ -256,7 +273,7 @@ mod app {
         // DRM-free: the patcher itself tells the game versions apart (it
         // only applies to a matching file).
         if components::runtime_needs_patch(&rt.join(EXE)) {
-            apply_drm_free(&rt, &bundle)?;
+            apply_drm_free(&rt, &bundle, &exe_sha)?;
         } else {
             log_line("executable: already DRM-free");
         }
@@ -265,7 +282,13 @@ mod app {
         // and the display mode the game can honour depends on whether
         // gamescope already gives it a single screen.
         let wine = wine::is_wine();
-        let gamescope = std::env::var_os("GAMESCOPE_WAYLAND_DISPLAY").is_some();
+        let env = Env {
+            wine,
+            gamescope: std::env::var_os("GAMESCOPE_WAYLAND_DISPLAY").is_some(),
+            screen: display::screen_size(),
+            overrides: std::env::var("WINEDLLOVERRIDES").ok(),
+        };
+        let plan = plan::plan(&settings, &env);
 
         // The bundled parts, and the DLL names Wine must then load from
         // the game folder.
@@ -281,12 +304,11 @@ mod app {
             Ok(Installed::NotOurs(name)) => log_line(&not_ours("SilentPatch", name, &rt)),
             Err(e) => log_line(&format!("warning: SilentPatch: {e}")),
         }
-        let gamepad = settings.gamepad.unwrap_or_default();
-        let gamepad_log = settings.gamepad_log == Some(true);
-        let xidi = match components::install_xidi(&game, &rt, &bundle, gamepad, gamepad_log) {
+        let gamepad = plan.gamepad;
+        let xidi = match components::install_xidi(&game, &rt, &bundle, gamepad, plan.gamepad_log) {
             Ok(Installed::Done) => {
                 log_line(&format!("Xidi installed ({gamepad:?})"));
-                if gamepad != Gamepad::Off {
+                if plan.xidi_ini.is_some() {
                     natives.push("dinput8");
                 }
                 true
@@ -308,14 +330,14 @@ mod app {
         };
         // A new profile has no controller chosen: pick Xidi's, as the
         // player would in Options → Controls (see `profile`).
-        if xidi && gamepad != Gamepad::Off {
+        if xidi && plan.choose_controller {
             match profile::choose_first_controller_in(&rt_profile) {
                 Ok(true) => log_line("profile: controller set to the gamepad"),
                 Ok(false) => {}
                 Err(e) => log_line(&format!("warning: profile controller: {e}")),
             }
         }
-        let dxvk_on = settings.dxvk != Some(false) && wine;
+        let dxvk_on = plan.dxvk;
         match components::install_dxvk(&game, &rt, &bundle, dxvk_on) {
             Ok(Installed::Done) if dxvk_on => {
                 natives.push("d3d9");
@@ -328,7 +350,7 @@ mod app {
             ),
             Err(e) => log_line(&format!("warning: DXVK: {e}")),
         }
-        if settings.hd_ui == Some(true) {
+        if plan.hd_ui {
             match components::install_hd_ui(&rt, &bundle) {
                 Ok(n) if n > 0 => log_line(&format!("HD UI: {n} files")),
                 Ok(_) => log_line("HD UI: not bundled"),
@@ -341,36 +363,37 @@ mod app {
                 Err(e) => log_line(&format!("warning: HD UI off: {e}")),
             }
         }
-        // Unset: SilentPatch's default is the desktop's size; on this
-        // screen that is what the settings window would have picked.
-        let resolution = settings.resolution.or_else(display::screen_size);
-        // The display mode the game can actually honour here (see
-        // `DisplayMode::effective`): exclusive fullscreen under raw Wine
-        // chases the desktop's monitor list, so it plays borderless
-        // instead — same size, no mode switch, no wrong display.
-        let chosen = settings
-            .display_mode
-            .unwrap_or(config::DisplayMode::Fullscreen);
-        let mode = chosen.effective(wine, gamescope);
-        if mode != chosen {
+        // Unset resolution: SilentPatch's default is the desktop's size;
+        // on this screen that is what the settings window would have
+        // picked. Exclusive fullscreen under raw Wine chases the desktop's
+        // monitor list, so it plays borderless instead (see
+        // `DisplayMode::effective`): same size, no mode switch, no wrong
+        // display.
+        if plan.effective_mode != plan.display_mode {
             log_line(&format!(
                 "display mode: {} plays borderless under Wine{} (exclusive fullscreen picks \
                  the wrong display when the desktop has several; install gamescope — cmr3-play \
                  uses it — for true fullscreen)",
-                chosen.key(),
-                if gamescope { " inside gamescope" } else { "" },
+                plan.display_mode.key(),
+                if env.gamescope {
+                    " inside gamescope"
+                } else {
+                    ""
+                },
             ));
         }
-        let mut ini_settings = settings.clone();
-        ini_settings.display_mode = Some(mode);
-        match components::apply_settings(&rt, &ini_settings, resolution) {
+        match components::apply_settings(&rt, &plan.ini_settings, plan.resolution) {
             Ok(log) => log_line(&format!("SilentPatchCMR3.ini: {}", log.join(", "))),
             Err(e) => log_line(&format!("warning: cannot write the settings: {e}")),
         }
 
         // Remember the game folder; the rest of the file stays as written.
         if writable && (existing.is_none() || saved.game.as_ref() != Some(&game)) {
-            let text = config::set_key(file_text, "game", &game.display().to_string());
+            let text = rea_launcher::cfg::spec::set_key(
+                file_text,
+                config::option("game"),
+                &game.display().to_string(),
+            );
             if let Err(e) = fsx::write_atomic(&settings_path, text) {
                 log_line(&format!(
                     "warning: cannot write {}: {e}",
@@ -386,11 +409,10 @@ mod app {
                 Err(e) => log_line(&format!("warning: {e}")),
             }
         }
-        // Plain Proton/Wine runs get the overrides cmr3-play would set.
-        let overrides = wine.then(|| {
-            let existing = std::env::var("WINEDLLOVERRIDES").ok();
-            components::wine_overrides(existing.as_deref(), &natives)
-        });
+        // Plain Proton/Wine runs get the overrides cmr3-play would set
+        // (only for the parts that did install).
+        let overrides =
+            wine.then(|| components::wine_overrides(env.overrides.as_deref(), &natives));
         if let Some(o) = &overrides {
             log_line(&format!("WINEDLLOVERRIDES={o}"));
         }
@@ -425,45 +447,112 @@ mod app {
     }
 
     /// Applies the bundled DRM-free patch (CookiePLMonster's xdelta
-    /// updates for the official 1.1 executables) to the runtime copy.
-    fn apply_drm_free(rt: &Path, bundle: &Path) -> Result<(), String> {
+    /// updates for the official 1.1 executables, owner decision of
+    /// 2026-11-02) to the runtime copy. xdelta refuses a source it wasn't
+    /// made for, and the result must be one of the known DRM-free builds;
+    /// anything else is refused with the game's SHA-256 (`sha`).
+    fn apply_drm_free(rt: &Path, bundle: &Path, sha: &str) -> Result<(), String> {
         let xdelta = bundle.join("patcher/xdelta.exe");
         if !xdelta.is_file() {
-            return Err(
-                "this executable has its original disc copy protection, and the \
-                 DRM-free patcher is not bundled.\n\nInstall the official 1.1 \
-                 patch, then try again (see the project's README)."
-                    .into(),
-            );
+            return Err(format!(
+                "this executable is not a known DRM-free build, and the DRM-free patcher \
+                 that converts the official 1.1 update is not bundled (SHA-256 {sha}).\n\n\
+                 Reinstall the launcher package, then try again."
+            ));
         }
         let exe = rt.join(EXE);
         let backup = rt.join("Rally_3PC.exe.drm");
+        let new = exe.with_extension("new");
         fsx::install_copy(&exe, &backup)
             .map_err(|e| format!("cannot back up the executable: {e}"))?;
+        let cleanup = || {
+            let _ = fs::remove_file(&backup);
+            let _ = fs::remove_file(&new);
+        };
         for variant in ["efigs", "polish"] {
-            let args =
-                components::xdelta_args(&xdelta, &backup, variant, &exe.with_extension("new"));
+            let args = components::xdelta_args(&xdelta, &backup, variant, &new);
             let run = Launch::new(&xdelta).args(&args).cwd(rt).hidden(true).run();
             match run.map(|code| code == 0) {
                 Ok(true) => {
-                    fsx::install_copy(&exe.with_extension("new"), &exe)
+                    let ok = fs::read(&new).is_ok_and(|bytes| edition::is_drm_free(&bytes));
+                    if !ok {
+                        log_line(&format!(
+                            "DRM-free patch ({variant}) gave an unknown result"
+                        ));
+                        continue;
+                    }
+                    fsx::install_copy(&new, &exe)
                         .map_err(|e| format!("cannot replace the executable: {e}"))?;
-                    let _ = fs::remove_file(&backup);
-                    let _ = fs::remove_file(exe.with_extension("new"));
+                    cleanup();
                     log_line(&format!("DRM-free patch applied ({variant})"));
                     return Ok(());
                 }
                 Ok(false) => continue,
-                Err(e) => return Err(e),
+                Err(e) => {
+                    cleanup();
+                    return Err(e);
+                }
             }
         }
-        let _ = fs::remove_file(&backup);
-        let _ = fs::remove_file(exe.with_extension("new"));
-        Err(
-            "the DRM-free patch did not apply: this is not an official 1.1 \
-             executable.\n\nInstall the official 1.1 patch (linked in the \
-             README) and point the launcher at the game again."
-                .into(),
-        )
+        cleanup();
+        Err(edition::refusal(sha))
+    }
+
+    /// `--check`: the game folder, its executable and the bundled parts,
+    /// without playing. The report goes to launcher.log and the terminal
+    /// (a message box only when there is none); the exit code says
+    /// whether everything needed is there.
+    fn check(settings: &Settings) -> u32 {
+        let bundle = components::bundle_dir();
+        let mut lines = Vec::new();
+        let mut ok = true;
+        match find_game(settings) {
+            Ok(game) => {
+                lines.push(format!("Game folder: {}", game.display()));
+                match fs::read(game.join(EXE)) {
+                    Ok(bytes) => {
+                        let sha = edition::sha256_hex(&bytes);
+                        match edition::identify(&bytes) {
+                            edition::Edition::DrmFree(name) => lines.push(format!("{EXE}: {name}")),
+                            edition::Edition::NeedsPatching => {
+                                lines.push(format!("{EXE}: {}", edition::UNKNOWN_NOTE));
+                                lines.push(format!("Report: {}", edition::ISSUE_URL));
+                                ok = false;
+                            }
+                        }
+                        lines.push(format!("SHA-256: {sha}"));
+                    }
+                    Err(e) => {
+                        lines.push(format!("{EXE}: cannot read it ({e})"));
+                        ok = false;
+                    }
+                }
+            }
+            Err(e) => {
+                lines.push(e);
+                ok = false;
+            }
+        }
+        lines.push("Bundled parts:".into());
+        for (name, there) in components::present(&bundle) {
+            lines.push(format!(
+                "  {name}: {}",
+                if there { "yes" } else { "missing" }
+            ));
+            ok &= there;
+        }
+        lines.push(if ok {
+            "Ready to play.".into()
+        } else {
+            "Not ready: see above.".into()
+        });
+        for line in &lines {
+            log_line(&format!("check: {line}"));
+        }
+        say(
+            &lines.join("\n"),
+            if ok { Icon::Info } else { Icon::Warning },
+        );
+        if ok { 0 } else { CHECK_FAILED }
     }
 }

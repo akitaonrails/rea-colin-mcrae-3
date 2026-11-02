@@ -4,12 +4,45 @@
 
 ### Added
 
+- One option table (`config::OPTIONS`) declares every setting once:
+  `--help`, the `launcher.cfg` template written on a first run, the file
+  and flag parsing and the settings window's rows all come from it, and a
+  headless window test fails when a setting lacks a window control or a
+  flag. Every setting now has a one-line description under its control.
+- The settings window shows the gamepad log switch (Controls), 4×
+  texture filtering, a 75° field of view, and any resolution or field of
+  view saved in `launcher.cfg` or given as a flag as a chip of its own
+  (it was kept but not shown).
+- `cmr3-play --play --scaler fsr --resolution 1280x720 …`: flags for one
+  run now also reach gamescope and post-processing, without changing
+  `launcher.cfg`.
+- `.github/ISSUE_TEMPLATE/bug.yml` asks for `launcher.log` and the
+  executable's SHA-256.
 - Releases carry a `SHA256SUMS` file for the package and the AppImage,
   provenance attestations, and the version's own changelog section as
   notes.
 
 ### Changed
 
+- Clearer names in the window: Texture sharpness (anisotropic
+  filtering), Smooth edges (anti-aliasing), Car shadows, HD menus,
+  Vulkan (DXVK), Upscaling (the gamescope scaler).
+- Anti-aliasing has As the game / On / Off, like vsync.
+- `--check` prints its report to the terminal (a message box only when
+  started without one), writes it to `launcher.log` and exits 1 when a
+  part is missing or the executable is not a known build. `--help` goes
+  to the terminal too and is generated from the options; bad flags exit
+  with 2.
+- An executable that is neither a known DRM-free build nor converted by
+  the DRM-free patcher is refused with its SHA-256 and a link to report
+  it; the patcher's output must be a known DRM-free build. Builds are
+  identified by SHA-256 where a copy was measured (variant B), else by
+  the patcher's MD5 list.
+- On a Steam Deck the window shows the Steam Deck look as chosen (it has
+  the same values as Enhanced there, which was shown instead); its card
+  no longer claims to save battery.
+- The caption under Colin McRae's photo sits on a solid band.
+- `vsync` and `fsaa` are written as on/off (true/false still read).
 - Built on rea-launcher-sdk v0.2.0 (Cargo tags, vendored `sdk/`, reusable
   workflows). The settings window's control borders are lighter
   (`#af6d7d`) so they reach 3:1 contrast; text fields show the selection
@@ -47,6 +80,13 @@
 
 ### Fixed
 
+- Unsetting a picture option no longer wipes the choice you made in the
+  game's own menu: the launcher records what it wrote to
+  `SilentPatchCMR3.ini` (`.cmr3-ini-owned` in the runtime folder) and
+  gives a key back only while it still holds that value. Values written
+  by earlier releases (no record) are left as they are.
+- Opening the Picture tab no longer turned the Original look into Custom
+  and wrote `fsaa = off`.
 - The Windows-target test of the DRM-free patcher's command compared
   paths as text and failed under Wine; it compares paths now.
 - A profile the player copied into the saves folder (a backup, say) is

@@ -64,4 +64,18 @@ for mode in borderless windowed; do
     *) echo "FAIL $mode: $(cat "$T/ran")"; fails=$((fails + 1)) ;;
   esac
 done
+# Flags for one run beat launcher.cfg, reach the launcher too, and leave
+# the file as it was.
+printf 'resolution = 1920x1080\nscaler = linear\ndisplay_mode = windowed\n' > "$CFG"
+before=$(cat "$CFG")
+rea_hook_command --play --no-window --scaler fsr --resolution 1280x720 --display-mode fullscreen > /dev/null
+ran=$(cat "$T/ran")
+case "$ran" in
+  *"gamescope -W 1280 -H 720 -w 1280 -h 720 -f -S fit -F fsr --"*"--no-window --no-window --scaler fsr --resolution 1280x720 --display-mode fullscreen"*)
+    echo "ok   one-run flags override launcher.cfg" ;;
+  *) echo "FAIL one-run flags: $ran"; fails=$((fails + 1)) ;;
+esac
+[ "$(cat "$CFG")" = "$before" ] && echo "ok   launcher.cfg untouched" || { echo "FAIL cfg changed"; fails=$((fails + 1)); }
+REA_CFG=$CFG
+rea_hook_command status > /dev/null; [ $? = 127 ] && echo "ok   other commands fall through" || { echo "FAIL hook"; fails=$((fails + 1)); }
 [ "$fails" = 0 ] && echo "all passed" || { echo "$fails failed"; exit 1; }

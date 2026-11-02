@@ -20,5 +20,6 @@ rea-launcher-win32.workspace = true
 rea-launcher-ui.workspace = true
 
 [dev-dependencies]
-# The settings window's look (palette, design size) is tested on the host.
-rea-launcher-ui.workspace = true
+# The settings window is tested headless (egui_kittest), on the host and
+# under Wine.
+rea-launcher-ui = { workspace = true, features = ["testing"] }

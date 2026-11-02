@@ -7,6 +7,7 @@
 //! command line and older launchers read them) and the look is worked out
 //! from them when the window opens.
 
+use rea_launcher::cfg::on_off;
 use rea_launcher::display::{STEAM_DECK_SCREEN, is_steam_deck, landscape};
 
 use crate::config::{self, DisplayMode, Gamepad, Postfx, Scaler, Settings, ShadowStyle};
@@ -110,14 +111,23 @@ pub struct Form {
     pub gamepad: Gamepad,
     pub dxvk: bool,
     pub scaler: Scaler,
+    pub gamepad_log: bool,
 }
 
-/// Field-of-view choices offered (the game's own is 75).
-pub const FOVS: [(Option<u32>, &str); 4] = [
-    (None, "75 (the game's)"),
-    (Some(60), "60"),
-    (Some(90), "90"),
-    (Some(110), "110"),
+/// Field-of-view choices offered (the game's own is 75); a value saved
+/// from the file or a flag outside these gets a chip of its own
+/// ([`with_saved`]).
+pub const FOVS: [(Option<u32>, &str); 5] = [
+    (None, "As the game"),
+    (Some(60), "60°"),
+    (Some(75), "75°"),
+    (Some(90), "90°"),
+    (Some(110), "110°"),
+];
+pub const FSAAS: [(Option<bool>, &str); 3] = [
+    (None, "As the game"),
+    (Some(true), "On"),
+    (Some(false), "Off"),
 ];
 pub const DISPLAY_MODES: [(DisplayMode, &str); 3] = [
     (DisplayMode::Fullscreen, "Fullscreen"),
@@ -129,10 +139,11 @@ pub const VSYNCS: [(Option<bool>, &str); 3] = [
     (Some(true), "On"),
     (Some(false), "Off"),
 ];
-pub const ANISOTROPICS: [(Option<u32>, &str); 5] = [
+pub const ANISOTROPICS: [(Option<u32>, &str); 6] = [
     (None, "As the game"),
     (Some(0), "Off"),
     (Some(2), "2×"),
+    (Some(4), "4×"),
     (Some(8), "8×"),
     (Some(16), "16×"),
 ];
@@ -150,28 +161,6 @@ pub const GAMEPADS: [(Gamepad, &str); 3] = [
     (Gamepad::Rally, "Rally"),
     (Gamepad::Standard, "Standard"),
     (Gamepad::Off, "Off"),
-];
-pub const SCALERS: [(Scaler, &str, &str); 4] = [
-    (
-        Scaler::Nearest,
-        "Sharp",
-        "Every game pixel becomes a crisp block.",
-    ),
-    (
-        Scaler::Pixel,
-        "Even pixels",
-        "Crisp blocks, with only their edges blended so all are the same size.",
-    ),
-    (
-        Scaler::Fsr,
-        "FSR",
-        "AMD FSR: smooth, then sharpened. Softer than Sharp.",
-    ),
-    (
-        Scaler::Linear,
-        "Smooth",
-        "Plain smoothing. The softest look.",
-    ),
 ];
 
 /// Display resolutions offered: the screen's, the common sizes, and the
@@ -194,6 +183,23 @@ pub fn resolutions(screen: Option<(u32, u32)>) -> Vec<(Option<(u32, u32)>, Strin
         out.push((Some((w, h)), label.to_string()));
     }
     out.push((Some((640, 480)), "Original 640×480".to_string()));
+    out
+}
+
+/// `choices` with `current` added as its own chip (labelled by `label`)
+/// when it is a value the curated list lacks: a size or angle saved from
+/// `launcher.cfg` or a flag is shown and kept, never lost.
+pub fn with_saved<T: PartialEq + Copy>(
+    choices: &[(Option<T>, String)],
+    current: Option<T>,
+    label: impl Fn(T) -> String,
+) -> Vec<(Option<T>, String)> {
+    let mut out = choices.to_vec();
+    if let Some(value) = current
+        && !out.iter().any(|(v, _)| *v == Some(value))
+    {
+        out.push((Some(value), label(value)));
+    }
     out
 }
 
@@ -225,6 +231,7 @@ impl Form {
             gamepad: s.gamepad.unwrap_or(Gamepad::Rally),
             dxvk: s.dxvk != Some(false),
             scaler: s.scaler.unwrap_or(Scaler::Linear),
+            gamepad_log: s.gamepad_log == Some(true),
         }
     }
 
@@ -256,9 +263,13 @@ impl Form {
     }
 
     /// The look these picture values make on a screen.
+    /// On a Steam Deck the Enhanced look fitted to its screen holds the
+    /// same values as the Steam Deck look, which is the one shown.
     pub fn look_of(picture: &Picture, screen: Option<(u32, u32)>) -> Look {
         if *picture == Picture::ORIGINAL {
             Look::Original
+        } else if *picture == Picture::STEAM_DECK && is_steam_deck(screen) {
+            Look::SteamDeck
         } else if *picture == Picture::enhanced(screen) {
             Look::Enhanced
         } else if *picture == Picture::STEAM_DECK {
@@ -308,7 +319,7 @@ impl Form {
             "display_mode",
             (p.display_mode != DisplayMode::Fullscreen).then(|| p.display_mode.key().into()),
         );
-        put("vsync", p.vsync.map(|v| v.to_string()));
+        put("vsync", p.vsync.map(|v| on_off(v).into()));
         put(
             "anisotropic",
             p.anisotropic.map(|a| match a {
@@ -316,10 +327,7 @@ impl Form {
                 n => n.to_string(),
             }),
         );
-        put(
-            "fsaa",
-            p.fsaa.map(|b| if b { "on".into() } else { "off".into() }),
-        );
+        put("fsaa", p.fsaa.map(|b| on_off(b).into()));
         put("shadows", p.shadows.map(|m| m.key().into()));
         put(
             "postfx",
@@ -336,6 +344,7 @@ impl Form {
         );
         put("dxvk", (!self.dxvk).then(|| "off".into()));
         put("scaler", Some(self.scaler.key().into()));
+        put("gamepad_log", self.gamepad_log.then(|| "on".into()));
         t
     }
 }
@@ -351,16 +360,16 @@ mod tests {
     }
 
     fn first_run(screen: Option<(u32, u32)>) -> Form {
-        Form::first_run(&Settings::parse_file(config::TEMPLATE).0, screen)
+        Form::first_run(&Settings::parse_file(&config::template()).0, screen)
     }
 
     #[test]
     fn a_first_run_is_any_file_the_window_never_saved() {
         let first = |text: &str| Form::is_first_run(&Settings::parse_file(text).0);
         assert!(first(""));
-        assert!(first(config::TEMPLATE));
+        assert!(first(&config::template()));
         // `--game` (or a --no-window run) stored the folder first.
-        let with_game = config::set_key(config::TEMPLATE, "game", r"D:\CMR3");
+        let with_game = config::set_key(&config::template(), "game", r"D:\CMR3");
         assert!(first(&with_game));
         let f = Form::first_run(&Settings::parse_file(&with_game).0, SCREEN);
         assert_eq!(f.look, Look::Enhanced);
@@ -386,9 +395,9 @@ mod tests {
 
     #[test]
     fn the_look_is_worked_out_from_the_saved_values() {
-        let mut f = form(config::TEMPLATE);
+        let mut f = form(&config::template());
         f.set_look(Look::Enhanced, SCREEN);
-        let saved = f.save(config::TEMPLATE);
+        let saved = f.save(&config::template());
         assert_eq!(form(&saved).look, Look::Enhanced);
         let tweaked = config::set_key(&saved, "anisotropic", "8");
         assert_eq!(form(&tweaked).look, Look::Custom);
@@ -401,6 +410,35 @@ mod tests {
         assert_eq!(s.resolution, Some((640, 480)));
         assert!(s.original_resolution);
         assert_eq!(s.hd_ui, None, "off by default");
+    }
+
+    #[test]
+    fn on_a_steam_deck_its_own_look_is_the_one_chosen() {
+        let deck = Some(STEAM_DECK_SCREEN);
+        let f = first_run(deck);
+        assert_eq!(f.look, Look::SteamDeck);
+        // Saved and opened again on the Deck: still the Steam Deck look,
+        // although Enhanced fitted to 1280×800 has the same values.
+        let saved = f.save(&config::template());
+        assert_eq!(
+            Form::new(&Settings::parse_file(&saved).0, deck).look,
+            Look::SteamDeck
+        );
+        // Elsewhere those values are still the Steam Deck look.
+        assert_eq!(form(&saved).look, Look::SteamDeck);
+    }
+
+    #[test]
+    fn a_saved_value_outside_the_chips_gets_its_own() {
+        let fovs: Vec<_> = FOVS.iter().map(|(v, l)| (*v, l.to_string())).collect();
+        let shown = with_saved(&fovs, Some(45), |f| format!("{f}°"));
+        assert_eq!(shown.last(), Some(&(Some(45), "45°".to_string())));
+        assert_eq!(with_saved(&fovs, Some(90), |f| format!("{f}°")), fovs);
+        assert_eq!(with_saved(&fovs, None, |f| format!("{f}°")), fovs);
+        // And the value is kept when saving.
+        let f = form("fov = 45\nresolution = 1600x900\n");
+        let (s, _) = Settings::parse_file(&f.save(""));
+        assert_eq!((s.fov, s.resolution), (Some(45), Some((1600, 900))));
     }
 
     #[test]
@@ -424,7 +462,7 @@ mod tests {
 
     #[test]
     fn saving_round_trips_every_field() {
-        let mut f = form(config::TEMPLATE);
+        let mut f = form(&config::template());
         f.game = r"D:\Games\CMR3".into();
         f.saves = r"Z:\home\me\saves".into();
         f.picture = Picture {
@@ -442,7 +480,8 @@ mod tests {
         f.gamepad = Gamepad::Standard;
         f.dxvk = false;
         f.scaler = Scaler::Fsr;
-        let saved = f.save(config::TEMPLATE);
+        f.gamepad_log = true;
+        let saved = f.save(&config::template());
         assert!(saved.contains("# Colin McRae Rally 3 launcher settings."));
         let mut back = form(&saved);
         assert_eq!(back.look, Look::Custom);
@@ -454,8 +493,8 @@ mod tests {
 
     #[test]
     fn defaults_round_trip_to_an_empty_file() {
-        let f = form(config::TEMPLATE);
-        let saved = f.save(config::TEMPLATE);
+        let f = form(&config::template());
+        let saved = f.save(&config::template());
         // An empty file is neither preset (the window's first run picks
         // one); it keeps SilentPatch's own defaults, which start at the
         // desktop's size.

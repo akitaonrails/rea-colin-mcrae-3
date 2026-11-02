@@ -1,16 +1,21 @@
 //! Command line and the settings file (`launcher.cfg`).
 //!
-//! The file is plain `key = value` lines with `#` comments, written once from
-//! a commented template so users can edit it. The launcher later changes
-//! only the lines it owns (`game`), keeping everything else as the user left
-//! it. Unknown keys are reported, ignored and kept, so older launchers can
-//! read newer files; values it cannot read are reported and ignored. The
-//! reading and line editing are the SDK's `rea_launcher::cfg`; the keys,
-//! their values and the template are this game's.
+//! Every option is declared once, in [`OPTIONS`] (the SDK's
+//! `rea_launcher::cfg::spec`): its key, flag, values, label and a one-line
+//! description. `--help`, the commented template written on a first run,
+//! the file and flag parsing and the settings window's rows all come from
+//! that table, so the window and the command line can't drift apart.
+//!
+//! The file is plain `key = value` lines with `#` comments. The launcher
+//! later changes only the lines it owns (`game`), keeping everything else
+//! as the user left it. Unknown keys are reported, ignored and kept, so
+//! older launchers can read newer files; values it cannot read are
+//! reported and ignored.
 
 use std::path::PathBuf;
 
-use rea_launcher::cfg::{self, ArgError, Rejected, Resolution, need};
+use rea_launcher::cfg::spec::{self, Kind, OptionSpec, Value};
+use rea_launcher::cfg::{self, ArgError, KeyStyle, Rejected, Resolution};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Settings {
@@ -81,9 +86,8 @@ impl Postfx {
         }
     }
 
-    fn parse(v: &str) -> Option<Postfx> {
-        let v = v.trim().to_ascii_lowercase();
-        Postfx::ALL.into_iter().find(|m| m.key() == v)
+    fn from_key(v: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|m| m.key() == v)
     }
 }
 
@@ -113,9 +117,8 @@ impl ShadowStyle {
         }
     }
 
-    fn parse(v: &str) -> Option<ShadowStyle> {
-        let v = v.trim().to_ascii_lowercase();
-        ShadowStyle::ALL.into_iter().find(|m| m.key() == v)
+    fn from_key(v: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|m| m.key() == v)
     }
 }
 
@@ -170,9 +173,8 @@ impl DisplayMode {
         }
     }
 
-    fn parse(v: &str) -> Option<DisplayMode> {
-        let v = v.trim().to_ascii_lowercase();
-        DisplayMode::ALL.into_iter().find(|m| m.key() == v)
+    fn from_key(v: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|m| m.key() == v)
     }
 }
 
@@ -202,9 +204,8 @@ impl Gamepad {
         }
     }
 
-    fn parse(v: &str) -> Option<Gamepad> {
-        let v = v.trim().to_ascii_lowercase();
-        Gamepad::ALL.into_iter().find(|g| g.key() == v)
+    fn from_key(v: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|m| m.key() == v)
     }
 }
 
@@ -231,154 +232,211 @@ impl Scaler {
         }
     }
 
-    fn parse(v: &str) -> Option<Scaler> {
-        let v = v.trim().to_ascii_lowercase();
-        Scaler::ALL.into_iter().find(|s| s.key() == v)
+    fn from_key(v: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|m| m.key() == v)
     }
 }
 
 pub const FILE_NAME: &str = "launcher.cfg";
 
-/// The file written on first run.
-pub const TEMPLATE: &str = r"# Colin McRae Rally 3 launcher settings.
-#
-# One setting per line as key = value; lines starting with # are comments.
-# Command-line options (--game, --runtime) override this file for one run.
-# A launcher.cfg next to CMR3Launcher.exe is used instead of this one when
-# it exists (for portable installs).
+/// `display_mode` values and their window labels.
+pub const DISPLAY_MODES: &[(&str, &str)] = &[
+    ("fullscreen", "Fullscreen"),
+    ("windowed", "Windowed"),
+    ("borderless", "Borderless"),
+];
+/// `anisotropic` values: off or the level in texels.
+pub const ANISOTROPICS: &[(&str, &str)] = &[
+    ("off", "Off"),
+    ("2", "2×"),
+    ("4", "4×"),
+    ("8", "8×"),
+    ("16", "16×"),
+];
+pub const SHADOWS: &[(&str, &str)] = &[("sharp", "Sharp"), ("soft", "Soft")];
+pub const GAMEPADS: &[(&str, &str)] =
+    &[("rally", "Rally"), ("standard", "Standard"), ("off", "Off")];
+pub const SCALERS: &[(&str, &str)] = &[
+    ("nearest", "Sharp"),
+    ("pixel", "Even pixels"),
+    ("fsr", "FSR"),
+    ("linear", "Smooth"),
+];
+pub const POSTFXS: &[(&str, &str)] = &[
+    ("off", "Off"),
+    ("color", "Colour"),
+    ("cinematic", "Cinematic"),
+];
 
-# The folder with your installed Rally_3PC.exe. Filled in by --game; the
-# game folder is only read, never changed.
-game =
+/// Every option: one row each for the file, the flags, `--help`, the
+/// template and the window.
+pub const OPTIONS: &[OptionSpec] = &[
+    OptionSpec::new(
+        "game",
+        Kind::Path,
+        "Game folder",
+        "The folder with your installed Rally_3PC.exe. It is only read, never changed. \
+         Remembered once given.",
+    ),
+    OptionSpec::new(
+        "saves",
+        Kind::Path,
+        "Profile folder",
+        "Where your profile (the game's CMR3 file) is kept: copied into the game before it \
+         starts and back when it ends. Default: Saved Games\\Colin McRae Rally 3.",
+    ),
+    OptionSpec::new(
+        "runtime",
+        Kind::Path,
+        "Runtime folder",
+        "Where the launcher keeps its private, writable copy of the game (about 3 GB; \
+         hard-linked when it can be). Default: %LOCALAPPDATA%\\CMR3Launcher\\Rally3.",
+    )
+    .launcher_only(),
+    OptionSpec::new(
+        "resolution",
+        Kind::Size {
+            min: (640, 480),
+            max: (7680, 4320),
+            aliases: cfg::ORIGINAL,
+        },
+        "Resolution",
+        "The game's screen size; original is the 640×480 of 2003. Unset: your desktop's size. \
+         Wider screens show more to the sides, unstretched.",
+    )
+    .with_example("1920x1080"),
+    OptionSpec::new(
+        "display_mode",
+        Kind::Choice(DISPLAY_MODES),
+        "Display mode",
+        "Fullscreen fills the screen; windowed and borderless play in a window on the desktop.",
+    ),
+    OptionSpec::new(
+        "vsync",
+        Kind::Toggle,
+        "VSync",
+        "Waits for the screen's refresh before showing each frame: no tearing. \
+         Unset keeps the game's own choice.",
+    ),
+    OptionSpec::new(
+        "anisotropic",
+        Kind::Choice(ANISOTROPICS),
+        "Texture sharpness",
+        "Anisotropic filtering: keeps the road surface sharp into the distance. \
+         Unset keeps the game's.",
+    ),
+    OptionSpec::new(
+        "fsaa",
+        Kind::Toggle,
+        "Smooth edges",
+        "Anti-aliasing: smooths the jagged edges of cars and scenery; costs speed at 4K. \
+         Unset keeps the game's.",
+    ),
+    OptionSpec::new(
+        "fov",
+        Kind::Range { min: 30, max: 150 },
+        "Field of view",
+        "How wide the camera sees, in degrees, for both cameras (rounded down to a step of 5). \
+         The game's own is 75; wider screens already show more to the sides.",
+    )
+    .with_example("75"),
+    OptionSpec::new(
+        "shadows",
+        Kind::Choice(SHADOWS),
+        "Car shadows",
+        "Sharp: the crisper 2005 shadows. Soft: the blurrier 2003 ones. \
+         Unset keeps the game's.",
+    ),
+    OptionSpec::new(
+        "hd_ui",
+        Kind::Toggle,
+        "HD menus",
+        "Bekoha's HD UI: fonts, menus and race graphics redrawn for 4K.",
+    ),
+    OptionSpec::new(
+        "gamepad",
+        Kind::Choice(GAMEPADS),
+        "Gamepad",
+        "Rally: the triggers are the pedals, and the d-pad and A also work the menus. \
+         Standard: the pad as it reports itself. Off: the game's own DirectInput.",
+    ),
+    OptionSpec::new(
+        "gamepad_log",
+        Kind::Toggle,
+        "Gamepad log",
+        "Records what the game asks of the pad and what every button and stick sent \
+         (Xidi's log, beside the game in the runtime folder); for reporting a button \
+         that doesn't arrive.",
+    ),
+    OptionSpec::new(
+        "dxvk",
+        Kind::Toggle,
+        "Vulkan (DXVK)",
+        "Linux and Wine only: draws through Vulkan instead of Wine's OpenGL translator, \
+         full speed instead of about 10 FPS at 4K. On unless set off; ignored on Windows.",
+    ),
+    OptionSpec::new(
+        "scaler",
+        Kind::Choice(SCALERS),
+        "Upscaling",
+        "Linux only: how gamescope enlarges the picture to your screen. Sharp: crisp blocks. \
+         Even pixels: crisp, all the same size. FSR: smoothed, then sharpened. Smooth: the softest.",
+    )
+    .helper_owned(),
+    OptionSpec::new(
+        "postfx",
+        Kind::Choice(POSTFXS),
+        "Post-processing",
+        "Linux only, needs DXVK: a colour grade over the finished frame. Colour: real blacks, \
+         fuller contrast and sharpening. Cinematic: a stronger grade.",
+    )
+    .helper_owned(),
+];
 
-# Where the launcher keeps its private, writable copy of the game (about
-# 3 GB the first time; hard-linked instead of copied when that is
-# possible). Default: %LOCALAPPDATA%\CMR3Launcher\Rally3
-#runtime =
-
-# Where your profile (the game's CMR3 file) is kept. It is copied into the
-# game before it starts and back when it exits.
-# Default: %USERPROFILE%\Saved Games\Colin McRae Rally 3
-#saves =
-
-# Display resolution, e.g. 1920x1080, or original for the 640x480 of 2003.
-# Unset: the desktop's size. The launcher's SilentPatch adds every other
-# aspect ratio, so 16:9 shows more to the sides, unstretched.
-#resolution = 3840x2160
-
-# Fullscreen (the default), windowed or borderless.
-#display_mode = fullscreen
-
-# true waits for the screen's refresh before showing each frame (no
-# tearing); false doesn't. Unset keeps the game's own choice.
-#vsync = true
-
-# Anisotropic filtering: off, 2, 4, 8 or 16. Sharpens the road surface at
-# a distance. Unset keeps the game's.
-#anisotropic = 16
-
-# Anti-aliasing. SilentPatch fixed its broken sun and shadows, so it is
-# safe at any size; it costs speed at 4K.
-#fsaa = off
-
-# Field of view in degrees for both cameras, 30 to 150 in steps of 5. The
-# game's own is 75; wider screens already show more to the sides.
-#fov = 75
-
-# The HD UI pack (by Bekoha): fonts, banners and race UI redrawn for 4K.
-#hd_ui = on
-
-# Car shadows: sharp (the sharper 2005 look, SilentPatch's default) or
-# soft (the blurrier 2003 one).
-#shadows = sharp
-
-# Xidi's log: what the game asks of DirectInput and what every pad
-# control sent — turn it on when a button doesn't arrive.
-#gamepad_log = off
-
-# Gamepad through Xidi, as a game controller: rally puts the triggers on
-# the game's pedal axis (both at once), ignores the resting left-stick Y,
-# and has the d-pad and A also press the arrow keys and Enter for the
-# menus (which answer only the keyboard); standard passes the pad through as it
-# reports itself. With either, a new profile starts with the pad chosen
-# in the game's Options > Controls. off: no Xidi, the game's own
-# DirectInput.
-#gamepad = rally
-
-# Linux only: play through DXVK (Vulkan) instead of Wine's OpenGL
-# translator — the difference between native speed and ~10 FPS at 4K.
-#dxvk = on
-
-
-# Linux (cmr3-play) only: how gamescope enlarges the picture. nearest
-# (sharp pixels), pixel (sharp, all pixels the same size), fsr (smooth,
-# then sharpened) or linear (smooth).
-#scaler = linear
-
-# Linux (cmr3-play) only: post-processing over the finished frame, on
-# top of the game's own picture. off (the default): the faithful,
-# washed-out picture. color: real blacks, fuller contrast and CAS
-# sharpening. cinematic: a stronger grade, plus depth-based ambient
-# occlusion, which lifts the flat look (needs the AO
-# shaders; docs/ENHANCEMENTS.md). Needs dxvk = on: it works on the
-# game's Vulkan.
-#postfx = cinematic
-";
-
-pub const USAGE: &str = concat!(
-    "CMR3Launcher ",
-    env!("CARGO_PKG_VERSION"),
-    "\n\n",
-    "\
-CMR3Launcher [options]
-
-  --game <folder>          the folder with your installed Rally_3PC.exe (remembered)
-  --saves <folder>         where your profile is kept
-  --runtime <folder>       where the launcher keeps its private copy
-  --resolution <WxH>       display resolution, or original (640x480)
-  --display-mode <mode>    fullscreen, windowed or borderless
-  --vsync on|off           wait for the screen's refresh
-  --anisotropic <n>        off, 2, 4, 8 or 16
-  --fsaa on|off            anti-aliasing
-  --fov <30-150>           field of view for both cameras
-  --hd-ui on|off           the HD UI pack
-  --shadows <style>        sharp or soft car shadows
-  --postfx <style>         off, color or cinematic (Linux)
-  --gamepad <preset>       rally, standard (Xidi controller) or off
-  --gamepad-log on|off     Xidi's log of what the game and the pad exchange
-  --dxvk on|off            DXVK under Wine (Linux only)
-  --scaler <filter>        nearest, pixel, fsr or linear: gamescope's (Linux)
-
-These override launcher.cfg for one run (only --game is remembered).
-Without options the settings window opens first.
-
-  --no-window              play with the saved settings, no window
-  --settings [--linux]     only the settings window (exit 0: play, 3: closed;
-                           --linux adds the gamescope scaler, for cmr3-play)
-
-CMR3Launcher --check [--game <folder>]
-  checks the game folder, its Rally_3PC.exe version and the bundled parts
-
-Other settings are in launcher.cfg (see the comments in it)."
-);
-
-/// `WxH` within what a modern screen can hold; `original` is 640×480, the
-/// size the game shipped with.
-fn parse_resolution(v: &str) -> Option<(u32, u32)> {
-    match cfg::parse_resolution(v, (640, 480), (7680, 4320), cfg::ORIGINAL)? {
-        Resolution::Size(w, h) => Some((w, h)),
-        Resolution::Original | Resolution::Fullscreen => Some((640, 480)),
-    }
+/// The row for `key`; every key the launcher uses has one.
+pub fn option(key: &str) -> &'static OptionSpec {
+    spec::find(OPTIONS, key).unwrap_or_else(|| panic!("no option row for {key}"))
 }
 
-/// An anisotropic level: `off`, or 2, 4, 8, 16.
-fn parse_anisotropic(v: &str) -> Option<u32> {
-    let v = v.trim().to_ascii_lowercase();
-    if v == "off" {
-        return Some(0);
-    }
-    let n: u32 = v.parse().ok()?;
-    [2, 4, 8, 16].contains(&n).then_some(n)
+/// The file written on first run: a commented line for every option.
+pub fn template() -> String {
+    spec::template(
+        "Colin McRae Rally 3 launcher settings.\n\
+         \n\
+         One setting per line as key = value; lines starting with # are comments. \
+         A setting left unset keeps the game's own value (or the default named). \
+         Command-line options (--resolution 1920x1080, ...) override this file for one run. \
+         A launcher.cfg next to CMR3Launcher.exe is used instead of this one when it exists \
+         (portable installs).",
+        OPTIONS,
+    )
+}
+
+/// The launcher's own switches, which take no value.
+pub const SWITCHES: [&str; 4] = ["--settings", "--linux", "--no-window", "--check"];
+
+/// `--help`: the options from [`OPTIONS`], the switches and exit codes.
+pub fn usage() -> String {
+    format!(
+        "CMR3Launcher {}\n\n\
+         CMR3Launcher [options]\n\n\
+         {}\n\
+         These override launcher.cfg for one run (only --game is remembered);\n\
+         every one is also a launcher.cfg key (--hd-ui is hd_ui) and a control\n\
+         in the settings window. Without options the settings window opens first.\n\n\
+         \x20 --no-window              play with the saved settings, no window\n\
+         \x20 --settings [--linux]     only the settings window (exit 0: Play pressed,\n\
+         \x20                          3: closed without Play, 4: no window possible);\n\
+         \x20                          --linux adds the Linux-only rows, for cmr3-play\n\
+         \x20 --check                  checks the game folder, its Rally_3PC.exe and the\n\
+         \x20                          bundled parts without playing; the report goes to\n\
+         \x20                          the terminal and launcher.log (exit 0: ready,\n\
+         \x20                          1: something is missing or unknown)\n\
+         \x20 --help                   this text\n\n\
+         The log is %LOCALAPPDATA%\\CMR3Launcher\\launcher.log.",
+        env!("CARGO_PKG_VERSION"),
+        spec::usage(OPTIONS, KeyStyle::Underscore).trim_end(),
+    )
 }
 
 /// The SilentPatch ini value for an anisotropic level in texels.
@@ -393,75 +451,75 @@ pub fn anisotropic_ini(level: Option<u32>) -> Option<u32> {
     })
 }
 
-fn parse_fov(v: &str) -> Option<u32> {
-    cfg::parse_range(v, 30..=150).map(|n| n - n % 5)
+/// Why a parsed value can't be used: only an option row whose kind and
+/// key disagree (a bug in [`OPTIONS`]).
+fn mismatch() -> Rejected {
+    Rejected::Unknown
 }
 
-/// Every `launcher.cfg` key (and so every `--flag`) the launcher reads.
-pub const KEYS: [&str; 16] = [
-    "game",
-    "runtime",
-    "saves",
-    "resolution",
-    "display_mode",
-    "vsync",
-    "anisotropic",
-    "fsaa",
-    "fov",
-    "shadows",
-    "hd_ui",
-    "gamepad_log",
-    "gamepad",
-    "dxvk",
-    "postfx",
-    "scaler",
-];
+fn path(v: Value) -> Result<PathBuf, Rejected> {
+    match v {
+        Value::Text(t) => Ok(t.into()),
+        _ => Err(mismatch()),
+    }
+}
 
-/// The launcher's own switches, which take no value.
-pub const SWITCHES: [&str; 4] = ["--settings", "--linux", "--no-window", "--check"];
+fn toggle(v: Value) -> Result<bool, Rejected> {
+    match v {
+        Value::Toggle(on) => Ok(on),
+        _ => Err(mismatch()),
+    }
+}
+
+fn choice<T>(v: Value, from: fn(&str) -> Option<T>) -> Result<T, Rejected> {
+    match v {
+        Value::Choice(c) => from(c).ok_or_else(mismatch),
+        _ => Err(mismatch()),
+    }
+}
 
 impl Settings {
-    /// Sets one value by its `launcher.cfg` key. The command line's
-    /// `--some-key` is `some_key`, so the file and the flags read alike.
-    fn apply(&mut self, key: &str, value: &str) -> Result<(), Rejected> {
+    /// Sets one value by its `launcher.cfg` key, already checked against
+    /// its row in [`OPTIONS`]. The command line's `--some-key` is
+    /// `some_key`, so the file and the flags read alike.
+    fn apply(&mut self, key: &str, value: Value) -> Result<(), Rejected> {
         match key {
-            "game" => self.game = Some(value.into()),
-            "runtime" => self.runtime = Some(value.into()),
-            "saves" => self.saves = Some(value.into()),
+            "game" => self.game = Some(path(value)?),
+            "runtime" => self.runtime = Some(path(value)?),
+            "saves" => self.saves = Some(path(value)?),
             "resolution" => {
-                let r = need(parse_resolution(value), "WIDTHxHEIGHT or original")?;
+                let Value::Size(r) = value else {
+                    return Err(mismatch());
+                };
+                let r = match r {
+                    Resolution::Size(w, h) => (w, h),
+                    Resolution::Original | Resolution::Fullscreen => (640, 480),
+                };
                 self.resolution = Some(r);
                 self.original_resolution = r == (640, 480);
             }
-            "display_mode" => {
-                let m = DisplayMode::parse(value);
-                self.display_mode = Some(need(m, "fullscreen, windowed or borderless")?);
-            }
-            "vsync" => self.vsync = Some(need(cfg::parse_bool(value), cfg::ON_OFF)?),
+            "display_mode" => self.display_mode = Some(choice(value, DisplayMode::from_key)?),
+            "vsync" => self.vsync = Some(toggle(value)?),
             "anisotropic" => {
-                let a = parse_anisotropic(value);
-                self.anisotropic = Some(need(a, "off, 2, 4, 8 or 16")?);
+                self.anisotropic = Some(choice(value, |c| match c {
+                    "off" => Some(0),
+                    n => n.parse().ok(),
+                })?);
             }
-            "fsaa" => self.fsaa = Some(need(cfg::parse_bool(value), cfg::ON_OFF)?),
-            "fov" => self.fov = Some(need(parse_fov(value), "a number from 30 to 150")?),
-            "shadows" => self.shadows = Some(need(ShadowStyle::parse(value), "sharp or soft")?),
-            "hd_ui" => self.hd_ui = Some(need(cfg::parse_bool(value), cfg::ON_OFF)?),
-            "gamepad_log" => {
-                self.gamepad_log = Some(need(cfg::parse_bool(value), cfg::ON_OFF)?);
+            "fsaa" => self.fsaa = Some(toggle(value)?),
+            "fov" => {
+                let Value::Number(n) = value else {
+                    return Err(mismatch());
+                };
+                self.fov = Some(n - n % 5);
             }
-            "gamepad" => {
-                let g = Gamepad::parse(value);
-                self.gamepad = Some(need(g, "rally, standard or off")?);
-            }
-            "dxvk" => self.dxvk = Some(need(cfg::parse_bool(value), cfg::ON_OFF)?),
-            "postfx" => {
-                let p = Postfx::parse(value);
-                self.postfx = Some(need(p, "off, color or cinematic")?);
-            }
-            "scaler" => {
-                let f = Scaler::parse(value);
-                self.scaler = Some(need(f, "nearest, pixel, fsr or linear")?);
-            }
+            "shadows" => self.shadows = Some(choice(value, ShadowStyle::from_key)?),
+            "hd_ui" => self.hd_ui = Some(toggle(value)?),
+            "gamepad_log" => self.gamepad_log = Some(toggle(value)?),
+            "gamepad" => self.gamepad = Some(choice(value, Gamepad::from_key)?),
+            "dxvk" => self.dxvk = Some(toggle(value)?),
+            "postfx" => self.postfx = Some(choice(value, Postfx::from_key)?),
+            "scaler" => self.scaler = Some(choice(value, Scaler::from_key)?),
             _ => return Err(Rejected::Unknown),
         }
         Ok(())
@@ -470,7 +528,7 @@ impl Settings {
     /// Reads a settings file; the second value lists lines it could not use.
     pub fn parse_file(text: &str) -> (Settings, Vec<String>) {
         let mut s = Settings::default();
-        let warnings = cfg::parse(text, FILE_NAME, |k, v| s.apply(k, v));
+        let warnings = spec::parse_file(text, FILE_NAME, OPTIONS, |k, v| s.apply(k, v));
         (s, warnings)
     }
 
@@ -503,17 +561,15 @@ impl Settings {
     }
 
     /// The command line: `--key value` settings and the launcher's own
-    /// [`SWITCHES`] (returned in order), in one pass. Errors carry the
-    /// usage.
+    /// [`SWITCHES`] (returned in order), in one pass.
     pub fn parse_args<I: IntoIterator<Item = String>>(
         args: I,
-    ) -> Result<(Settings, Vec<String>), String> {
+    ) -> Result<(Settings, Vec<String>), ArgError> {
         let mut s = Settings::default();
-        match cfg::parse_args(args, &KEYS, &SWITCHES, |k, v| s.apply(k, v)) {
-            Ok(switches) => Ok((s, switches)),
-            Err(ArgError::Help(_)) => Err(USAGE.into()),
-            Err(e) => Err(format!("{e}\n\n{USAGE}")),
-        }
+        let switches = spec::parse_args(args, KeyStyle::Underscore, OPTIONS, &SWITCHES, |k, v| {
+            s.apply(k, v)
+        })?;
+        Ok((s, switches))
     }
 }
 
@@ -526,7 +582,9 @@ mod tests {
     use super::*;
 
     fn args(a: &[&str]) -> Result<Settings, String> {
-        Settings::parse_args(a.iter().map(|s| s.to_string())).map(|(s, _)| s)
+        Settings::parse_args(a.iter().map(|s| s.to_string()))
+            .map(|(s, _)| s)
+            .map_err(|e| e.to_string())
     }
 
     #[test]
@@ -551,21 +609,46 @@ mod tests {
         let (s, switches) = Settings::parse_args(["--game", "--check"].map(String::from)).unwrap();
         assert!(switches.is_empty());
         assert_eq!(s.game, Some(PathBuf::from("--check")));
-        let e = args(&["--vsync", "maybe"]).unwrap_err();
-        assert!(
-            e.starts_with("--vsync needs on or off, not maybe\n\nCMR3Launcher"),
-            "{e}"
+    }
+
+    #[test]
+    fn bad_flags_say_what_they_need() {
+        assert_eq!(
+            args(&["--vsync", "maybe"]).unwrap_err(),
+            "--vsync needs on or off, not maybe"
         );
-        assert!(
-            args(&["--fov"])
-                .unwrap_err()
-                .starts_with("--fov needs a value")
+        assert_eq!(args(&["--fov"]).unwrap_err(), "--fov needs a value");
+        assert_eq!(
+            args(&["--fov", "200"]).unwrap_err(),
+            "--fov needs 30 to 150, not 200"
         );
-        assert!(
-            args(&["--bogus"])
-                .unwrap_err()
-                .starts_with("unknown argument --bogus")
+        assert_eq!(
+            args(&["--anisotropic", "3"]).unwrap_err(),
+            "--anisotropic needs off, 2, 4, 8 or 16, not 3"
         );
+        assert_eq!(
+            args(&["--resolution", "8000x100"]).unwrap_err(),
+            "--resolution needs WIDTHxHEIGHT or original, not 8000x100"
+        );
+        assert_eq!(
+            args(&["--display-mode", "wide"]).unwrap_err(),
+            "--display-mode needs fullscreen, windowed or borderless, not wide"
+        );
+        assert_eq!(
+            args(&["--gamepad", "wheel"]).unwrap_err(),
+            "--gamepad needs rally, standard or off, not wheel"
+        );
+        assert_eq!(
+            args(&["--scaler", "blurry"]).unwrap_err(),
+            "--scaler needs nearest, pixel, fsr or linear, not blurry"
+        );
+        assert_eq!(args(&["--bogus"]).unwrap_err(), "unknown argument --bogus");
+        for help in ["--help", "-h", "/?"] {
+            assert!(matches!(
+                Settings::parse_args([help.to_string()]),
+                Err(ArgError::Help(_))
+            ));
+        }
     }
 
     #[test]
@@ -596,30 +679,135 @@ mod tests {
         assert_eq!(M::Windowed.effective(false, false), M::Windowed);
     }
 
-    #[test]
-    fn parses_every_setting() {
-        let (s, warnings) = Settings::parse_file(
-            "game = C:\\G\nresolution = 3840x2160\ndisplay_mode = borderless\nvsync = off\nanisotropic = 16\nfsaa = on\nfov = 90\nhd_ui = off\ngamepad = standard\ndxvk = off\nscaler = fsr\n",
-        );
-        assert!(warnings.is_empty(), "{warnings:?}");
+    /// One value per option, as the file and as a flag.
+    const EVERY: &[(&str, &str)] = &[
+        ("game", r"C:\G"),
+        ("saves", r"D:\Saves"),
+        ("runtime", r"E:\Rt"),
+        ("resolution", "3840x2160"),
+        ("display_mode", "borderless"),
+        ("vsync", "off"),
+        ("anisotropic", "4"),
+        ("fsaa", "on"),
+        ("fov", "90"),
+        ("shadows", "soft"),
+        ("hd_ui", "off"),
+        ("gamepad", "standard"),
+        ("gamepad_log", "on"),
+        ("dxvk", "off"),
+        ("scaler", "fsr"),
+        ("postfx", "color"),
+    ];
+
+    fn check_every(s: &Settings) {
         assert_eq!(s.game, Some(PathBuf::from(r"C:\G")));
+        assert_eq!(s.saves, Some(PathBuf::from(r"D:\Saves")));
+        assert_eq!(s.runtime, Some(PathBuf::from(r"E:\Rt")));
         assert_eq!(s.resolution, Some((3840, 2160)));
         assert_eq!(s.display_mode, Some(DisplayMode::Borderless));
         assert_eq!(s.vsync, Some(false));
-        assert_eq!(s.anisotropic, Some(16));
+        assert_eq!(s.anisotropic, Some(4));
         assert_eq!(s.fsaa, Some(true));
         assert_eq!(s.fov, Some(90));
+        assert_eq!(s.shadows, Some(ShadowStyle::Soft));
         assert_eq!(s.hd_ui, Some(false));
         assert_eq!(s.gamepad, Some(Gamepad::Standard));
+        assert_eq!(s.gamepad_log, Some(true));
         assert_eq!(s.dxvk, Some(false));
         assert_eq!(s.scaler, Some(Scaler::Fsr));
+        assert_eq!(s.postfx, Some(Postfx::Color));
     }
 
     #[test]
-    fn template_parses_clean() {
-        let (s, warnings) = Settings::parse_file(TEMPLATE);
+    fn every_option_parses_from_the_file_and_the_flags() {
+        assert_eq!(EVERY.len(), OPTIONS.len(), "one value per option row");
+        let file: String = EVERY.iter().map(|(k, v)| format!("{k} = {v}\n")).collect();
+        let (s, warnings) = Settings::parse_file(&file);
         assert!(warnings.is_empty(), "{warnings:?}");
-        assert_eq!(s, Settings::default(), "every setting is off by default");
+        check_every(&s);
+        let flags: Vec<String> = EVERY
+            .iter()
+            .flat_map(|(k, v)| [format!("--{}", k.replace('_', "-")), v.to_string()])
+            .collect();
+        let (s, switches) = Settings::parse_args(flags).unwrap();
+        assert!(switches.is_empty());
+        check_every(&s);
+    }
+
+    #[test]
+    fn help_is_generated_from_the_table() {
+        let help = usage();
+        for row in OPTIONS {
+            let flag = row.flag_name(KeyStyle::Underscore);
+            assert!(help.contains(&flag), "{flag} missing from --help");
+            assert!(help.contains(row.label), "{} missing", row.label);
+        }
+        assert!(help.contains("--scaler nearest|pixel|fsr|linear"));
+        assert!(help.contains("Upscaling (Linux helper)"));
+        assert!(help.contains("4: no window possible"));
+        assert!(help.contains("--check"));
+        // Every documented flag parses (they share launcher.cfg's keys).
+        for line in help.lines() {
+            let Some(flag) = line.trim().strip_prefix("--") else {
+                continue;
+            };
+            let flag = flag.split_whitespace().next().unwrap();
+            if matches!(flag, "no-window" | "settings" | "linux" | "check" | "help") {
+                continue;
+            }
+            if let Err(e) = args(&[&format!("--{flag}"), "?"]) {
+                assert!(!e.starts_with("unknown"), "--{flag}: {e}");
+            }
+        }
+    }
+
+    #[test]
+    fn template_parses_clean_and_names_every_key() {
+        let t = template();
+        let (s, warnings) = Settings::parse_file(&t);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(s, Settings::default(), "every setting is unset");
+        for row in OPTIONS {
+            assert!(t.contains(&format!("\n#{} =", row.key)), "{}", row.key);
+        }
+    }
+
+    #[test]
+    fn a_launcher_cfg_from_release_0_1_still_reads() {
+        // The template the 0.1 launchers wrote, then filled in by them.
+        let old = include_str!("../tests/fixtures/launcher-0.1.cfg");
+        let (s, warnings) = Settings::parse_file(old);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(s, Settings::default());
+        let filled = set_key(old, "game", r"D:\CMR3");
+        let filled = set_key(&filled, "vsync", "true");
+        let filled = set_key(&filled, "fov", "77");
+        let filled = set_key(&filled, "scaler", "linear");
+        let (s, warnings) = Settings::parse_file(&filled);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(s.game, Some(PathBuf::from(r"D:\CMR3")));
+        assert_eq!(s.vsync, Some(true), "true/false still read");
+        assert_eq!(s.fov, Some(75), "snapped to the step");
+        assert_eq!(s.scaler, Some(Scaler::Linear));
+    }
+
+    #[test]
+    fn a_windows_code_page_file_reads() {
+        // Saved by Notepad in Windows-1252, CRLF: "José" in the path.
+        let bytes = b"game = C:\\Users\\Jos\xe9\\Jogos d'A\xe7\xe3o\\CMR3\r\nvsync = on\r\n";
+        let dir = std::env::temp_dir().join(format!("cmr3-cp1252-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(FILE_NAME);
+        std::fs::write(&path, bytes).unwrap();
+        let text = cfg::read_file(&path).unwrap().unwrap();
+        let (s, warnings) = Settings::parse_file(&text);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(
+            s.game,
+            Some(PathBuf::from("C:\\Users\\José\\Jogos d'Ação\\CMR3"))
+        );
+        assert_eq!(s.vsync, Some(true));
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
@@ -649,95 +837,21 @@ mod tests {
             "resolution = 8000x100\nfov = 200\nanisotropic = 3\ndisplay_mode = wide\ngamepad = wheel\nscaler = blurry\n",
         );
         assert_eq!(warnings.len(), 6, "{warnings:?}");
-        // 45 degrees is in range (it snaps to the step), so no warning.
-        let (_, warnings) = Settings::parse_file("fov = 45\n");
+        assert!(warnings[1].contains("fov needs 30 to 150"), "{warnings:?}");
+        // 47 degrees is in range (it snaps to the step), so no warning.
+        let (s, warnings) = Settings::parse_file("fov = 47\n");
         assert!(warnings.is_empty());
-    }
-
-    #[test]
-    fn fov_snaps_to_steps_of_five() {
-        assert_eq!(parse_fov("77"), Some(75));
-        assert_eq!(parse_fov("78"), Some(75));
-        assert_eq!(parse_fov("80"), Some(80));
-        assert_eq!(parse_fov("29"), None);
+        assert_eq!(s.fov, Some(45));
     }
 
     #[test]
     fn anisotropic_maps_to_the_ini_index() {
         assert_eq!(anisotropic_ini(Some(0)), Some(0));
         assert_eq!(anisotropic_ini(Some(2)), Some(1));
+        assert_eq!(anisotropic_ini(Some(4)), Some(2));
+        assert_eq!(anisotropic_ini(Some(8)), Some(3));
         assert_eq!(anisotropic_ini(Some(16)), Some(4));
         assert_eq!(anisotropic_ini(None), None);
-    }
-
-    #[test]
-    fn every_flag_parses() {
-        let s = args(&[
-            "--game",
-            "D:\\G",
-            "--resolution",
-            "2560x1440",
-            "--display-mode",
-            "windowed",
-            "--vsync",
-            "on",
-            "--anisotropic",
-            "8",
-            "--fsaa",
-            "off",
-            "--fov",
-            "90",
-            "--hd-ui",
-            "off",
-            "--gamepad",
-            "off",
-            "--dxvk",
-            "off",
-        ])
-        .unwrap();
-        assert_eq!(s.game, Some(PathBuf::from(r"D:\G")));
-        assert_eq!(s.resolution, Some((2560, 1440)));
-        assert_eq!(s.display_mode, Some(DisplayMode::Windowed));
-        assert_eq!(s.vsync, Some(true));
-        assert_eq!(s.anisotropic, Some(8));
-        assert_eq!(s.fsaa, Some(false));
-        assert_eq!(s.fov, Some(90));
-        assert_eq!(s.hd_ui, Some(false));
-        assert_eq!(s.gamepad, Some(Gamepad::Off));
-        assert_eq!(s.dxvk, Some(false));
-        assert!(args(&["--vsync", "maybe"]).is_err());
-        assert!(args(&["--fov"]).is_err());
-        assert!(args(&["--bogus"]).is_err());
-        assert!(args(&["--help"]).unwrap_err().contains("CMR3Launcher"));
-    }
-
-    #[test]
-    fn every_documented_flag_is_accepted() {
-        // Each `--flag` in USAGE parses (they share launcher.cfg's keys).
-        for line in USAGE.lines() {
-            let Some(flag) = line.trim().strip_prefix("--") else {
-                continue;
-            };
-            let flag = flag.split_whitespace().next().unwrap();
-            if matches!(flag, "no-window" | "settings" | "linux" | "check") {
-                continue; // taken by main before parse_args
-            }
-            if let Err(e) = args(&[&format!("--{flag}"), "?"]) {
-                assert!(!e.starts_with("unknown"), "--{flag}: {e}");
-            }
-        }
-        let s = args(&[
-            "--shadows",
-            "soft",
-            "--postfx",
-            "color",
-            "--gamepad-log",
-            "on",
-        ])
-        .unwrap();
-        assert_eq!(s.shadows, Some(ShadowStyle::Soft));
-        assert_eq!(s.postfx, Some(Postfx::Color));
-        assert_eq!(s.gamepad_log, Some(true));
     }
 
     #[test]
@@ -752,11 +866,12 @@ mod tests {
 
     #[test]
     fn set_key_keeps_the_rest_of_the_file() {
-        let filled = set_key(TEMPLATE, "game", r"D:\CMR3");
+        let t = template();
+        let filled = set_key(&t, "game", r"D:\CMR3");
         assert!(filled.contains("\ngame = D:\\CMR3\n"));
         assert!(filled.contains("#runtime =\n"));
         let again = set_key(&filled, "game", r"E:\CMR3");
-        assert_eq!(again.matches("game =").count(), 1);
+        assert_eq!(again.matches("\ngame =").count(), 1);
         let cleared = clear_key(&filled, "game");
         assert!(cleared.contains("#game ="));
         assert!(!cleared.contains("\ngame ="));

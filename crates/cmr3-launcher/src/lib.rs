@@ -19,7 +19,10 @@ pub mod edition;
 pub mod form;
 #[cfg(any(windows, test))]
 pub mod look;
+pub mod plan;
 pub mod profile;
 pub mod runtime;
 pub mod sp;
+#[cfg(any(windows, test))]
+pub mod window;
 pub mod xidi;

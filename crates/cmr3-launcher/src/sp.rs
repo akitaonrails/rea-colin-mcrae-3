@@ -1,13 +1,17 @@
 //! `SilentPatchCMR3.ini`: the game's settings, which SilentPatch redirects
 //! from the registry into this portable file in the game folder.
 //!
-//! The launcher owns the keys below and leaves every other line as the
-//! game wrote it, so the player's own choices (gamma, detail levels,
-//! controls) survive. Keys the launcher no longer sets are removed, so the
-//! game's defaults apply again. The editing itself is the SDK's
-//! `rea_launcher::ini` (byte-faithful, `KEY=value` as SilentPatch writes).
+//! The launcher writes the keys below only while their option is set and
+//! leaves every other line as the game wrote it, so the player's own
+//! choices (gamma, detail levels, controls) survive. What it wrote is
+//! recorded ([`OWNED`], the SDK's `rea_launcher::ini::Owned`): when an
+//! option goes back to unset, the key returns to its earlier value (or
+//! goes) only while it still holds the launcher's value — a choice the
+//! player made since in the game's own menu stays. The editing itself is
+//! the SDK's `rea_launcher::ini` (byte-faithful, `KEY=value` as
+//! SilentPatch writes).
 
-use rea_launcher::ini::Ini;
+use rea_launcher::ini::{self, Ini, Owned};
 
 use crate::config::Settings;
 
@@ -25,23 +29,30 @@ pub const REGISTRY: &str = "Registry";
 pub const GRAPHICS: &str = "Graphics";
 pub const ADVANCED: &str = "Advanced";
 
-/// Writes the launcher's picture settings into the ini file's bytes.
-/// Returns the new bytes and a log line for each key set.
+/// The record of the values the launcher wrote, in the runtime folder.
+pub const OWNED: &str = ".cmr3-ini-owned";
+
+/// Writes the launcher's picture settings into the ini file's bytes,
+/// recording them in `owned`. Returns the new bytes and a log line for
+/// each key set or given back.
 pub fn apply_picture(
     bytes: &[u8],
     settings: &Settings,
     resolution: Option<(u32, u32)>,
+    owned: &mut Owned,
 ) -> (Vec<u8>, Vec<String>) {
     let mut ini = Ini::from_bytes(bytes).tight();
     let mut log = Vec::new();
     let mut put = |section: &str, key: &str, value: Option<String>| match value {
         Some(v) => {
-            ini.set(section, key, &v);
+            ini::set_owned(&mut ini, owned, section, key, &v);
             log.push(format!("{key}={v}"));
         }
-        None => {
-            ini.remove(section, key);
-        }
+        None => match ini::release(&mut ini, owned, section, key) {
+            ini::Released::Restored => log.push(format!("{key} back to the game's")),
+            ini::Released::PlayerChanged => log.push(format!("{key} kept (changed in the game)")),
+            ini::Released::NotOurs => {}
+        },
     };
     put(
         REGISTRY,
@@ -98,7 +109,16 @@ HEIGHT=480\n\
 DIGITAL_TACHO=0\n";
 
     fn apply(text: &str, settings: &Settings, res: Option<(u32, u32)>) -> (String, Vec<String>) {
-        let (bytes, log) = apply_picture(text.as_bytes(), settings, res);
+        apply_with(text, settings, res, &mut Owned::default())
+    }
+
+    fn apply_with(
+        text: &str,
+        settings: &Settings,
+        res: Option<(u32, u32)>,
+        owned: &mut Owned,
+    ) -> (String, Vec<String>) {
+        let (bytes, log) = apply_picture(text.as_bytes(), settings, res, owned);
         (String::from_utf8(bytes).unwrap(), log)
     }
 
@@ -151,29 +171,57 @@ DIGITAL_TACHO=0\n";
             shadows: Some(ShadowStyle::Sharp),
             ..Settings::default()
         };
-        let (t, log) = apply(GAME_WRITTEN, &sharp, None);
+        let mut owned = Owned::default();
+        let (t, log) = apply_with(GAME_WRITTEN, &sharp, None, &mut owned);
         assert!(t.contains("[Advanced]\nSHARPER_SHADOWS=1"));
         assert!(log.iter().any(|l| l == "SHARPER_SHADOWS=1"));
         let soft = Settings {
             shadows: Some(ShadowStyle::Soft),
             ..Settings::default()
         };
-        let (t, log) = apply(&t, &soft, None);
+        let (t, log) = apply_with(&t, &soft, None, &mut owned);
         assert!(t.contains("SHARPER_SHADOWS=0"));
         assert!(log.iter().any(|l| l == "SHARPER_SHADOWS=0"));
-        // Unset: the game's choice again.
-        let (t, _) = apply(&t, &Settings::default(), None);
+        // Unset: the key the launcher added goes again.
+        let (t, _) = apply_with(&t, &Settings::default(), None, &mut owned);
         assert!(!t.contains("SHARPER_SHADOWS"));
     }
 
     #[test]
-    fn apply_picture_without_settings_restores_the_defaults() {
-        let with = "[Registry]\nWIDTH=3840\nHEIGHT=2160\nVSYNC=1\nANISOTROPIC=4\n[Graphics]\nEXTERIOR_FOV=90\nINTERIOR_FOV=90\n";
+    fn unset_gives_back_only_what_the_launcher_wrote() {
+        // The game's own file: the player chose these in its menu.
+        let game = "[Registry]\nWIDTH=1024\nHEIGHT=768\nVSYNC=0\nFSAA=1\nDISPLAY_MODE=1\n[Graphics]\nEXTERIOR_FOV=80\n";
+        let set = Settings {
+            vsync: Some(true),
+            fsaa: Some(false),
+            fov: Some(90),
+            display_mode: Some(DisplayMode::Fullscreen),
+            ..Settings::default()
+        };
+        let mut owned = Owned::default();
+        let (t, _) = apply_with(game, &set, Some((1920, 1080)), &mut owned);
+        assert!(t.contains("VSYNC=1") && t.contains("FSAA=0") && t.contains("WIDTH=1920"));
+        // The player then changes vsync in the game's own menu.
+        let t = t.replace("VSYNC=1", "VSYNC=0");
+        // Every option back to unset: the launcher's values go back to the
+        // game's earlier ones; the player's new vsync stays.
+        let (t, log) = apply_with(&t, &Settings::default(), None, &mut owned);
+        assert_eq!(t, game, "{log:?}");
+        assert!(log.contains(&"VSYNC kept (changed in the game)".to_string()));
+        assert!(log.contains(&"FSAA back to the game's".to_string()));
+        // A key the launcher never wrote is never touched.
+        let (again, log) = apply_with(&t, &Settings::default(), None, &mut owned);
+        assert_eq!(again, game);
+        assert!(log.is_empty(), "{log:?}");
+    }
+
+    #[test]
+    fn values_from_before_the_record_are_left_alone() {
+        // A runtime from release 0.1 holds the old launcher's values but
+        // no record: unset keeps them rather than guessing.
+        let with = "[Registry]\nWIDTH=3840\nHEIGHT=2160\nVSYNC=1\n[Graphics]\nEXTERIOR_FOV=90\n";
         let (t, _) = apply(with, &Settings::default(), None);
-        assert!(!t.contains("WIDTH"));
-        assert!(!t.contains("VSYNC"));
-        assert!(!t.contains("ANISOTROPIC"));
-        assert!(!t.contains("FOV"));
+        assert_eq!(t, with);
     }
 
     #[test]
@@ -181,7 +229,7 @@ DIGITAL_TACHO=0\n";
         // A Windows-1252 value the game wrote, CRLF lines.
         let bytes = b"[Registry]\r\nPLAYER=Jos\xE9\r\nWIDTH=640\r\n";
         let settings = Settings::default();
-        let (out, _) = apply_picture(bytes, &settings, Some((1920, 1080)));
+        let (out, _) = apply_picture(bytes, &settings, Some((1920, 1080)), &mut Owned::default());
         assert_eq!(
             out,
             b"[Registry]\r\nPLAYER=Jos\xE9\r\nWIDTH=1920\r\nHEIGHT=1080\r\n"
