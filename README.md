@@ -15,10 +15,10 @@ You point the launcher at your installed game and press **Play**. The rest
 Vulkan renderer — is bundled and configured for you. Your game folder is
 never changed: the launcher works on its own private copy.
 
-[![Video: the settings window, then a gravel stage at 4K with a gamepad (1:51, click to play)](https://new-uploads-akitaonrails.s3.us-east-2.amazonaws.com/2026/11/02/rea-colin-mcrae-3-demo-poster.jpg)](https://new-uploads-akitaonrails.s3.us-east-2.amazonaws.com/2026/11/02/rea-colin-mcrae-3-demo.mp4)
+[![Video: the game's intro, then a gravel stage in Japan at 4K with the Cinematic look and a gamepad (1:56, click to play)](https://new-uploads-akitaonrails.s3.us-east-2.amazonaws.com/2026/11/02/rea-colin-mcrae-3-demo-v012-poster.jpg)](https://new-uploads-akitaonrails.s3.us-east-2.amazonaws.com/2026/11/02/rea-colin-mcrae-3-demo-v012.mp4)
 
-*Click to watch (1:51): the settings window, then a stage on Linux through
-the AppImage.*
+*Click to watch (1:56): a stage on Linux through the AppImage, with the
+Cinematic look.*
 
 ## The launcher
 
@@ -50,6 +50,10 @@ the AppImage.*
   reflections, sun rendering that no longer flickers or hitches with
   anti-aliasing.
 - Field-of-view control for the chase and interior cameras.
+- On Linux, the **Colour** and **Cinematic** looks fix the game's
+  washed-out picture: real blacks and fuller contrast, then sharpening.
+
+![The same spot of a stage before and after: the washed-out original on the left, the Cinematic look's deeper blacks and richer colour on the right]({U}rea-colin-mcrae-3-cinematic-before-after.jpg)
 
 ![Colin McRae Rally 3 running at 4K with the widescreen HD interface](docs/images/gameplay-4k.png)
 
@@ -149,7 +153,6 @@ edit by hand. Starting `CMR3Launcher.exe` with any option (for example
 | `gamepad = rally` | `rally` (the triggers are the pedals; the d-pad and A also work the menus), `standard`, or `off` (no Xidi). | rally |
 | `dxvk = on` | Linux only: draw through Vulkan instead of Wine's OpenGL translator. | on |
 | `scaler = linear` | Linux only: how gamescope enlarges the picture. | linear |
-| `postfx = color` | Linux `cmr3-play` only: `color` for CAS sharpening, or `cinematic` to add ambient occlusion when the shaders are supplied. | off |
 
 Flags: `--game`, `--saves`, `--runtime`, `--resolution`, `--display-mode`,
 `--vsync on|off`, `--anisotropic`, `--fsaa on|off`, `--fov`, `--shadows`,
