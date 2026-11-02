@@ -34,16 +34,16 @@ jobs:
         run: cargo fmt --all --check
 
       - name: Unit tests (host)
-        run: cargo test --workspace
+        run: cargo test --workspace --locked
 
       - name: Linux helper tests (GPU choice, gamescope args, post-processing, Wine prefix, supervision)
         run: sh linux/tests/gpu-env.sh && sh linux/tests/scaler.sh && sh linux/tests/postfx.sh && sh linux/tests/prefix.sh && sh linux/tests/supervision.sh
 
       - name: Lint (Windows target)
-        run: cargo clippy --release --target i686-pc-windows-gnu --workspace -- -D warnings
+        run: cargo clippy --release --target i686-pc-windows-gnu --workspace --locked -- -D warnings
 
       - name: Build CMR3Launcher.exe
-        run: cargo build --release --target i686-pc-windows-gnu --workspace
+        run: cargo build --release --target i686-pc-windows-gnu --workspace --locked
 
       - name: Fetch and verify the bundled components
         run: |
@@ -141,14 +141,16 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: CMR3Launcher-*
           merge-multiple: true
+      - name: Create checksums
+        run: sha256sum ./*.zip ./*.AppImage > SHA256SUMS
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-            --title "$GITHUB_REF_NAME" --notes-file CHANGELOG.md ./*.zip ./*.AppImage
+            --title "$GITHUB_REF_NAME" --notes-file CHANGELOG.md ./*.zip ./*.AppImage SHA256SUMS

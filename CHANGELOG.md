@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Releases carry a `SHA256SUMS` file for the package and the AppImage.
+
 ### Fixed
 
 - The DRM-free patcher never ran: the launcher passed xdelta its own path
