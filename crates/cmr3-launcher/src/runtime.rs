@@ -120,7 +120,11 @@ pub fn list(root: &Path) -> io::Result<Listing> {
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
-            let meta = entry.metadata()?;
+            // Followed: a symlinked file (or folder) counts as what it
+            // points to; a dangling one is skipped.
+            let Ok(meta) = fs::metadata(&path) else {
+                continue;
+            };
             if meta.is_dir() {
                 walk(root, &path, out)?;
             } else if meta.is_file() {
@@ -249,8 +253,13 @@ fn bring_over(from: &Path, to: &Path, rel: &str) -> io::Result<&'static str> {
     // A read-only original (a CD or ISO copy) is copied: a link would
     // share its attribute, and replacing a read-only file later needs a
     // fallback that is unreliable under Wine.
-    if is_static(rel) && fs::metadata(from).is_ok_and(|m| !m.permissions().readonly()) {
-        let linked = put_in_place(to, |tmp| fs::hard_link(from, tmp));
+    // The real file is linked: hard_link does not follow a symlink on
+    // Linux, and a link to the symlink itself could point nowhere.
+    if is_static(rel)
+        && fs::metadata(from).is_ok_and(|m| !m.permissions().readonly())
+        && let Ok(real) = fs::canonicalize(from)
+    {
+        let linked = put_in_place(to, |tmp| fs::hard_link(&real, tmp));
         if linked.is_ok() {
             return Ok("linked");
         }
@@ -547,6 +556,30 @@ mod tests {
                 .readonly()
         );
         fs::set_permissions(game.join("Data/a.dat"), fs::Permissions::from_mode(0o644)).unwrap();
+        for d in [game, rt] {
+            fs::remove_dir_all(d).unwrap();
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_originals_link_the_real_file() {
+        use std::os::unix::fs::MetadataExt;
+        let game = temp("symlink-game");
+        let rt = temp("symlink-rt");
+        fs::create_dir_all(game.join("Data")).unwrap();
+        fs::write(game.join("real.dat"), b"data").unwrap();
+        // A relative target: a link to the symlink itself would dangle.
+        std::os::unix::fs::symlink("../real.dat", game.join("Data/a.dat")).unwrap();
+        std::os::unix::fs::symlink("missing", game.join("Data/gone.dat")).unwrap();
+        sync(&game, &rt).unwrap();
+        let got = rt.join("Data/a.dat");
+        assert!(!fs::symlink_metadata(&got).unwrap().file_type().is_symlink());
+        assert_eq!(fs::read(&got).unwrap(), b"data");
+        assert_eq!(
+            fs::metadata(&got).unwrap().ino(),
+            fs::metadata(game.join("real.dat")).unwrap().ino()
+        );
         for d in [game, rt] {
             fs::remove_dir_all(d).unwrap();
         }
