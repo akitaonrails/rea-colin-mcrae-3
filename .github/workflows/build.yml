@@ -113,6 +113,8 @@ jobs:
           cp docs/ENHANCEMENTS.md "dist/$name/docs/"
           cp -r thirdparty "dist/$name/thirdparty"
           cp -r linux "dist/$name/linux"
+          # The shared play library cmr3-play sources, beside it.
+          cp sdk/rea-play.sh "dist/$name/linux/rea-play.sh"
           (cd dist && zip -r "$name.zip" "$name")
           echo "PACKAGE=dist/$name.zip" >> "$GITHUB_ENV"
           echo "PACKAGE_DIR=dist/$name" >> "$GITHUB_ENV"

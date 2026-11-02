@@ -16,238 +16,67 @@
 #   CMR3_RUN       a wrapper that runs wine and gamescope, e.g.
 #                  "distrobox enter gaming --" when they live in a container
 #   CMR3_WAIT      set: wait for the game to end (the AppImage sets it)
+#   CMR3_VKBASALT  a folder with libvkbasalt.so, for postfx
+#
+# The session, GPU choice, Wine prefix and gamescope handling are the
+# shared rea-launcher-sdk play library (rea-play.sh, beside this script in
+# a package, else the repository's vendored sdk/); this script holds the
+# game's own settings and its post-processing.
 set -u
-HERE=$(dirname "$(readlink -f "$0")")
-PREFIX=${CMR3_PREFIX:-$HOME/.local/share/cmr3-launcher/prefix}
-LAUNCHER=${CMR3_LAUNCHER:-}
-if [ -z "$LAUNCHER" ]; then
-  for p in "$HERE/CMR3Launcher.exe" "$HERE/../CMR3Launcher.exe"; do
-    [ -f "$p" ] && LAUNCHER=$(readlink -f "$p") && break
-  done
-fi
-RUN=${CMR3_RUN:-}
-STATE=$HOME/.config/cmr3-launcher
-mkdir -p "$STATE" "$PREFIX"
 
-# launcher.cfg is the one the launcher itself uses: next to its exe (a
-# portable install or the AppImage), or in the prefix user's
-# AppData\Local\CMR3Launcher.
-CFG=
-if [ -n "$LAUNCHER" ]; then
-  for p in "$(dirname "$LAUNCHER")/launcher.cfg" "$(dirname "$(dirname "$LAUNCHER")")/launcher.cfg"; do
-    [ -f "$p" ] && CFG=$(readlink -f "$p")
-  done
+_here=$(dirname "$(readlink -f "$0")")
+# Tests source this script from their own folder and name its folder.
+if [ -n "${CMR3_PLAY_FUNCTIONS_ONLY:-}" ] && [ -n "${CMR3_PLAY_HERE:-}" ]; then
+  _here=$CMR3_PLAY_HERE
 fi
-if [ -z "$CFG" ]; then
-  for d in "$PREFIX"/drive_c/users/*/AppData/Local/CMR3Launcher; do
-    case "$d" in */users/Public/*|*'*'*) continue ;; esac
-    [ -d "$d" ] && CFG=$d/launcher.cfg
-  done
-  [ -z "$CFG" ] && CFG=$PREFIX/drive_c/users/$USER/AppData/Local/CMR3Launcher/launcher.cfg
+if [ -f "$_here/rea-play.sh" ]; then
+  . "$_here/rea-play.sh"
+elif [ -f "$_here/../sdk/rea-play.sh" ]; then
+  . "$_here/../sdk/rea-play.sh"
+else
+  echo "rea-play.sh not found next to $0 or in ../sdk (run scripts/sdk-sync)" >&2
+  exit 1
 fi
 
-get_key() { [ -f "$CFG" ] && sed -n "s|^[[:space:]]*$1[[:space:]]*=[[:space:]]*||p" "$CFG" | tail -1; }
-LOCK=$STATE/running.pid
-
-# Session id and start time of a pid, from /proc. Fields are read after
-# the last ") ", so a command name with spaces or parentheses is fine.
-proc_stat() {
-  [ -r "/proc/$1/stat" ] || return 1
-  stat=$(cat "/proc/$1/stat") || return 1
-  rest=${stat##*) }
-  set -- $rest
-  [ "$#" -ge 20 ] || return 1
-  printf '%s %s\n' "$4" "${20}"
-}
-
-read_lock() {
-  [ -r "$LOCK" ] || return 1
-  IFS=' ' read -r LOCK_PID LOCK_START < "$LOCK" || return 1
-  case "$LOCK_PID" in ''|*[!0-9]*) return 1 ;; esac
-  case "$LOCK_START" in ''|*[!0-9]*) return 1 ;; esac
-}
-
-# Our session is running when the locked pid is still the session leader
-# we started, with the start time recorded then: a stale lock whose pid
-# was reused, or a Rally_3PC.exe started elsewhere, does not count.
-session_valid() {
-  read_lock || return 1
-  stats=$(proc_stat "$LOCK_PID") || return 1
-  [ "$stats" = "$LOCK_PID $LOCK_START" ]
-}
-
-# A lock from an older cmr3-play holds only a pid: a live one is taken as
-# running, so an upgrade does not start a second session beside it.
-legacy_pid() {
-  [ -r "$LOCK" ] || return 1
-  IFS=' ' read -r old rest < "$LOCK" || return 1
-  [ -z "$rest" ] || return 1
-  case "$old" in ''|*[!0-9]*) return 1 ;; esac
-  kill -0 "$old" 2>/dev/null && echo "$old"
-}
-
-running() { session_valid || legacy_pid >/dev/null; }
-
-# Ends our session (its whole process group) and the prefix's Wine
-# processes. Only a still-valid lock is signalled (an old-format one as
-# the older script did: its pid alone).
-stop_session() {
-  if session_valid; then
-    kill -TERM "-$LOCK_PID" 2>/dev/null || true
-  elif old=$(legacy_pid); then
-    kill "$old" 2>/dev/null || true
-  fi
-  rm -f "$LOCK"
-  $RUN env WINEPREFIX="$PREFIX" wineserver -k 2>/dev/null
-}
-
-# The best GPU for the game, as environment assignments (none: the
-# default GPU). A player's own DRI_PRIME / __NV_PRIME_RENDER_OFFLOAD wins.
-# - NVIDIA with its driver and OpenGL library: NVIDIA's render offload,
-#   which picks it over an integrated GPU (harmless when it drives the
-#   screen anyway). The Vulkan layer matters too: DXVK draws through it.
-# - Several Mesa GPUs, the screen's one integrated (Intel, or less video
-#   memory than another): DRI_PRIME=1, the other one.
-# CMR3_SYSFS replaces /sys (tests).
-gpu_env() {
-  [ -n "${DRI_PRIME:-}${__NV_PRIME_RENDER_OFFLOAD:-}" ] && return
-  sys=${CMR3_SYSFS:-/sys}
-  n=0 nvidia= boot= boot_vram=0 other_vram=0
-  for d in "$sys"/class/drm/card*; do
-    case "${d##*/}" in *-*) continue ;; esac  # connectors (card0-DP-1)
-    [ -r "$d/device/vendor" ] || continue
-    n=$((n + 1))
-    vram=$(cat "$d/device/mem_info_vram_total" 2>/dev/null || echo 0)
-    [ "$(basename "$(readlink "$d/device/driver")")" = nvidia ] && nvidia=1
-    if [ "$(cat "$d/device/boot_vga" 2>/dev/null)" = 1 ]; then
-      boot=$(cat "$d/device/vendor"); boot_vram=$vram
-    elif [ "$vram" -gt "$other_vram" ]; then
-      other_vram=$vram
-    fi
-  done
-  if [ -n "$nvidia" ] && $RUN sh -c 'ldconfig -p 2>/dev/null | grep -q libGLX_nvidia.so.0'; then
-    echo "__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia __VK_LAYER_NV_optimus=NVIDIA_only"
-  elif [ "$n" -ge 2 ] && { [ "$boot" = 0x8086 ] || [ "$other_vram" -gt "$boot_vram" ]; }; then
-    echo "DRI_PRIME=1"
-  fi
-}
-
+# The player-facing CMR3_* names, mapped onto the library's settings.
+REA_APP=cmr3-launcher                 # ~/.config/cmr3-launcher, the prefix name
+REA_EXE_NAME=CMR3Launcher.exe
+REA_EXE_HINT=CMR3_LAUNCHER
+REA_EXE=${CMR3_LAUNCHER:-}
+REA_PREFIX=${CMR3_PREFIX:-}
+REA_RUN=${CMR3_RUN:-}
+# A launch returns at once (the lock remembers the session), unless
+# CMR3_WAIT asks to wait for the game.
+REA_ALWAYS_WAIT=0
+REA_WAIT=${CMR3_WAIT:-}
+# launcher.cfg: next to the launcher (a portable install or the AppImage),
+# or in the prefix user's AppData\Local\CMR3Launcher.
+REA_CFG_APPDATA=CMR3Launcher
+# resolution = original is the 640x480 of 2003; a windowed or borderless
+# game sizes itself, so gamescope only runs for fullscreen.
+REA_ORIGINAL_SIZE=640x480
+REA_WINDOWED_KEY=display_mode
+# Pads reach the game through Wine's SDL backend (Xidi reads them as
+# XInput). SDL finds every pad itself; naming a device as well
+# (SDL_JOYSTICK_DEVICE) would add the same pad a second time.
+REA_SDL_ENV="SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1 SDL_JOYSTICK_HIDAPI=0"
+REA_SDL_SETTINGS=0
 # Wine's DLL choices for the game: the launcher installs Xidi and the ASI
 # loader into its own copy of the game (native, then Wine's builtin when
 # they misbehave), and DXVK's d3d9.dll for the Vulkan path. winedbg is
 # disabled so a crash in Wine's parts (a video-decoder regression, say)
 # ends the game instead of freezing it in a hidden debugger. Overrides
 # already set (the AppImage's, a player's) are kept after ours.
-dll_overrides() {
-  echo "dinput8,dsound,d3d9=n,b;winedbg=d${WINEDLLOVERRIDES:+;$WINEDLLOVERRIDES}"
-}
+REA_DLL_OVERRIDES='dinput8,dsound,d3d9=n,b'
+REA_WINEDBG_OFF=1
+# The launcher returns once the game is up: wait for the game itself.
+REA_GAME_PROCS=Rally_3PC.exe
 
-# One-time prefix settings: no crash dialog (winetricks' nocrashdialog),
-# which would otherwise pop up over the game when a Wine part faults.
-prepare_prefix() {
-  grep -qs '"ShowCrashDialog"=dword:00000000' "$PREFIX/user.reg" && return 0
-  $RUN env WINEPREFIX="$PREFIX" wine reg add 'HKCU\Software\Wine\WineDbg' \
-    /v ShowCrashDialog /t REG_DWORD /d 0 /f >/dev/null 2>&1
-  # Its wineserver must end first, or the game would join it outside
-  # gamescope (see settings).
-  $RUN env WINEPREFIX="$PREFIX" wineserver -w 2>/dev/null
-}
-
-# The game's window mode from launcher.cfg: gamescope only makes sense for
-# the fullscreen one (windowed and borderless sizes themselves).
-display_mode() { get_key display_mode; }
-
-start() {
-  if [ -z "$LAUNCHER" ] || [ ! -f "$LAUNCHER" ]; then
-    echo "CMR3Launcher.exe not found next to cmr3-play (or set CMR3_LAUNCHER)"; exit 1
-  fi
-  # The spellings the launcher accepts (1920X1080, spaces, CRLF); anything
-  # else keeps the default size.
-  res=$(get_key resolution | tr -d ' \r' | tr X x)
-  W=1920; H=1080
-  case "$res" in
-    original) W=640; H=480 ;;
-    *x*)
-      w=${res%x*} h=${res#*x}
-      case "$w:$h" in
-        :*|*:|*[!0-9:]*) ;;
-        *) W=$w H=$h ;;
-      esac ;;
-  esac
-  F=$(get_key scaler); F=${F:-linear}
-  inner=$STATE/inner.sh
-  # The launcher is positional parameter 1, never part of the script's
-  # text. The Vulkan layers (postfx) are set here, for the game only:
-  # gamescope, itself a Vulkan program, must not load them.
-  cat > "$inner" <<'INNER'
-#!/bin/sh
-trap 'wineserver -k; exit' INT TERM HUP
-if [ -n "${CMR3_VK_INSTANCE_LAYERS:-}" ]; then
-  export VK_LAYER_PATH="$CMR3_VK_LAYER_PATH"
-  export VK_INSTANCE_LAYERS="$CMR3_VK_INSTANCE_LAYERS"
-  export VKBASALT_CONFIG_FILE="$CMR3_VKBASALT_CONFIG_FILE"
-fi
-wine "$1" --no-window
-sleep 3; while pgrep -x Rally_3PC.exe >/dev/null; do sleep 1; done
-wineserver -k
-INNER
-  chmod +x "$inner"
-  export WINEDLLOVERRIDES="$(dll_overrides)"
-  # Pads reach the game through Wine's SDL backend (Xidi reads them as
-  # XInput). SDL finds every pad itself; naming a device as well
-  # (SDL_JOYSTICK_DEVICE) would add the same pad a second time.
-  export SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS="${SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS:-1}"
-  export SDL_JOYSTICK_HIDAPI="${SDL_JOYSTICK_HIDAPI:-0}"
-  prepare_prefix
-  # Already inside gamescope (a Steam Deck in Game Mode), a windowed mode,
-  # or no gamescope installed: the game runs directly (a second gamescope
-  # inside one fails).
-  case "$(display_mode)" in windowed|borderless) windowed=1 ;; *) windowed= ;; esac
-  if [ -n "$windowed" ] \
-     || [ -n "${GAMESCOPE_WAYLAND_DISPLAY:-}" ] \
-     || ! $RUN sh -c "command -v gamescope" >/dev/null 2>&1; then
-    echo "starting without a gamescope of our own"
-    launch sh "$inner" "$LAUNCHER"
-  else
-    echo "starting at ${W}x${H}, scaler $F"
-    launch gamescope -W "$W" -H "$H" -w "$W" -h "$H" -f -S fit -F "$F" -- "$inner" "$LAUNCHER"
-  fi
-}
-
-# Interrupted while waiting: end the session and wait for it, so the
-# AppImage's mount stays until its Wine is gone.
-launch_interrupted() {
-  trap - EXIT HUP INT TERM
-  if session_valid; then
-    kill -TERM "-$LOCK_PID" 2>/dev/null || true
-  fi
-  wait "$pid" 2>/dev/null
-  rm -f "$LOCK"
-  exit 143
-}
-
-# Runs a command in the prefix in its own session (so stop can end exactly
-# this launch), recorded in the lock by pid and start time. In the
-# background, or with CMR3_WAIT (the AppImage, unmounted when its script
-# ends) until it exits; then the lock goes too.
-launch() {
-  setsid $RUN env WINEPREFIX="$PREFIX" $GPU "$@" > "$STATE/play.log" 2>&1 < /dev/null &
-  pid=$!
-  # No record possible (it already ended, or no /proc): still a started
-  # game, not a failure.
-  stats=$(proc_stat "$pid") || {
-    if [ -n "${CMR3_WAIT:-}" ]; then wait "$pid"; return; fi
-    return 0
-  }
-  printf '%s %s\n' "$pid" "${stats#* }" > "$LOCK"
-  [ -n "${CMR3_WAIT:-}" ] || return 0
-  trap 'rm -f "$LOCK"' EXIT
-  trap 'launch_interrupted' HUP INT TERM
-  wait "$pid"
-  rc=$?
-  rm -f "$LOCK"
-  trap - EXIT HUP INT TERM
-  return "$rc"
+# Before each game start: no crash dialog over the game (once per
+# prefix), and the post-processing layer for the game only.
+rea_hook_before_start() {
+  rea_wine_no_crash_dialog
+  postfx_env
 }
 
 # Post-processing over the finished frame (postfx = color|cinematic in
@@ -255,16 +84,16 @@ launch() {
 # from the kit's thirdparty/vkbasalt, CMR3_VKBASALT, or a system install;
 # without one, the game runs as it was.
 postfx_env() {
-  fx=$(get_key postfx)
+  fx=$(rea_get_key postfx)
   case "$fx" in color|cinematic) ;; *) return 0 ;; esac
   # The layer works on the game's Vulkan, which only DXVK gives it.
-  if [ "$(get_key dxvk)" = off ]; then
+  if [ "$(rea_get_key dxvk)" = off ]; then
     echo "postfx: needs DXVK (dxvk = off); continuing without"
     return 0
   fi
   lib=""
-  for p in "$(dirname "$LAUNCHER")/thirdparty/vkbasalt/libvkbasalt.so" \
-           "$HERE/thirdparty/vkbasalt/libvkbasalt.so" \
+  for p in "$(dirname "$REA_EXE")/thirdparty/vkbasalt/libvkbasalt.so" \
+           "$REA_HERE/thirdparty/vkbasalt/libvkbasalt.so" \
            "${CMR3_VKBASALT:-}/libvkbasalt.so" \
            /usr/lib/vkbasalt/libvkbasalt.so \
            /usr/lib32/libvkbasalt.so /usr/lib/libvkbasalt.so; do
@@ -275,10 +104,10 @@ postfx_env() {
     return 0
   fi
   kbdir=$(dirname "$lib")
-  mkdir -p "$STATE/vkbasalt"
-  rm -f "$STATE/vkbasalt/layer.json" \
-        "$STATE/vkbasalt/layer64.json" \
-        "$STATE/vkbasalt/layer32.json"
+  mkdir -p "$REA_STATE/vkbasalt"
+  rm -f "$REA_STATE/vkbasalt/layer.json" \
+        "$REA_STATE/vkbasalt/layer64.json" \
+        "$REA_STATE/vkbasalt/layer32.json"
   # One manifest per library bitness, each under its own layer name, both
   # requested: whichever matches the process (a WoW64 prefix loads the
   # 64-bit loader even for its 32-bit game) is the one that loads. The
@@ -291,7 +120,7 @@ postfx_env() {
     esac
     [ -f "$l" ] || continue
     name="VK_LAYER_VKBASALT_post_processing$([ "$bits" = 32 ] && echo 32)"
-    cat > "$STATE/vkbasalt/layer$bits.json" <<JSON
+    cat > "$REA_STATE/vkbasalt/layer$bits.json" <<JSON
 {
   "file_format_version": "1.0.0",
   "layer": {
@@ -320,29 +149,29 @@ JSON
   case "$fx" in
     color) grade 0.08 0.90 1.15 1.08 ;;
     cinematic) grade 0.10 0.86 1.12 1.14 ;;
-  esac > "$STATE/vkbasalt/grade.cube"
+  esac > "$REA_STATE/vkbasalt/grade.cube"
   effects=lut:cas
   extra=""
-  if [ "$fx" = cinematic ] && [ -f "$STATE/vkbasalt/shaders/MxAO.fx" ]; then
+  if [ "$fx" = cinematic ] && [ -f "$REA_STATE/vkbasalt/shaders/MxAO.fx" ]; then
     # The depth pass: only when the player supplied MxAO (licences keep
     # us from shipping it; docs/ENHANCEMENTS.md explains where from).
     effects=mxao:lut:cas
-    extra="mxao = $STATE/vkbasalt/shaders/MxAO.fx
-reshadeIncludePath = $STATE/vkbasalt/shaders
-reshadeTexturePath = $STATE/vkbasalt/shaders"
+    extra="mxao = $REA_STATE/vkbasalt/shaders/MxAO.fx
+reshadeIncludePath = $REA_STATE/vkbasalt/shaders
+reshadeTexturePath = $REA_STATE/vkbasalt/shaders"
   fi
   {
     echo "effects = $effects"
     [ -n "$extra" ] && echo "$extra"
-    echo "lutFile = $STATE/vkbasalt/grade.cube"
+    echo "lutFile = $REA_STATE/vkbasalt/grade.cube"
     echo "casSharpness = 0.65"
     echo "executeAt = end"
-  } > "$STATE/vkbasalt/vkBasalt.conf"
-  # Passed on under our own names; the game's script turns them into the
-  # real ones (see start).
-  export CMR3_VK_LAYER_PATH="$STATE/vkbasalt"
-  export CMR3_VK_INSTANCE_LAYERS="$names"
-  export CMR3_VKBASALT_CONFIG_FILE="$STATE/vkbasalt/vkBasalt.conf"
+  } > "$REA_STATE/vkbasalt/vkBasalt.conf"
+  # For the game only: gamescope, itself a Vulkan program, must not load
+  # the layer (the library hands these to the game's own script).
+  rea_game_env VK_LAYER_PATH "$REA_STATE/vkbasalt"
+  rea_game_env VK_INSTANCE_LAYERS "$names"
+  rea_game_env VKBASALT_CONFIG_FILE "$REA_STATE/vkbasalt/vkBasalt.conf"
   echo "postfx: $fx via $lib ($names)"
   return 0
 }
@@ -370,39 +199,7 @@ grade() {
   }'
 }
 
-# The settings window; its exit code says what to do next.
-settings() {
-  $RUN env WINEPREFIX="$PREFIX" $GPU wine "$LAUNCHER" --settings --linux 2>/dev/null
-  rc=$?
-  # The window ran on the desktop. Its wineserver lingers for a few seconds
-  # and is tied to the desktop's display; a game started meanwhile would
-  # join it and open there instead of in gamescope. Wait for it to end.
-  $RUN env WINEPREFIX="$PREFIX" wineserver -w 2>/dev/null
-  case $rc in
-    0|4) return 0 ;;  # Play pressed, or no window could be shown
-    *) return 1 ;;    # closed
-  esac
-}
-
-# Tests load the functions above without running anything.
+rea_init || exit 1
+# Tests load the configuration and functions without running anything.
 [ -n "${CMR3_PLAY_FUNCTIONS_ONLY:-}" ] && return 0
-GPU=$(gpu_env)
-[ -n "$GPU" ] && echo "GPU: $GPU"
-postfx_env
-
-case "${1:-}" in
-  "")
-    if running; then echo "already running"; exit 0; fi
-    if [ -z "$LAUNCHER" ] || [ ! -f "$LAUNCHER" ]; then
-      echo "CMR3Launcher.exe not found next to cmr3-play (or set CMR3_LAUNCHER)"; exit 1
-    fi
-    settings || exit 0
-    start ;;
-  --play|start)
-    if running; then echo "already running"; else start; fi ;;
-  status) if running; then echo running; else echo idle; fi ;;
-  stop)
-    stop_session
-    echo stopped ;;
-  *) echo "usage: $0 [--play|stop|status]"; exit 2 ;;
-esac
+rea_main "$@"

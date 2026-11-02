@@ -78,6 +78,10 @@ some other way is neither reported nor stopped.
 | Log (`launcher.log`) | the same folder |
 | The launcher's copy of the game | `…/AppData/Local/CMR3Launcher/Rally3` (about 3 GB; hard-linked when possible) |
 | Your profile | `…/drive_c/users/<you>/Saved Games/Colin McRae Rally 3` |
+| `cmr3-play`'s session lock and logs (`play.log`, `settings.log`) | `~/.config/cmr3-launcher` |
+
+`cmr3-play` needs `rea-play.sh` (the shared play library) beside it; the
+zip and the AppImage ship it there.
 
 ## Troubleshooting
 

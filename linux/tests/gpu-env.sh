@@ -1,15 +1,17 @@
 #!/bin/sh
-# Tests cmr3-play's GPU choice against fake sysfs trees: sh linux/tests/gpu-env.sh
+# Tests cmr3-play's GPU choice (the play library's rea_gpu_env, with
+# CMR3's settings) against fake sysfs trees: sh linux/tests/gpu-env.sh
 set -u
 # A clean environment: the player's own choice would win every case.
 unset DRI_PRIME __NV_PRIME_RENDER_OFFLOAD __GLX_VENDOR_LIBRARY_NAME
 HERE=$(dirname "$(readlink -f "$0")")
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 export HOME=$T CMR3_PREFIX=$T/prefix
-# cmr3-play asks the wrapper whether NVIDIA's OpenGL library is installed.
-fake_run() { [ -n "${NV_LIB:-}" ]; }
-CMR3_PLAY_FUNCTIONS_ONLY=1 . "$HERE/../cmr3-play"
-RUN=fake_run
+CMR3_PLAY_FUNCTIONS_ONLY=1 CMR3_PLAY_HERE=$HERE/.. . "$HERE/../cmr3-play"
+REA_TEST=1
+# The library asks whether NVIDIA's OpenGL library is installed.
+nv_lib() { [ -n "${NV_LIB:-}" ]; }
+REA_NV_LIB_CHECK=nv_lib
 
 # gpu <tree> <card> <vendor> <driver> <boot_vga> [vram]
 gpu() {
@@ -22,7 +24,7 @@ gpu() {
 }
 fails=0
 check() { # name tree expected [NV_LIB]
-  got=$(CMR3_SYSFS=$T/$2 NV_LIB=${4:-} gpu_env)
+  got=$(REA_SYSFS=$T/$2 NV_LIB=${4:-} rea_gpu_env)
   if [ "$got" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1: got '$got', want '$3'"; fails=$((fails + 1)); fi
 }
 NV="__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia __VK_LAYER_NV_optimus=NVIDIA_only"

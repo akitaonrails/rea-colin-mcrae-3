@@ -43,7 +43,7 @@ for tool in function_grep.pl widl winebuild winecpp winedump wineg++ winegcc win
 done
 cp "$PKG/CMR3Launcher.exe" "$APPDIR/usr/lib/cmr/"
 cp -r "$PKG/thirdparty" "$APPDIR/usr/lib/cmr/thirdparty"
-cp "$PKG/linux/cmr3-play" "$APPDIR/usr/lib/cmr/"
+cp "$PKG/linux/cmr3-play" "$PKG/linux/rea-play.sh" "$APPDIR/usr/lib/cmr/"
 mkdir -p "$APPDIR/usr/share/doc/wine"
 cp "$HERE"/wine/* "$APPDIR/usr/share/doc/wine/"
 cp "$HERE/AppRun" "$APPDIR/AppRun"

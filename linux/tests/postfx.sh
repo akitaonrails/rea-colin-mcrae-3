@@ -5,18 +5,23 @@ set -u
 unset VK_INSTANCE_LAYERS VK_LAYER_PATH
 HERE=$(dirname "$(readlink -f "$0")")
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-export HOME=$T CMR3_PREFIX=$T/prefix CMR3_SYSFS=$T/nosys
+export HOME=$T CMR3_PREFIX=$T/prefix
 export CMR3_LAUNCHER=$T/CMR3Launcher.exe
 mkdir -p "$T/thirdparty/vkbasalt/lib32"
 : > "$T/CMR3Launcher.exe"
 : > "$T/thirdparty/vkbasalt/libvkbasalt.so"
 : > "$T/thirdparty/vkbasalt/lib32/libvkbasalt.so"
 printf 'postfx = color\n' > "$T/launcher.cfg"
-CMR3_PLAY_FUNCTIONS_ONLY=1 . "$HERE/../cmr3-play"
-LAUNCHER=$T/CMR3Launcher.exe
+CMR3_PLAY_FUNCTIONS_ONLY=1 CMR3_PLAY_HERE=$HERE/.. . "$HERE/../cmr3-play"
+STATE=$REA_STATE
+# The launcher.cfg next to the launcher wins.
+[ "$REA_CFG" = "$T/launcher.cfg" ] || { echo "FAIL cfg: $REA_CFG"; exit 1; }
 fails=0
+# What postfx gave the game (the library writes these to game.env).
+game_env() { printf '%s' "$REA_GAME_ENV" | sed -n "s/^$1=//p"; }
 mkdir -p "$STATE/vkbasalt"
 printf '{"legacy":true}\n' > "$STATE/vkbasalt/layer.json"
+REA_GAME_ENV=
 postfx_env > /dev/null
 if [ ! -e "$STATE/vkbasalt/layer.json" ]; then
   echo "ok   legacy manifest cannot shadow the current one"
@@ -33,10 +38,17 @@ for bits in 64 32; do
     fails=$((fails + 1))
   fi
 done
-case "$CMR3_VK_INSTANCE_LAYERS" in
+case "$(game_env VK_INSTANCE_LAYERS)" in
   *post_processing:*post_processing32) echo "ok   both bitnesses requested" ;;
-  *) echo "FAIL layer names: $CMR3_VK_INSTANCE_LAYERS"; fails=$((fails + 1)) ;;
+  *) echo "FAIL layer names: $REA_GAME_ENV"; fails=$((fails + 1)) ;;
 esac
+if [ "$(game_env VK_LAYER_PATH)" = "$STATE/vkbasalt" ] \
+   && [ "$(game_env VKBASALT_CONFIG_FILE)" = "$STATE/vkbasalt/vkBasalt.conf" ]; then
+  echo "ok   layer path and config for the game"
+else
+  echo "FAIL game env: $REA_GAME_ENV"
+  fails=$((fails + 1))
+fi
 # The layers reach the game only, never gamescope: nothing Vulkan reads is
 # exported here; the game's script sets them (see supervision.sh).
 if [ -z "${VK_INSTANCE_LAYERS:-}${VK_LAYER_PATH:-}" ]; then
@@ -62,6 +74,7 @@ fi
 # Cinematic with the player's MxAO: the effect is declared by its file.
 printf 'postfx = cinematic\n' > "$T/launcher.cfg"
 mkdir -p "$STATE/vkbasalt/shaders"; : > "$STATE/vkbasalt/shaders/MxAO.fx"
+REA_GAME_ENV=
 postfx_env > /dev/null
 if grep -qx "effects = mxao:lut:cas" "$conf" && grep -qx "mxao = $STATE/vkbasalt/shaders/MxAO.fx" "$conf"; then
   echo "ok   cinematic declares MxAO and chains it first"
@@ -70,9 +83,9 @@ else
   fails=$((fails + 1))
 fi
 # Without DXVK the layer has no Vulkan to work on: nothing is set up.
-unset CMR3_VK_INSTANCE_LAYERS
 printf 'postfx = color\ndxvk = off\n' > "$T/launcher.cfg"
 case "$(postfx_env)" in *"needs DXVK"*) echo "ok   postfx says it needs DXVK" ;; *) echo "FAIL no DXVK note"; fails=$((fails + 1)) ;; esac
+REA_GAME_ENV=
 postfx_env > /dev/null
-if [ -z "${CMR3_VK_INSTANCE_LAYERS:-}" ]; then echo "ok   no layer without DXVK"; else echo "FAIL layer set without DXVK"; fails=$((fails + 1)); fi
+if [ -z "$REA_GAME_ENV" ]; then echo "ok   no layer without DXVK"; else echo "FAIL layer set without DXVK"; fails=$((fails + 1)); fi
 [ "$fails" = 0 ] && echo "all passed" || { echo "$fails failed"; exit 1; }
