@@ -138,6 +138,11 @@
 
 ### Fixed
 
+- `--check` no longer calls an official 1.1 executable with disc
+  protection "not ready" when the bundled patcher converts it. It tries
+  the patcher on a scratch copy (the game folder is only read) and says
+  the executable is converted at Play. A missing HD UI is listed as
+  optional and no longer fails the check.
 - Under `cmr3-play`, the AppImage and Proton, an error that stops the
   launcher (game folder not found, an unknown game build, "already
   running") shows a message box again. Since SDK v0.3.0 it only went to

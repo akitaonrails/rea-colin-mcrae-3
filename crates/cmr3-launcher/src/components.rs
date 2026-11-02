@@ -46,24 +46,36 @@ pub fn bundle_dir() -> std::path::PathBuf {
         .unwrap_or_else(|| std::path::PathBuf::from("thirdparty"))
 }
 
+/// The bundled parts `--check` looks for: name, the files (a path ending
+/// in `/` is a folder) under the bundle, and whether play works without
+/// it (the HD UI is an extra).
+pub const PARTS: [(&str, &[&str], bool); 6] = [
+    ("SilentPatch", &["silentpatch/SilentPatchCMR3.asi"], false),
+    ("ASI loader", &["silentpatch/dinput8.dll"], false),
+    ("Xidi", &["xidi/dinput8.dll"], false),
+    (
+        "DRM-free patcher",
+        &["patcher/xdelta.exe", "patcher/efigs.xdelta"],
+        false,
+    ),
+    ("DXVK (Wine)", &["dxvk/d3d9.dll"], false),
+    ("HD UI", &["hd-ui/"], true),
+];
+
 /// Which bundled parts are present, for `--check` and the log.
-pub fn present(bundle: &Path) -> Vec<(&'static str, bool)> {
-    let file = |rel: &[&str]| {
-        bundle
-            .join(rel.iter().collect::<std::path::PathBuf>())
-            .is_file()
+pub fn present(bundle: &Path) -> Vec<crate::check::Part> {
+    let there = |rel: &str| match rel.strip_suffix('/') {
+        Some(dir) => bundle.join(dir).is_dir(),
+        None => bundle.join(rel).is_file(),
     };
-    vec![
-        ("SilentPatch", file(&["silentpatch", "SilentPatchCMR3.asi"])),
-        ("ASI loader", file(&["silentpatch", "dinput8.dll"])),
-        ("Xidi", file(&["xidi", "dinput8.dll"])),
-        (
-            "DRM-free patcher",
-            file(&["patcher", "xdelta.exe"]) && file(&["patcher", "efigs.xdelta"]),
-        ),
-        ("DXVK (Wine)", file(&["dxvk", "d3d9.dll"])),
-        ("HD UI", bundle.join("hd-ui").is_dir()),
-    ]
+    PARTS
+        .iter()
+        .map(|&(name, files, optional)| crate::check::Part {
+            name,
+            there: files.iter().all(|f| there(f)),
+            optional,
+        })
+        .collect()
 }
 
 /// The runtime's ledger of the files the launcher installed (the SDK's

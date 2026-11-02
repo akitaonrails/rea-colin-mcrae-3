@@ -14,6 +14,7 @@
 //! knowledge.
 
 pub mod audience;
+pub mod check;
 pub mod components;
 pub mod config;
 pub mod edition;

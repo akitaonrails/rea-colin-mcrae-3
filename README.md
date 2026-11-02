@@ -232,8 +232,11 @@ launcher's own switches:
 
 - `--no-window`: play with the saved settings, no window.
 - `--check`: check a game folder, its executable (with its SHA-256) and
-  the bundled parts without playing. The report goes to the terminal and
-  `launcher.log` (exit 0 ready, 1 something missing or unknown).
+  the bundled parts without playing. An official 1.1 executable with disc
+  protection is tried with the bundled patcher on a scratch copy and
+  reported as "converted at Play"; the HD UI is optional. The report goes
+  to the terminal and `launcher.log` (exit 0 ready, 1 something needed is
+  missing or unknown).
 - `--settings`: only the settings window (exit 0 Play pressed, 3 closed
   without Play, 4 no window possible).
 - `--linux`: started by `cmr3-play` or the AppImage.

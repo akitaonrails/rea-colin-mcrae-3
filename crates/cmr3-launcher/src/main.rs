@@ -30,6 +30,7 @@ mod app {
     use std::path::{Path, PathBuf};
 
     use cmr3_launcher::audience::{self, Audience};
+    use cmr3_launcher::check;
     use cmr3_launcher::components::{self, Installed};
     use cmr3_launcher::config::{self, Settings};
     use cmr3_launcher::edition;
@@ -478,11 +479,39 @@ mod app {
         )
     }
 
-    /// Applies the bundled DRM-free patch (CookiePLMonster's xdelta
-    /// updates for the official 1.1 executables, owner decision of
-    /// 2026-11-02) to the runtime copy. xdelta refuses a source it wasn't
-    /// made for, and the result must be one of the known DRM-free builds;
-    /// anything else is refused with the game's SHA-256 (`sha`).
+    /// Runs the bundled DRM-free patch (CookiePLMonster's xdelta updates
+    /// for the official 1.1 executables, owner decision of 2026-11-02) on
+    /// `source`, writing `out`: the patch set whose result is one of the
+    /// known DRM-free builds, or `None` when every set refused it (xdelta
+    /// refuses a source it wasn't made for) or gave an unknown result.
+    fn try_drm_free_patch(
+        xdelta: &Path,
+        source: &Path,
+        out: &Path,
+        cwd: &Path,
+    ) -> Result<Option<&'static str>, String> {
+        for variant in ["efigs", "polish"] {
+            let args = components::xdelta_args(xdelta, source, variant, out);
+            let code = Launch::new(xdelta)
+                .args(&args)
+                .cwd(cwd)
+                .hidden(true)
+                .run()?;
+            if code != 0 {
+                continue;
+            }
+            if fs::read(out).is_ok_and(|bytes| edition::is_drm_free(&bytes)) {
+                return Ok(Some(variant));
+            }
+            log_line(&format!(
+                "DRM-free patch ({variant}) gave an unknown result"
+            ));
+        }
+        Ok(None)
+    }
+
+    /// Applies the bundled DRM-free patch to the runtime copy; anything
+    /// it refuses is refused with the game's SHA-256 (`sha`).
     fn apply_drm_free(rt: &Path, bundle: &Path, sha: &str) -> Result<(), String> {
         let xdelta = bundle.join("patcher/xdelta.exe");
         if !xdelta.is_file() {
@@ -501,83 +530,46 @@ mod app {
             let _ = fs::remove_file(&backup);
             let _ = fs::remove_file(&new);
         };
-        for variant in ["efigs", "polish"] {
-            let args = components::xdelta_args(&xdelta, &backup, variant, &new);
-            let run = Launch::new(&xdelta).args(&args).cwd(rt).hidden(true).run();
-            match run.map(|code| code == 0) {
-                Ok(true) => {
-                    let ok = fs::read(&new).is_ok_and(|bytes| edition::is_drm_free(&bytes));
-                    if !ok {
-                        log_line(&format!(
-                            "DRM-free patch ({variant}) gave an unknown result"
-                        ));
-                        continue;
-                    }
-                    fsx::install_copy(&new, &exe)
-                        .map_err(|e| format!("cannot replace the executable: {e}"))?;
-                    cleanup();
-                    log_line(&format!("DRM-free patch applied ({variant})"));
-                    return Ok(());
-                }
-                Ok(false) => continue,
-                Err(e) => {
-                    cleanup();
-                    return Err(e);
-                }
-            }
-        }
+        let patched = try_drm_free_patch(&xdelta, &backup, &new, rt);
+        let result = match patched {
+            Ok(Some(variant)) => fsx::install_copy(&new, &exe)
+                .map(|()| log_line(&format!("DRM-free patch applied ({variant})")))
+                .map_err(|e| format!("cannot replace the executable: {e}")),
+            Ok(None) => Err(edition::refusal(sha)),
+            Err(e) => Err(e),
+        };
         cleanup();
-        Err(edition::refusal(sha))
+        result
     }
 
     /// `--check`: the game folder, its executable and the bundled parts,
-    /// without playing. The report goes to launcher.log and the terminal
-    /// (a message box only when there is none); the exit code says
-    /// whether everything needed is there.
+    /// without playing. An executable that is not DRM-free is tried with
+    /// the bundled patcher on a scratch file in the launcher's folder (the
+    /// game folder is only read). The report goes to launcher.log and the
+    /// terminal (a message box only when nobody sees one); the exit code
+    /// says whether everything needed is there.
     fn check(settings: &Settings) -> u32 {
         let bundle = components::bundle_dir();
-        let mut lines = Vec::new();
-        let mut ok = true;
-        match find_game(settings) {
-            Ok(game) => {
-                lines.push(format!("Game folder: {}", game.display()));
-                match fs::read(game.join(EXE)) {
-                    Ok(bytes) => {
-                        let sha = edition::sha256_hex(&bytes);
-                        match edition::identify(&bytes) {
-                            edition::Edition::DrmFree(name) => lines.push(format!("{EXE}: {name}")),
-                            edition::Edition::NeedsPatching => {
-                                lines.push(format!("{EXE}: {}", edition::UNKNOWN_NOTE));
-                                lines.push(format!("Report: {}", edition::ISSUE_URL));
-                                ok = false;
-                            }
-                        }
-                        lines.push(format!("SHA-256: {sha}"));
-                    }
-                    Err(e) => {
-                        lines.push(format!("{EXE}: cannot read it ({e})"));
-                        ok = false;
-                    }
-                }
-            }
-            Err(e) => {
-                lines.push(e);
-                ok = false;
-            }
-        }
-        lines.push("Bundled parts:".into());
-        for (name, there) in components::present(&bundle) {
-            lines.push(format!(
-                "  {name}: {}",
-                if there { "yes" } else { "missing" }
-            ));
-            ok &= there;
-        }
-        lines.push(if ok {
-            "Ready to play.".into()
-        } else {
-            "Not ready: see above.".into()
+        let game = find_game(settings);
+        let exe = game.as_ref().ok().map(|game| {
+            let path = game.join(EXE);
+            let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+            let sha = edition::sha256_hex(&bytes);
+            let exe = check::Exe::from_edition(edition::identify(&bytes), || {
+                let xdelta = bundle.join("patcher/xdelta.exe");
+                xdelta.is_file().then(|| {
+                    let scratch = home();
+                    fs::create_dir_all(&scratch).map_err(|e| e.to_string())?;
+                    let out = scratch.join("check-Rally_3PC.exe.new");
+                    let tried = try_drm_free_patch(&xdelta, &path, &out, &scratch);
+                    let _ = fs::remove_file(&out);
+                    tried
+                })
+            });
+            Ok((exe, sha))
         });
+        let game = game.map(|g| g.display().to_string());
+        let (lines, ok) = check::report(game, exe, &components::present(&bundle));
         for line in &lines {
             log_line(&format!("check: {line}"));
         }
