@@ -104,6 +104,10 @@ fn put_owned(
 /// ledger, or byte-equal to one of `ours`, for runtimes from before the
 /// ledger): the game's own file comes back, or none. Anything else (the
 /// game's own file, a player's mod) stays.
+///
+/// `ours` holds only what this launcher would install now (the current
+/// bundle's DLL, the current Xidi.ini presets): a pre-ledger file from an
+/// older bundle or older presets is not recognised and stays in place.
 fn take_out(
     game: &Path,
     runtime: &Path,

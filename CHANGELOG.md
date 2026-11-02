@@ -42,6 +42,10 @@
   `d3d9.dll` the launcher installed (recorded by checksum in
   `.cmr3-launcher-components`), and bring back the game folder's own
   `dinput8.dll`/`d3d9.dll` when it has one; a player's own files stay.
+  Upgrading: files from before the record are recognised only when they
+  are byte-for-byte this release's bundled DLL or one of its `Xidi.ini`
+  presets; anything older stays, so remove it by hand (or delete the
+  runtime folder) if Gamepad off or DXVK off seems to have no effect.
 - Started from plain Proton or Wine (without `cmr3-play`), the game now
   loads the installed ASI loader, Xidi and DXVK: the launcher gives it
   `WINEDLLOVERRIDES` for them, keeping the player's other rules (a rule
