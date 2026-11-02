@@ -91,48 +91,16 @@ jobs:
           cp packaging/licenses/Xidi-LICENSE packaging/licenses/Xidi-Hookshot-LICENSE thirdparty/xidi/
 
       - name: Build both vkBasalt layer bitnesses
-        run: packaging/build-vkbasalt.sh vkBasalt-0.3.2.10 thirdparty/vkbasalt
-
-      - name: Build the vkBasalt layer (both bitnesses)
         run: |
-          # The postfx layer: built from the pinned source. Both bitnesses
-          # ship — a WoW64 prefix loads the 64-bit Vulkan loader even for
-          # the 32-bit game, so each process finds its own library.
+          # The postfx layer, from the pinned source: both bitnesses ship —
+          # a WoW64 prefix loads the 64-bit Vulkan loader even for its
+          # 32-bit game, so each process finds its own library.
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y gcc-multilib g++-multilib meson ninja-build \
             glslang-tools pkg-config libx11-dev libx11-dev:i386 \
             libvulkan-dev libvulkan-dev:i386
-          pins() { grep -v '^#' packaging/third-party.txt | grep .; }
-          url=$(pins | awk '$1=="vkbasalt" {print $2}')
-          sha=$(pins | awk '$1=="vkbasalt" {print $3}')
-          curl -fsSL "$url" -o vkbasalt.tar.gz
-          echo "$sha  vkbasalt.tar.gz" | sha256sum -c -
-          tar -xzf vkbasalt.tar.gz
-          cd vkBasalt-0.3.2.10
-          meson setup build64 -Dwith_json=false > /dev/null && ninja -C build64 > /dev/null
-          cat > cross32.txt <<'EOF'
-          [binaries]
-          c = ['gcc', '-m32']
-          cpp = ['g++', '-m32']
-          ar = 'ar'
-          strip = 'strip'
-          pkg-config = '/usr/bin/pkg-config'
-
-          [host_machine]
-          system = 'linux'
-          cpu_family = 'x86'
-          cpu = 'i686'
-          endian = 'little'
-          EOF
-          PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig \
-            meson setup build32 --cross-file cross32.txt -Dwith_json=false > /dev/null \
-            && ninja -C build32 > /dev/null
-          strip build64/src/libvkbasalt.so build32/src/libvkbasalt.so
-          mkdir -p ../thirdparty/vkbasalt/lib32
-          cp build64/src/libvkbasalt.so ../thirdparty/vkbasalt/
-          cp build32/src/libvkbasalt.so ../thirdparty/vkbasalt/lib32/
-          cp LICENSE ../thirdparty/vkbasalt/LICENSE
+          packaging/build-vkbasalt.sh vkBasalt-*/ thirdparty/vkbasalt
 
       - name: Package
         run: |

@@ -6,7 +6,7 @@
 # fallbacks (our mirror on the 'thirdparty' release) for the day an
 # upstream moves or disappears. The sha256 is the gate: an upstream update
 # never enters a build silently — bump it deliberately after testing, and
-# refresh the mirror (packaging/mirror.yml).
+# refresh the mirror (.github/workflows/mirror.yml).
 #
 # Upstream's "latest" links live in packaging/upstream-watch.txt, checked
 # weekly by .github/workflows/watch-upstream.yml.
@@ -30,15 +30,11 @@ patcher https://github.com/CookiePLMonster/SilentPatchCMR3/releases/download/BUI
 dxvk https://github.com/doitsujin/dxvk/releases/download/v3.1.1/dxvk-3.1.1.tar.gz 40565b4a724aadc4433fa4e010b4b23916d9b1f1baeee64e17186db94f54e608 https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/dxvk-3.1.1.tar.gz
 dxvk-d3d9-sha256 - 265888c31ca78dffa290c39cb7e50bfb02762590e41927906e46fb32f01497fa
 
-# vkBasalt 0.3.2.10 (Zlib) — source for the 32/64-bit Vulkan post-processing
-# layers built by packaging/build-vkbasalt.sh.
-vkbasalt https://github.com/DadSchoorse/vkBasalt/archive/refs/tags/v0.3.2.10.tar.gz 22f0d44518361b12cf51f30fc9931423977af32a396e746ebf6d726c05788de6 https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/vkBasalt-0.3.2.10.tar.gz
-
 # HD UI v1.0.1 by Bekoha — fonts and race graphics redrawn for 4K (owner
 # decision, like the 1998 game's HD art pack; credited in THIRD_PARTY.md).
 hd-ui https://github.com/bekoha/bekoha.github.io/releases/download/cmr3-hdui-1.0.1/CMR3_HD_UI_v1.0.1.zip b3193f037fe4d0a22d9700f561be56774f8c296b6e3a221eb6f2bb79b6eda3b7 https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/CMR3_HD_UI_v1.0.1.zip
 
-# vkBasalt v0.3.2.10 (zlib) — the post-processing layer (postfx), built
-# from source by CI for both bitnesses (see build.yml); the mirror below
-# carries the last good build.
-vkbasalt https://github.com/DadSchoorse/vkBasalt/archive/refs/tags/v0.3.2.10.tar.gz eb196ff446fa36ec0ca99c4406d753c1fa210afddeec5e7a76e1c2e74ed605e3
+# vkBasalt 0.3.2.10 (Zlib) — source for the 32/64-bit Vulkan post-
+# processing layers built by packaging/build-vkbasalt.sh. Pinned to the
+# commit archive, which is byte-stable; GitHub's tag archives are not.
+vkbasalt https://github.com/DadSchoorse/vkBasalt/archive/4f97f09ffe91900e6ca136cc26cf7966f8f6970d.tar.gz 07bad26a0a432cb110c95cb3c4d11efceb4dd9e60f3c086ab92256e79d7696bc https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/vkBasalt-0.3.2.10.tar.gz
