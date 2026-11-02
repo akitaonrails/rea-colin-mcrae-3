@@ -59,7 +59,9 @@
   running from an older `cmr3-play` (its pid-only lock) counts as running,
   and closing the AppImage while the game runs waits for it to end. The resolution is
   validated before it reaches gamescope, and the postfx Vulkan layer is
-  given to the game only, no longer to gamescope as well.
+  given to the game only, no longer to gamescope as well. Post-processing
+  therefore needs DXVK (it works on the game's Vulkan): with `dxvk = off`
+  `cmr3-play` says so and skips it, and the settings window notes it.
 - `--resolution 1920x1080` on the command line now wins over a file's
   `resolution = original` completely, and `--help` lists `--scaler`.
 - The settings window recommends the Enhanced look until it has saved

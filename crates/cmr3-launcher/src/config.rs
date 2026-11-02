@@ -316,7 +316,8 @@ game =
 # washed-out picture. color: real blacks, fuller contrast and CAS
 # sharpening. cinematic: a stronger grade, plus depth-based ambient
 # occlusion, which lifts the flat look (needs the AO
-# shaders; docs/ENHANCEMENTS.md).
+# shaders; docs/ENHANCEMENTS.md). Needs dxvk = on: it works on the
+# game's Vulkan.
 #postfx = cinematic
 ";
 

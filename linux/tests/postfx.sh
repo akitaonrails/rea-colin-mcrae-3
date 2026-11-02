@@ -69,4 +69,10 @@ else
   echo "FAIL cinematic: $(tr '\n' '|' < "$conf")"
   fails=$((fails + 1))
 fi
+# Without DXVK the layer has no Vulkan to work on: nothing is set up.
+unset CMR3_VK_INSTANCE_LAYERS
+printf 'postfx = color\ndxvk = off\n' > "$T/launcher.cfg"
+case "$(postfx_env)" in *"needs DXVK"*) echo "ok   postfx says it needs DXVK" ;; *) echo "FAIL no DXVK note"; fails=$((fails + 1)) ;; esac
+postfx_env > /dev/null
+if [ -z "${CMR3_VK_INSTANCE_LAYERS:-}" ]; then echo "ok   no layer without DXVK"; else echo "FAIL layer set without DXVK"; fails=$((fails + 1)); fi
 [ "$fails" = 0 ] && echo "all passed" || { echo "$fails failed"; exit 1; }

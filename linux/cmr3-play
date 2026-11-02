@@ -257,6 +257,11 @@ launch() {
 postfx_env() {
   fx=$(get_key postfx)
   case "$fx" in color|cinematic) ;; *) return 0 ;; esac
+  # The layer works on the game's Vulkan, which only DXVK gives it.
+  if [ "$(get_key dxvk)" = off ]; then
+    echo "postfx: needs DXVK (dxvk = off); continuing without"
+    return 0
+  fi
   lib=""
   for p in "$(dirname "$LAUNCHER")/thirdparty/vkbasalt/libvkbasalt.so" \
            "$HERE/thirdparty/vkbasalt/libvkbasalt.so" \

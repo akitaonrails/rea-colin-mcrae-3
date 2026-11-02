@@ -86,6 +86,10 @@ some other way is neither reported nor stopped.
   `thirdparty/dxvk/d3d9.dll` exists next to the launcher. Without it
   Wine draws through its OpenGL translator, which manages about 10 FPS
   at 4K on a fast card.
+- **Post-processing (Colour, Cinematic) changes nothing** — it is a
+  Vulkan layer on the game's DXVK, so it needs **DXVK** on (and
+  `cmr3-play`); with DXVK off the game draws through OpenGL and the
+  layer has nothing to work on.
 - **The game window is the wrong shape** — keep the game's own display
   options as they are and set the resolution in the launcher; SilentPatch
   matches the aspect ratio to the resolution.

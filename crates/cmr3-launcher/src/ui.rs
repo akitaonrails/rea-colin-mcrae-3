@@ -694,8 +694,16 @@ impl Window<'_> {
                         .map_or("", |s| s.2);
                     ui.label(egui::RichText::new(note).font(font(13.0)).color(MUTED));
                 });
+                let dxvk = self.form.dxvk;
                 row(ui, "Post-processing", &mut |ui| {
                     chips(ui, &form::POSTFX, &mut self.form.picture.postfx);
+                    if !dxvk {
+                        ui.label(
+                            egui::RichText::new("Needs DXVK (it works on the game's Vulkan)")
+                                .font(font(13.0))
+                                .color(MUTED),
+                        );
+                    }
                 });
                 row(ui, "", &mut |ui| {
                     toggle(
