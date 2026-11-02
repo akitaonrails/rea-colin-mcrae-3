@@ -26,6 +26,8 @@
   `WINEDLLOVERRIDES` for them, keeping the player's other rules. Wine is
   also recognised by `WINEPREFIX`, `WINELOADER` or
   `STEAM_COMPAT_DATA_PATH` when `wine_get_version` is hidden.
+- A `SilentPatchCMR3.ini` whose last line had no newline got the next new
+  section header glued onto that line.
 
 ## [0.1.2] - 2026-11-02
 

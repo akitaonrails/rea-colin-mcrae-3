@@ -13,7 +13,15 @@ use crate::config::Settings;
 pub fn set(text: &str, section: &str, key: &str, value: &str) -> String {
     match section_range(text, section) {
         Some((start, end)) => insert_in_section(text, key, value, start, end),
-        None => format!("{text}[{section}]\n{key}={value}\n"),
+        None => {
+            // A last line without its newline would run into the header.
+            let sep = if text.is_empty() || text.ends_with('\n') {
+                ""
+            } else {
+                "\n"
+            };
+            format!("{text}{sep}[{section}]\n{key}={value}\n")
+        }
     }
 }
 
@@ -204,6 +212,14 @@ DIGITAL_TACHO=0\n";
         assert_eq!(t, "[Registry]\nVSYNC=1\n");
         let t = set(&t, GRAPHICS, "EXTERIOR_FOV", "75");
         assert!(t.contains("[Graphics]\nEXTERIOR_FOV=75\n"));
+    }
+
+    #[test]
+    fn a_new_section_starts_on_its_own_line() {
+        let t = set("[Registry]\nGAMMA=1", GRAPHICS, "EXTERIOR_FOV", "75");
+        assert_eq!(t, "[Registry]\nGAMMA=1\n[Graphics]\nEXTERIOR_FOV=75\n");
+        let t = set("[Registry]\r\nGAMMA=1\r\n", GRAPHICS, "EXTERIOR_FOV", "75");
+        assert!(t.ends_with("GAMMA=1\r\n[Graphics]\nEXTERIOR_FOV=75\n"));
     }
 
     #[test]
