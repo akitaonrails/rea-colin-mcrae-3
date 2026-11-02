@@ -11,6 +11,9 @@
   linked file and to reset their modification time on every sync.
 - A runtime folder inside the game folder is refused even when it does
   not exist yet and is named through `..`, a relative path or a symlink.
+- Files the launcher puts in the runtime copy are written beside it and
+  renamed into place: an interrupted or failed write no longer leaves a
+  missing or half-written file (the settings ini, a DLL, the patched exe).
 
 ## [0.1.2] - 2026-11-02
 

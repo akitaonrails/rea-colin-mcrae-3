@@ -246,44 +246,63 @@ fn make_writable(path: &Path) -> io::Result<()> {
 /// static data when both sit on one volume (falling back to a copy), a
 /// plain copy otherwise. Returns how the file arrived.
 fn bring_over(from: &Path, to: &Path, rel: &str) -> io::Result<&'static str> {
-    if let Some(dir) = to.parent() {
-        fs::create_dir_all(dir)?;
+    if is_static(rel) {
+        let linked = put_in_place(to, |tmp| fs::hard_link(from, tmp));
+        if linked.is_ok() {
+            return Ok("linked");
+        }
     }
-    // Removing needs no attribute change (std removes read-only files on
-    // Windows too), so a linked original is never touched.
-    if to.exists() {
-        fs::remove_file(to)?;
-    }
-    if is_static(rel) && fs::hard_link(from, to).is_ok() {
-        return Ok("linked");
-    }
-    fs::copy(from, to)?;
-    make_writable(to)?;
+    install_copy(from, to)?;
     Ok("copied")
 }
 
-/// Writes `bytes` to `path` as a fresh file, never through a hard link to
-/// the original: an existing file is removed first.
-pub fn install(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    if let Some(dir) = path.parent() {
-        fs::create_dir_all(dir)?;
-    }
-    if path.exists() {
-        fs::remove_file(path)?;
-    }
-    fs::write(path, bytes)
+/// Where a replacement for `path` is prepared, beside it (same volume, so
+/// the final rename is one step).
+fn temp_beside(path: &Path) -> PathBuf {
+    let mut name = std::ffi::OsString::from(".");
+    name.push(path.file_name().unwrap_or_default());
+    name.push(".cmr3-new");
+    path.with_file_name(name)
 }
 
-/// Copies `from` over `path` as a fresh file (never through a link).
-pub fn install_copy(from: &Path, path: &Path) -> io::Result<()> {
+/// Builds `path`'s new content with `make` at a temp name, then renames it
+/// over `path`: the old file stays whole until the new one is complete.
+/// Nothing is ever written through `path`, which may be a hard link to
+/// the user's original.
+fn put_in_place(path: &Path, make: impl FnOnce(&Path) -> io::Result<()>) -> io::Result<()> {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir)?;
     }
-    if path.exists() {
-        fs::remove_file(path)?;
-    }
-    fs::copy(from, path)?;
-    make_writable(path)
+    let tmp = temp_beside(path);
+    let _ = fs::remove_file(&tmp);
+    let result = make(&tmp).and_then(|()| match fs::rename(&tmp, path) {
+        // Windows refuses to replace a read-only file: remove it (std
+        // ignores the attribute, never changing it), then rename.
+        Err(e) if e.kind() == io::ErrorKind::PermissionDenied && path.exists() => {
+            fs::remove_file(path)?;
+            fs::rename(&tmp, path)
+        }
+        other => other,
+    });
+    // Gone after a rename, except when `path` already was the same file
+    // (renaming a link onto itself does nothing).
+    let _ = fs::remove_file(&tmp);
+    result
+}
+
+/// Writes `bytes` to `path` as a fresh file, never through a hard link to
+/// the original.
+pub fn install(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    put_in_place(path, |tmp| fs::write(tmp, bytes))
+}
+
+/// Copies `from` over `path` as a fresh, writable file (never through a
+/// link).
+pub fn install_copy(from: &Path, path: &Path) -> io::Result<()> {
+    put_in_place(path, |tmp| {
+        fs::copy(from, tmp)?;
+        make_writable(tmp)
+    })
 }
 
 /// Removes a file the launcher put in the runtime folder, writable or not.
@@ -553,6 +572,50 @@ mod tests {
         assert!(check_separate(&game, &alias.join("new-runtime")).is_err());
         fs::remove_file(&alias).unwrap();
         fs::remove_dir_all(&game).unwrap();
+    }
+
+    #[test]
+    fn installs_swap_whole_files_and_leave_no_temp() {
+        let rt = temp("atomic");
+        fs::create_dir_all(&rt).unwrap();
+        let ini = rt.join("SilentPatchCMR3.ini");
+        install(&ini, b"one").unwrap();
+        // A temp left by an interrupted run is replaced, not in the way.
+        fs::write(temp_beside(&ini), b"stale").unwrap();
+        install(&ini, b"two").unwrap();
+        assert_eq!(fs::read(&ini).unwrap(), b"two");
+        // A failed copy leaves the old file whole.
+        assert!(install_copy(&rt.join("missing"), &ini).is_err());
+        assert_eq!(fs::read(&ini).unwrap(), b"two");
+        let names: Vec<_> = fs::read_dir(&rt)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(names, ["SilentPatchCMR3.ini"]);
+        fs::remove_dir_all(&rt).unwrap();
+    }
+
+    #[test]
+    fn relinking_the_same_original_leaves_no_temp() {
+        let game = temp("relink-game");
+        let rt = temp("relink-rt");
+        fs::create_dir_all(&game).unwrap();
+        fs::write(game.join("Rally_3PC.exe"), b"exe").unwrap();
+        sync(&game, &rt).unwrap();
+        // The runtime already holds a link to this very file.
+        assert_eq!(
+            bring_over(
+                &game.join("Rally_3PC.exe"),
+                &rt.join("Rally_3PC.exe"),
+                "Rally_3PC.exe"
+            )
+            .unwrap(),
+            "linked"
+        );
+        assert!(!temp_beside(&rt.join("Rally_3PC.exe")).exists());
+        for d in [game, rt] {
+            fs::remove_dir_all(d).unwrap();
+        }
     }
 
     #[test]
