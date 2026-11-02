@@ -14,6 +14,14 @@
   `sdk-update` workflow opens or updates a pull request that moves the
   launcher to the newest rea-launcher-sdk tag and lists its Migration
   items. It never merges.
+- README in the rea launcher layout (`sdk/docs/playbooks/readme.md`):
+  install steps for Windows, the Steam Deck, the AppImage, Proton and your
+  own Wine; First run; the settings window with a looks table; Gamepad;
+  the Options table in the shared column order; Where things live for
+  Windows and Linux (saves and the GPU preference included); an Uninstall
+  that backs up the profile first; How it works; Built on
+  rea-launcher-sdk; Contributing; credits for every bundled project, Wine
+  and the AppImage tools. `linux/README.md` gets an Environment table.
 - Golden snapshots (`crates/cmr3-launcher/tests/snapshots/`) of `--help`,
   the `launcher.cfg` template, and what each look and two option
   combinations write (components, `SilentPatchCMR3.ini`, `Xidi.ini`,
