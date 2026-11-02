@@ -166,6 +166,9 @@ pub fn check_separate(game: &Path, runtime: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Clears read-only on a file the launcher just created. Never called on
+/// an existing runtime file: that may be a hard link to the user's
+/// original, whose attributes it shares.
 fn make_writable(path: &Path) -> io::Result<()> {
     let mut perm = fs::metadata(path)?.permissions();
     #[allow(clippy::permissions_set_readonly_false)]
@@ -180,8 +183,9 @@ fn bring_over(from: &Path, to: &Path, rel: &str) -> io::Result<&'static str> {
     if let Some(dir) = to.parent() {
         fs::create_dir_all(dir)?;
     }
+    // Removing needs no attribute change (std removes read-only files on
+    // Windows too), so a linked original is never touched.
     if to.exists() {
-        make_writable(to)?;
         fs::remove_file(to)?;
     }
     if is_static(rel) && fs::hard_link(from, to).is_ok() {
@@ -199,7 +203,6 @@ pub fn install(path: &Path, bytes: &[u8]) -> io::Result<()> {
         fs::create_dir_all(dir)?;
     }
     if path.exists() {
-        make_writable(path)?;
         fs::remove_file(path)?;
     }
     fs::write(path, bytes)
@@ -211,7 +214,6 @@ pub fn install_copy(from: &Path, path: &Path) -> io::Result<()> {
         fs::create_dir_all(dir)?;
     }
     if path.exists() {
-        make_writable(path)?;
         fs::remove_file(path)?;
     }
     fs::copy(from, path)?;
@@ -221,7 +223,6 @@ pub fn install_copy(from: &Path, path: &Path) -> io::Result<()> {
 /// Removes a file the launcher put in the runtime folder, writable or not.
 pub fn remove(path: &Path) -> io::Result<()> {
     if path.exists() {
-        make_writable(path)?;
         fs::remove_file(path)?;
     }
     Ok(())
@@ -242,11 +243,13 @@ pub fn sync(game: &Path, runtime: &Path) -> io::Result<(usize, usize)> {
         let from = native(game, rel);
         let to = native(runtime, rel);
         if bring_over(&from, &to, rel)? == "linked" {
+            // A link is the original itself: its time is already the
+            // source's, and setting it would touch the user's file.
             linked += 1;
+            continue;
         }
-        // The manifest compares source stamps; the runtime copy keeps the
-        // source's modification time so saves mirroring can tell them
-        // apart later.
+        // The manifest compares source stamps; a copy keeps the source's
+        // modification time so saves mirroring can tell them apart later.
         if let Some(stamp) = source.get(rel)
             && let Ok(file) = fs::OpenOptions::new().write(true).open(&to)
         {
@@ -383,6 +386,41 @@ mod tests {
         assert_eq!(sync(&game, &rt).unwrap().0, 1);
         assert_eq!(fs::read(rt.join("CMR3")).unwrap(), b"played");
 
+        for d in [game, rt] {
+            fs::remove_dir_all(d).unwrap();
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn linked_originals_keep_their_time_and_attributes() {
+        use std::os::unix::fs::PermissionsExt;
+        let game = temp("linked-meta-game");
+        let rt = temp("linked-meta-rt");
+        fs::create_dir_all(game.join("Data")).unwrap();
+        let original = game.join("Data/a.dat");
+        fs::write(&original, b"data").unwrap();
+        // A time with a fraction of a second: a whole-second set_modified
+        // through the link would show.
+        let when = UNIX_EPOCH + Duration::from_millis(1_700_000_000_500);
+        let f = fs::OpenOptions::new().write(true).open(&original).unwrap();
+        f.set_modified(when).unwrap();
+        drop(f);
+        fs::set_permissions(&original, fs::Permissions::from_mode(0o444)).unwrap();
+        let mode = |p: &Path| fs::metadata(p).unwrap().permissions().mode() & 0o777;
+
+        assert_eq!(sync(&game, &rt).unwrap(), (1, 1));
+        assert_eq!(fs::metadata(&original).unwrap().modified().unwrap(), when);
+        install(&rt.join("Data/a.dat"), b"replaced").unwrap();
+        assert_eq!(mode(&original), 0o444, "install over the link");
+        fs::remove_file(rt.join("Data/a.dat")).unwrap();
+        sync(&game, &rt).unwrap();
+        remove(&rt.join("Data/a.dat")).unwrap();
+        assert_eq!(mode(&original), 0o444, "remove of the link");
+        assert_eq!(fs::read(&original).unwrap(), b"data");
+        assert_eq!(fs::metadata(&original).unwrap().modified().unwrap(), when);
+
+        fs::set_permissions(&original, fs::Permissions::from_mode(0o644)).unwrap();
         for d in [game, rt] {
             fs::remove_dir_all(d).unwrap();
         }

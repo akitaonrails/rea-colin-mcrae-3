@@ -6,6 +6,9 @@
 
 - The DRM-free patcher never ran: the launcher passed xdelta its own path
   as a first argument, and xdelta stopped with "too many filenames".
+- The runtime copy no longer touches the game folder's files through hard
+  links: it used to clear their read-only attribute before replacing a
+  linked file and to reset their modification time on every sync.
 
 ## [0.1.2] - 2026-11-02
 

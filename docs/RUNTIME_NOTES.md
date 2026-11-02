@@ -264,3 +264,18 @@ with a fresh prefix under `.work/`.
   CI (Ubuntu's MinGW, same Rust) runs. Test with CI builds (`gh workflow
   run build.yml --ref <branch>`); the cause in the local toolchain is not
   isolated.
+
+## Unreleased — launcher robustness fixes (not yet verified in the game)
+
+Host-tested only; check each on Windows and under Proton/Wine before the
+next release.
+
+- **Hard-linked originals are left alone.** Replacing or removing a
+  runtime file no longer clears its read-only attribute first, and sync no
+  longer sets the time on linked files (it shares the original's inode).
+  Removal of a read-only file relies on Rust's `remove_file`, which on
+  Windows retries with `FILE_DISPOSITION_FLAG_IGNORE_READONLY_ATTRIBUTE`.
+  Not yet verified: a game folder whose files are read-only (a copied CD
+  install) on Windows and under Wine, with the HD UI on (it replaces
+  linked `Data\` files) and the DRM-free patch (it replaces the linked
+  exe).
