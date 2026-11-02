@@ -53,7 +53,7 @@ Cinematic look.*
 - On Linux, the **Colour** and **Cinematic** looks fix the game's
   washed-out picture: real blacks and fuller contrast, then sharpening.
 
-![The same spot of a stage before and after: the washed-out original on the left, the Cinematic look's deeper blacks and richer colour on the right]({U}rea-colin-mcrae-3-cinematic-before-after.jpg)
+![The same spot of a stage before and after: the washed-out original on the left, the Cinematic look's deeper blacks and richer colour on the right](https://new-uploads-akitaonrails.s3.us-east-2.amazonaws.com/2026/11/02/rea-colin-mcrae-3-cinematic-before-after.jpg)
 
 ![Colin McRae Rally 3 running at 4K with the widescreen HD interface](docs/images/gameplay-4k.png)
 
