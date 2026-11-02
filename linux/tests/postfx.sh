@@ -88,4 +88,17 @@ case "$(postfx_env)" in *"needs DXVK"*) echo "ok   postfx says it needs DXVK" ;;
 REA_GAME_ENV=
 postfx_env > /dev/null
 if [ -z "$REA_GAME_ENV" ]; then echo "ok   no layer without DXVK"; else echo "FAIL layer set without DXVK"; fails=$((fails + 1)); fi
+# One-run flags in any case, as the launcher reads them: `--postfx Color`
+# sets the layer up; `--dxvk False` turns it away with the DXVK note.
+printf 'dxvk = on\n' > "$T/launcher.cfg"
+rea_one_run --postfx Color
+REA_GAME_ENV=
+postfx_env > /dev/null
+case "$(game_env VK_INSTANCE_LAYERS)" in
+  *post_processing*) echo "ok   --postfx Color sets up the layer" ;;
+  *) echo "FAIL --postfx Color: no layer ($REA_GAME_ENV)"; fails=$((fails + 1)) ;;
+esac
+rea_one_run --dxvk False --postfx color
+case "$(postfx_env)" in *"needs DXVK"*) echo "ok   --dxvk False says postfx needs DXVK" ;; *) echo "FAIL --dxvk False: no DXVK note"; fails=$((fails + 1)) ;; esac
+REA_ONE_RUN=
 [ "$fails" = 0 ] && echo "all passed" || { echo "$fails failed"; exit 1; }

@@ -138,6 +138,11 @@
 
 ### Fixed
 
+- `cmr3-play` reads `postfx` and `dxvk` in any case, as the launcher
+  does: `--postfx Color` or `postfx = Cinematic` turns the post-processing
+  on, and `--dxvk False` gives the "needs DXVK" note. It only matched the
+  lowercase spellings before. `--display-mode Windowed` skipping gamescope
+  is now tested too.
 - The launcher reads `--scaler=fsr` and underscore spellings such as
   `--display_mode windowed` again, as release 0.1 did (scripts used
   them). A test runs the launcher's own parser on both.

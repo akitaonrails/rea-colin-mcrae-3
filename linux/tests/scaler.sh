@@ -89,4 +89,12 @@ scaler = linear
 ' > "$CFG"
 rea_main --play --scaler=nearest > /dev/null
 case "$(cat "$T/ran")" in *"-F nearest --"*) echo "ok   --scaler=nearest for one run" ;; *) echo "FAIL --scaler=: $(cat "$T/ran")"; fails=$((fails + 1)) ;; esac
+# Window modes in any case, as the launcher reads them.
+printf 'resolution = 1920x1080\n' > "$CFG"
+rea_main --play --display-mode Windowed > /dev/null
+case "$(cat "$T/ran")" in
+  *gamescope*) echo "FAIL --display-mode Windowed must skip gamescope"; fails=$((fails + 1)) ;;
+  *inner.sh*) echo "ok   --display-mode Windowed runs directly" ;;
+  *) echo "FAIL --display-mode Windowed: $(cat "$T/ran")"; fails=$((fails + 1)) ;;
+esac
 [ "$fails" = 0 ] && echo "all passed" || { echo "$fails failed"; exit 1; }

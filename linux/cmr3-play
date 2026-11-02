@@ -91,10 +91,10 @@ REA_HELPER_KEYS="scaler postfx resolution display_mode dxvk"
 # from the kit's thirdparty/vkbasalt, CMR3_VKBASALT, or a system install;
 # without one, the game runs as it was.
 postfx_env() {
-  fx=$(rea_get_key postfx)
+  fx=$(rea_get_value postfx)
   case "$fx" in color|cinematic) ;; *) return 0 ;; esac
   # The layer works on the game's Vulkan, which only DXVK gives it.
-  if [ "$(rea_get_key dxvk)" = off ]; then
+  if rea_is_off dxvk; then
     echo "postfx: needs DXVK (dxvk = off); continuing without"
     return 0
   fi
