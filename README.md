@@ -26,6 +26,24 @@ Cinematic look.*
 | --- | --- | --- |
 | ![The Play tab with game folder and look presets](docs/images/launcher-play.png) | ![The Picture tab with display and rendering options](docs/images/launcher-picture.png) | ![The Controls tab with the Rally gamepad preset](docs/images/launcher-controls.png) |
 
+## Problems it solves
+
+What goes wrong when you install the 2003 game on a computer today, and
+what the launcher does about it:
+
+| Problem | Fix |
+| --- | --- |
+| The game won't start on Windows 10/11: its SecuROM/SafeDisc disc protection is blocked since 2015, and Wine can't run it either. | The official 1.1 executable is converted to the DRM-free one of the later re-releases (SilentPatch project's patches). |
+| A stretched 4:3 picture, a short list of resolutions, an interface placed for 640×480. | Any resolution and aspect ratio, with the interface repositioned for wide screens (SilentPatch). |
+| A tiny, blurry interface at 4K. | Bekoha's HD UI, redrawn for 4K. |
+| Rendering bugs on modern GPUs and CPUs: a flickering sun that hitches with anti-aliasing, broken water reflections, split-screen and timing faults on multi-core CPUs. | Fixed by SilentPatch. |
+| Modern pads barely work: through DirectInput both triggers share one axis (no left-foot braking), a new profile has no controller chosen, the game's default bindings point steering at the right stick, and the menus ignore the pad. | Xidi turns the pad into a proper game controller; new profiles start with the pad chosen, steering on the left stick and the pedals on the triggers; the d-pad and A work the menus. |
+| Under Wine or Proton the game crawls at 4K (about 10 FPS) through Wine's OpenGL translator. | DXVK draws it through Vulkan, at full speed. |
+| Under Wine, fullscreen opens on the wrong monitor or comes out cropped. | gamescope gives the game a screen of its own; without it, borderless. |
+| Under Wine, a fault in Wine's video playback froze the game behind a hidden debugger, so it couldn't even quit. | The debugger and its crash dialog are off: the game ends cleanly instead. |
+| A flat, washed-out picture with grey blacks. | On Linux, the Colour and Cinematic looks restore real blacks and contrast. |
+| Patching the game folder risks the copy you own. | Your folder is only read; the launcher works on its own private copy. |
+
 ## What it adds to the original game
 
 **Runs on today's computers**
