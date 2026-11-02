@@ -224,7 +224,7 @@ Under Wine and Proton these are inside the Wine prefix (for Steam:
   executable is neither a DRM-free 1.1 build nor an official 1.1 one the
   bundled patcher converts (an unofficial no-CD, or still v1.0).
   Re-install the official 1.1 patch and try again. If it is a 1.1 build
-  anyway, [report it](https://github.com/akitaonrails/rea-colin-mcrae-3/issues/new?template=bug.yml)
+  anyway, [report it](https://github.com/akitaonrails/rea-colin-mcrae-3/issues/new?template=unknown-edition.yml)
   with the SHA-256 the message shows and `launcher.log`.
 - **The game crawls at 4K under Wine** — DXVK is off; turn it on in the
   settings window (Linux) or keep `thirdparty/dxvk/d3d9.dll` next to the

@@ -15,10 +15,11 @@ use md5::Digest as _;
 use md5::Md5;
 use rea_launcher::identify::{self, Known};
 
-/// Where players report a build the launcher doesn't know (the issue
-/// template asks for `launcher.log` and the SHA-256).
+/// Where players report a build the launcher doesn't know (the
+/// unknown-edition issue template asks for the SHA-256, where the copy
+/// comes from and `launcher.log`).
 pub const ISSUE_URL: &str =
-    "https://github.com/akitaonrails/rea-colin-mcrae-3/issues/new?template=bug.yml";
+    "https://github.com/akitaonrails/rea-colin-mcrae-3/issues/new?template=unknown-edition.yml";
 
 /// What the executable is, and how to make it run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

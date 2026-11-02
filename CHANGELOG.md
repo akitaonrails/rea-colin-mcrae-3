@@ -42,8 +42,12 @@
 - `cmr3-play --play --scaler fsr --resolution 1280x720 …`: flags for one
   run now also reach gamescope and post-processing, without changing
   `launcher.cfg`.
-- `.github/ISSUE_TEMPLATE/bug.yml` asks for `launcher.log` and the
-  executable's SHA-256.
+- Issue templates are the SDK's: `bug-report.yml` (where you play, the
+  launcher version, `Rally_3PC.exe`'s SHA-256, `launcher.log`) and
+  `unknown-edition.yml` (the SHA-256 and where your copy comes from), plus
+  a link to rea-launcher-sdk for the shared parts. The unknown-build
+  message, `--check` and the README link to `unknown-edition.yml` (it was
+  one `bug.yml`).
 - Releases carry a `SHA256SUMS` file for the package and the AppImage,
   provenance attestations, and the version's own changelog section as
   notes.
