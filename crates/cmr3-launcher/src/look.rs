@@ -9,12 +9,14 @@
 //! as one collection. Gold is both the action colour (Play, the tab
 //! underline) and the selection colour.
 
-use eframe::egui::{Color32, Vec2, vec2};
-use rea_launcher_ui::theme::Palette;
+use rea_launcher_ui::egui::{Color32, Vec2, vec2};
+use rea_launcher_ui::theme::{CardMetrics, Metrics, Palette, tint};
 
 pub const BASE: Color32 = Color32::from_rgb(0x54, 0x10, 0x1c);
 pub const PANEL: Color32 = Color32::from_rgb(0x69, 0x18, 0x2a);
-pub const LINE: Color32 = Color32::from_rgb(0x8a, 0x2a, 0x42);
+/// Control borders: 3:1 against `BASE` and `PANEL` (WCAG non-text
+/// contrast); the least lightening of the old `#8a2a42` that passes.
+pub const LINE: Color32 = Color32::from_rgb(0xaf, 0x6d, 0x7d);
 pub const GOLD: Color32 = Color32::from_rgb(0xf5, 0xc4, 0x00);
 pub const GOLD_HOVER: Color32 = Color32::from_rgb(0xff, 0xd3, 0x2a);
 pub const INK: Color32 = Color32::from_rgb(0xf7, 0xf0, 0xf2);
@@ -38,6 +40,18 @@ pub const PALETTE: Palette = Palette {
     disabled_ink: Color32::from_rgb(0x9a, 0x62, 0x72),
     disabled_line: Color32::from_rgb(0x6a, 0x22, 0x34),
     focus: INK,
+    selection: tint(GOLD, 128),
+};
+
+/// CMR3's widget sizes: the look cards' roomier padding and note.
+pub const METRICS: Metrics = Metrics {
+    card: CardMetrics {
+        pad: 14.0,
+        note: 13.5,
+        note_top: 32.0,
+        ..Metrics::DEFAULT.card
+    },
+    ..Metrics::DEFAULT
 };
 
 /// The settings window's design size in points.
@@ -58,7 +72,14 @@ mod tests {
 
     #[test]
     fn the_palette_reads_well() {
-        assert_eq!(PALETTE.contrast_problems(), Vec::<String>::new());
+        assert_eq!(
+            rea_launcher_ui::theme::contrast_problems(&PALETTE, &METRICS),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            rea_launcher_ui::theme::text_size_problems(&METRICS),
+            Vec::<String>::new()
+        );
     }
 
     #[test]

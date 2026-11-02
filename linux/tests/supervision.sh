@@ -22,7 +22,7 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 mkdir -p "$CMR3_PREFIX/drive_c/users/me/AppData/Local/CMR3Launcher"
-CMR3_PLAY_FUNCTIONS_ONLY=1 CMR3_PLAY_HERE=$HERE/.. . "$HERE/../cmr3-play"
+REA_FUNCTIONS_ONLY=1 REA_PLAY_HERE=$HERE/.. . "$HERE/../cmr3-play"
 LOCK=$REA_LOCK STATE=$REA_STATE
 fails=0
 ok() { echo "ok   $1"; }
@@ -167,7 +167,7 @@ REA_RUN=$T/fake-run
 if ( rea_proc_stat() { return 1; }; rea_start > /dev/null ); then ok "launch without a record still succeeds"; else fail "launch without a record failed"; fi
 
 # The command line, end to end through the script itself.
-unset CMR3_PLAY_FUNCTIONS_ONLY CMR3_PLAY_HERE
+unset REA_FUNCTIONS_ONLY REA_PLAY_HERE
 PLAYDIR=$T/kit/linux; mkdir -p "$PLAYDIR" "$T/kit/sdk"
 cp "$HERE/../cmr3-play" "$PLAYDIR/"; cp "$HERE/../../sdk/rea-play.sh" "$T/kit/sdk/"
 : > "$T/kit/CMR3Launcher.exe"

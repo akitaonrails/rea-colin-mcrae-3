@@ -511,7 +511,7 @@ impl Settings {
         let mut s = Settings::default();
         match cfg::parse_args(args, &KEYS, &SWITCHES, |k, v| s.apply(k, v)) {
             Ok(switches) => Ok((s, switches)),
-            Err(ArgError::Help) => Err(USAGE.into()),
+            Err(ArgError::Help(_)) => Err(USAGE.into()),
             Err(e) => Err(format!("{e}\n\n{USAGE}")),
         }
     }

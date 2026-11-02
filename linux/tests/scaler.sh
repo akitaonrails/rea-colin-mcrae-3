@@ -17,7 +17,7 @@ case "\$*" in *"command -v gamescope"*) exit 0 ;; *wineserver*|*"reg add"*) exit
 echo "\$*" > "$T/ran"
 FAKE
 chmod +x "$T/fake-run"
-CMR3_PLAY_FUNCTIONS_ONLY=1 CMR3_PLAY_HERE=$HERE/.. . "$HERE/../cmr3-play"
+REA_FUNCTIONS_ONLY=1 REA_PLAY_HERE=$HERE/.. . "$HERE/../cmr3-play"
 REA_RUN=$T/fake-run REA_GPU=
 CFG=$CFGDIR/launcher.cfg
 REA_CFG=$CFG

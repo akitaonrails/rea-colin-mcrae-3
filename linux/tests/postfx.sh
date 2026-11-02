@@ -12,7 +12,7 @@ mkdir -p "$T/thirdparty/vkbasalt/lib32"
 : > "$T/thirdparty/vkbasalt/libvkbasalt.so"
 : > "$T/thirdparty/vkbasalt/lib32/libvkbasalt.so"
 printf 'postfx = color\n' > "$T/launcher.cfg"
-CMR3_PLAY_FUNCTIONS_ONLY=1 CMR3_PLAY_HERE=$HERE/.. . "$HERE/../cmr3-play"
+REA_FUNCTIONS_ONLY=1 REA_PLAY_HERE=$HERE/.. . "$HERE/../cmr3-play"
 STATE=$REA_STATE
 # The launcher.cfg next to the launcher wins.
 [ "$REA_CFG" = "$T/launcher.cfg" ] || { echo "FAIL cfg: $REA_CFG"; exit 1; }

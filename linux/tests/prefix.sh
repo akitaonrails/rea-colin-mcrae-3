@@ -14,7 +14,7 @@ WINE
 printf '#!/bin/sh\necho "wineserver $*" >> "$HOME/calls"\n' > "$T/bin/wineserver"
 chmod +x "$T/bin/wine" "$T/bin/wineserver"
 PATH=$T/bin:$PATH
-CMR3_PLAY_FUNCTIONS_ONLY=1 CMR3_PLAY_HERE=$HERE/.. . "$HERE/../cmr3-play"
+REA_FUNCTIONS_ONLY=1 REA_PLAY_HERE=$HERE/.. . "$HERE/../cmr3-play"
 fails=0
 check() {
   if [ "$2" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1: $2"; fails=$((fails + 1)); fi

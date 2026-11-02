@@ -13,7 +13,8 @@ use cmr3_launcher::edition;
 use cmr3_launcher::form::{self, Form, Look, Picture};
 use cmr3_launcher::look::{self, ERROR, GOLD, INK, MUTED, PALETTE};
 use cmr3_launcher::xidi;
-use eframe::egui::{self, Align2, Key, Rect, TextureHandle, pos2, vec2};
+use rea_launcher_ui::eframe;
+use rea_launcher_ui::egui::{self, Align2, Key, Rect, TextureHandle, pos2, vec2};
 use rea_launcher_ui::pad::{self, Nav, PadNav};
 use rea_launcher_ui::theme::{self, body, decal, semibold};
 use rea_launcher_ui::widgets::{self, Crop, LookCard};
@@ -44,7 +45,7 @@ pub fn show(settings_path: &Path, text: &str, linux: bool) -> Result<Outcome, St
     let wine = wine::is_wine();
     let wine_scale = display::wine_dpi_scale();
     let screen = display::screen_size();
-    let fit = WindowFit::new(look::SIZE, wine, screen, wine_scale);
+    let fit = WindowFit::new(look::SIZE, wine, screen, wine_scale).with_native_fit(true);
     let options = fit.native_options(TITLE);
     let path = settings_path.to_path_buf();
     let text = text.to_string();
@@ -52,7 +53,7 @@ pub fn show(settings_path: &Path, text: &str, linux: bool) -> Result<Outcome, St
         TITLE,
         options,
         Box::new(|cc| {
-            theme::install(&cc.egui_ctx, &PALETTE);
+            theme::install_with(&cc.egui_ctx, &PALETTE, &look::METRICS);
             Ok(Box::new(Window::new(
                 &cc.egui_ctx,
                 path,

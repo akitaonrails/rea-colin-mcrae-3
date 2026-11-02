@@ -6,7 +6,9 @@
 # fallbacks (our mirror on the 'thirdparty' release) for the day an
 # upstream moves or disappears. The sha256 is the gate: an upstream update
 # never enters a build silently — bump it deliberately after testing, and
-# refresh the mirror (.github/workflows/mirror.yml).
+# refresh the mirror (.github/workflows/mirror.yml). The word `mirror` marks
+# a pin whose licence (or the owner's recorded decision: the HD UI) lets us
+# republish it; its last url is that copy, named like the primary url.
 #
 # Upstream's "latest" links live in packaging/upstream-watch.txt, checked
 # weekly by .github/workflows/watch-upstream.yml.
@@ -14,27 +16,27 @@
 # SilentPatch for Colin McRae Rally 3, build 2.1 (MIT) — the widescreen,
 # compatibility and quality-of-life fixes, and the ASI loader it ships
 # with.
-silentpatch https://github.com/CookiePLMonster/SilentPatchCMR3/releases/download/BUILD-2.1/SilentPatchCMR3.zip 927cc81b377a33fbe8450dfc01d22d7a37ab9ece44c45ba479205e890693b131 https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/SilentPatchCMR3.zip
+silentpatch https://github.com/CookiePLMonster/SilentPatchCMR3/releases/download/BUILD-2.1/SilentPatchCMR3.zip 927cc81b377a33fbe8450dfc01d22d7a37ab9ece44c45ba479205e890693b131 mirror https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/SilentPatchCMR3.zip
 
 # Xidi v4.3.1 Win32 (BSD-3-Clause) — DirectInput for XInput controllers.
-xidi https://github.com/samuelgr/Xidi/releases/download/v4.3.1/Xidi-v4.3.1.zip 78120f44baa816fc264fb722495776aab437a36be515e42345428b7f32ac17ff https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/Xidi-v4.3.1.zip
+xidi https://github.com/samuelgr/Xidi/releases/download/v4.3.1/Xidi-v4.3.1.zip 78120f44baa816fc264fb722495776aab437a36be515e42345428b7f32ac17ff mirror https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/Xidi-v4.3.1.zip
 
 # DRM-free patcher from the SilentPatch project (MIT distribution;
 # xdelta3 is Apache-2.0): turns the official 1.1 executables into the
 # DRM-free ones the late re-releases shipped.
-patcher https://github.com/CookiePLMonster/SilentPatchCMR3/releases/download/BUILD-2.1/CMR3Patcher.zip 661008fa5ca0f25a306dfd230e8e35ef044c11601d5b38b1bbb8890464d1c913 https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/CMR3Patcher.zip
+patcher https://github.com/CookiePLMonster/SilentPatchCMR3/releases/download/BUILD-2.1/CMR3Patcher.zip 661008fa5ca0f25a306dfd230e8e35ef044c11601d5b38b1bbb8890464d1c913 mirror https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/CMR3Patcher.zip
 
 # DXVK v3.1.1 (Zlib) — the d3d9.dll that draws through Vulkan under
 # Wine; only the 32-bit file from the release tarball goes into the
 # package.
-dxvk https://github.com/doitsujin/dxvk/releases/download/v3.1.1/dxvk-3.1.1.tar.gz 40565b4a724aadc4433fa4e010b4b23916d9b1f1baeee64e17186db94f54e608 https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/dxvk-3.1.1.tar.gz
+dxvk https://github.com/doitsujin/dxvk/releases/download/v3.1.1/dxvk-3.1.1.tar.gz 40565b4a724aadc4433fa4e010b4b23916d9b1f1baeee64e17186db94f54e608 mirror https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/dxvk-3.1.1.tar.gz
 dxvk-d3d9-sha256 - 265888c31ca78dffa290c39cb7e50bfb02762590e41927906e46fb32f01497fa
 
 # HD UI v1.0.1 by Bekoha — fonts and race graphics redrawn for 4K (owner
 # decision, like the 1998 game's HD art pack; credited in THIRD_PARTY.md).
-hd-ui https://github.com/bekoha/bekoha.github.io/releases/download/cmr3-hdui-1.0.1/CMR3_HD_UI_v1.0.1.zip b3193f037fe4d0a22d9700f561be56774f8c296b6e3a221eb6f2bb79b6eda3b7 https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/CMR3_HD_UI_v1.0.1.zip
+hd-ui https://github.com/bekoha/bekoha.github.io/releases/download/cmr3-hdui-1.0.1/CMR3_HD_UI_v1.0.1.zip b3193f037fe4d0a22d9700f561be56774f8c296b6e3a221eb6f2bb79b6eda3b7 mirror https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/CMR3_HD_UI_v1.0.1.zip
 
 # vkBasalt 0.3.2.10 (Zlib) — source for the 32/64-bit Vulkan post-
 # processing layers built by packaging/build-vkbasalt.sh. Pinned to the
 # commit archive, which is byte-stable; GitHub's tag archives are not.
-vkbasalt https://github.com/DadSchoorse/vkBasalt/archive/4f97f09ffe91900e6ca136cc26cf7966f8f6970d.tar.gz 07bad26a0a432cb110c95cb3c4d11efceb4dd9e60f3c086ab92256e79d7696bc https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/vkBasalt-0.3.2.10.tar.gz
+vkbasalt https://github.com/DadSchoorse/vkBasalt/archive/4f97f09ffe91900e6ca136cc26cf7966f8f6970d.tar.gz 07bad26a0a432cb110c95cb3c4d11efceb4dd9e60f3c086ab92256e79d7696bc https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/vkBasalt-0.3.2.10.tar.gz mirror https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/4f97f09ffe91900e6ca136cc26cf7966f8f6970d.tar.gz

@@ -7,7 +7,7 @@ unset DRI_PRIME __NV_PRIME_RENDER_OFFLOAD __GLX_VENDOR_LIBRARY_NAME
 HERE=$(dirname "$(readlink -f "$0")")
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 export HOME=$T CMR3_PREFIX=$T/prefix
-CMR3_PLAY_FUNCTIONS_ONLY=1 CMR3_PLAY_HERE=$HERE/.. . "$HERE/../cmr3-play"
+REA_FUNCTIONS_ONLY=1 REA_PLAY_HERE=$HERE/.. . "$HERE/../cmr3-play"
 REA_TEST=1
 # The library asks whether NVIDIA's OpenGL library is installed.
 nv_lib() { [ -n "${NV_LIB:-}" ]; }

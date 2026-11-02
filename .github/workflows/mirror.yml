@@ -1,54 +1,20 @@
 name: mirror
 
-# Publishes the exact, checksum-validated third-party downloads (including
-# the vkBasalt source) to this repository's own `thirdparty` release, so builds keep working if an
-# upstream moves, breaks or disappears (packaging/third-party.txt falls
-# back to these urls). Run after adopting a new pin.
+# Publishes the exact, checksum-validated third-party downloads marked
+# `mirror` in packaging/third-party.txt (the vkBasalt source included) to
+# this repository's own `thirdparty` release, so builds keep working if an
+# upstream moves, breaks or disappears (each pin falls back to its mirror
+# url). The SDK's reusable workflow never deletes the release; it uploads
+# each file under the pin's own file name. Run after adopting a new pin.
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   mirror:
-    name: Refresh the thirdparty release
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Fetch every component exactly as the build does
-        run: |
-          pins() { grep -v '^#' packaging/third-party.txt | grep .; }
-          sha_of() { pins | awk -v n="$1" '$1 == n { print $3 }'; }
-          mkdir -p mirror
-          for name in silentpatch patcher xidi dxvk vkbasalt hd-ui; do
-            sha=$(sha_of "$name")
-            case $name in
-              silentpatch) file=SilentPatchCMR3.zip ;;
-              patcher) file=CMR3Patcher.zip ;;
-              xidi) file=Xidi-v4.3.1.zip ;;
-              dxvk) file=dxvk-3.1.1.tar.gz ;;
-              vkbasalt) file=vkBasalt-0.3.2.10.tar.gz ;;
-              hd-ui) file=CMR3_HD_UI_v1.0.1.zip ;;
-            esac
-            for url in $(pins | awk -v n="$name" '$1 == n { for (i = 2; i <= NF; i++) if (i != 3) print $i }'); do
-              echo "$name from $url"
-              if curl -fsSL --retry 2 "$url" -o "mirror/$file.part" \
-                 && echo "$sha  mirror/$file.part" | sha256sum -c -; then
-                mv "mirror/$file.part" "mirror/$file"; break
-              fi
-            done
-            [ -f "mirror/$file" ] || { echo "no source for $name"; exit 1; }
-          done
-
-      - name: Publish as the thirdparty release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release delete thirdparty --yes 2>/dev/null || true
-          git push --delete origin refs/tags/thirdparty 2>/dev/null || true
-          gh release create thirdparty mirror/* \
-            --title "Validated third-party components" \
-            --notes "Exact copies of the pinned downloads in packaging/third-party.txt, kept here so builds survive an upstream move or deletion. Refreshed by the mirror workflow."
+    permissions:
+      contents: write
+    uses: akitaonrails/rea-launcher-sdk/.github/workflows/mirror.yml@v0.2.0

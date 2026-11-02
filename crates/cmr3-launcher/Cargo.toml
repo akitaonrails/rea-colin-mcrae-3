@@ -16,11 +16,9 @@ md-5.workspace = true
 rea-launcher.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-eframe = { version = "0.37", default-features = false, features = ["glow"] }
 rea-launcher-win32.workspace = true
 rea-launcher-ui.workspace = true
 
 [dev-dependencies]
 # The settings window's look (palette, design size) is tested on the host.
 rea-launcher-ui.workspace = true
-eframe = { version = "0.37", default-features = false, features = ["glow"] }

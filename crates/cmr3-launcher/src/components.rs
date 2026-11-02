@@ -594,21 +594,20 @@ mod tests {
             "efigs",
             Path::new("C:\\rt\\Rally_3PC.exe.new"),
         );
-        let joined: Vec<String> = args
-            .iter()
-            .map(|a| a.to_string_lossy().into_owned())
-            .collect();
-        assert_eq!(
-            joined,
-            vec![
-                "-f".to_string(),
-                "-d".into(),
-                "-s".into(),
-                "C:\\rt\\Rally_3PC.exe".into(),
-                bundle.join("patcher/efigs.xdelta").display().to_string(),
-                "C:\\rt\\Rally_3PC.exe.new".into(),
-            ]
-        );
+        // Compared as paths, not text: `join` spells the separator its
+        // own way on each platform.
+        let want: Vec<std::ffi::OsString> = vec![
+            "-f".into(),
+            "-d".into(),
+            "-s".into(),
+            "C:\\rt\\Rally_3PC.exe".into(),
+            bundle.join("patcher").join("efigs.xdelta").into(),
+            "C:\\rt\\Rally_3PC.exe.new".into(),
+        ];
+        assert_eq!(args.len(), want.len());
+        for (got, want) in args.iter().zip(&want) {
+            assert_eq!(Path::new(got), Path::new(want));
+        }
         assert!(bundle.join("patcher/polish.xdelta").is_file());
         fs::remove_dir_all(&bundle).unwrap();
     }

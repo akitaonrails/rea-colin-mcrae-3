@@ -10,6 +10,15 @@
 
 ### Changed
 
+- Built on rea-launcher-sdk v0.2.0 (Cargo tags, vendored `sdk/`, reusable
+  workflows). The settings window's control borders are lighter
+  (`#af6d7d`) so they reach 3:1 contrast; text fields show the selection
+  in gold. CI also runs the Windows-target tests under Wine.
+- The mirror workflow is the SDK's: it never deletes the `thirdparty`
+  release and uploads each pinned file under the name its pin expects
+  (the vkBasalt source as its commit archive's name).
+- `linux/tests` use the SDK's `REA_FUNCTIONS_ONLY` / `REA_PLAY_HERE`
+  convention (`CMR3_PLAY_FUNCTIONS_ONLY` and `CMR3_PLAY_HERE` are gone).
 - The launcher is built on the shared
   [rea-launcher-sdk](https://github.com/akitaonrails/rea-launcher-sdk)
   v0.1.0, with the sibling launchers: the runtime copy, profile
@@ -38,6 +47,8 @@
 
 ### Fixed
 
+- The Windows-target test of the DRM-free patcher's command compared
+  paths as text and failed under Wine; it compares paths now.
 - A profile the player copied into the saves folder (a backup, say) is
   used even when it is older than the game's copy; the newer copy used to
   win and could later overwrite it. The launcher records each profile's
