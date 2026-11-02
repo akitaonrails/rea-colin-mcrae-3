@@ -6,8 +6,9 @@ CHANGELOG.md
 THIRD_PARTY.md
 LICENSE-MIT
 LICENSE-APACHE
+licenses/Barlow-OFL.txt
 docs/ENHANCEMENTS.md
-docs/images/*.png
+docs/images/*.jpg
 linux/cmr3-play x
 linux/rea-play.sh
 linux/README.md
@@ -16,6 +17,7 @@ thirdparty/silentpatch/SilentPatchCMR3.asi
 thirdparty/silentpatch/dinput8.dll
 thirdparty/silentpatch/ReadMe.txt
 thirdparty/silentpatch/LICENSE
+thirdparty/silentpatch/Ultimate-ASI-Loader-LICENSE
 thirdparty/patcher/xdelta.exe
 thirdparty/patcher/efigs.xdelta
 thirdparty/patcher/polish.xdelta
@@ -32,3 +34,5 @@ thirdparty/hd-ui/*
 thirdparty/vkbasalt/libvkbasalt.so
 thirdparty/vkbasalt/lib32/libvkbasalt.so
 thirdparty/vkbasalt/LICENSE
+thirdparty/vkbasalt/ReShade-LICENSE.md
+thirdparty/vkbasalt/stb-LICENSE

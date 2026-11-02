@@ -24,7 +24,7 @@ Cinematic look.*
 
 | Play | Picture | Controls |
 | --- | --- | --- |
-| ![The Play tab with game folder and look presets](docs/images/launcher-play.png) | ![The Picture tab with display and rendering options](docs/images/launcher-picture.png) | ![The Controls tab with the Rally gamepad preset](docs/images/launcher-controls.png) |
+| ![The Play tab with game folder and look presets](docs/images/launcher-play.jpg) | ![The Picture tab with display and rendering options](docs/images/launcher-picture.jpg) | ![The Controls tab with the Rally gamepad preset](docs/images/launcher-controls.jpg) |
 
 ## Problems it solves
 
@@ -73,7 +73,7 @@ what the launcher does about it:
 
 ![The same spot of a stage before and after: the washed-out original on the left, the Cinematic look's deeper blacks and richer colour on the right](https://new-uploads-akitaonrails.s3.us-east-2.amazonaws.com/2026/11/02/rea-colin-mcrae-3-cinematic-before-after.jpg)
 
-![Colin McRae Rally 3 running at 4K with the widescreen HD interface](docs/images/gameplay-4k.png)
+![Colin McRae Rally 3 running at 4K with the widescreen HD interface](docs/images/gameplay.jpg)
 
 **Gamepads**
 
@@ -251,7 +251,7 @@ CookiePLMonster (widescreen, display and compatibility fixes),
 [Xidi](https://github.com/samuelgr/Xidi) by samuelgr,
 [DXVK](https://github.com/doitsujin/dxvk), and
 [vkBasalt](https://github.com/DadSchoorse/vkBasalt). The settings window's
-Colin McRae photo is by Carolyn Williams (CC BY 2.0); its Barlow fonts are
+Colin McRae photo is by "Carolyn" on Flickr (CC BY 2.0, via Wikimedia Commons); its Barlow fonts are
 by Jeremy Tribby (SIL OFL). See [THIRD_PARTY.md](THIRD_PARTY.md) for the
 full component and licence list.
 

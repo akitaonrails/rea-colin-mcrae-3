@@ -148,7 +148,7 @@ a GPU hang. GDB was attached and detached without changing the process,
 but its WoW64 stack could not be symbolized, so the module that caused
 the heap corruption remains unknown; do not blame DXVK or vkBasalt from
 this evidence alone. The user's new 4K gameplay capture was added to the
-README as `docs/images/gameplay-4k.png`.
+README as `docs/images/gameplay.jpg` (resized to 1920×1080 JPEG).
 
 ## 2026-11-01 — v0.1.0 release-candidate gate
 

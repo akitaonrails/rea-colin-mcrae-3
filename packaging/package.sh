@@ -50,17 +50,24 @@ cp "$WORK/dxvk-3.1.1/x32/d3d9.dll" "$TP/dxvk/"
 pin_verify "$TP/dxvk/d3d9.dll" "$(pin_sha dxvk-d3d9-sha256)"
 cp packaging/licenses/DXVK-LICENSE "$TP/dxvk/LICENSE"
 cp packaging/licenses/SilentPatchCMR3-LICENSE "$TP/silentpatch/LICENSE"
+cp packaging/licenses/Ultimate-ASI-Loader-LICENSE "$TP/silentpatch/Ultimate-ASI-Loader-LICENSE"
 cp packaging/licenses/xdelta3-LICENSE "$TP/patcher/LICENSE"
 cp packaging/licenses/Xidi-LICENSE packaging/licenses/Xidi-Hookshot-LICENSE "$TP/xidi/"
 # The postfx layer, from the pinned source: both bitnesses ship — a
 # WoW64 prefix loads the 64-bit Vulkan loader even for its 32-bit game,
 # so each process finds its own library.
 packaging/build-vkbasalt.sh "$WORK"/vkBasalt-*/ "$TP/vkbasalt"
+# vkBasalt compiles in ReShade's FX compiler (BSD-3) and stb (MIT).
+cp "$WORK"/vkBasalt-*/src/reshade/LICENSE.md "$TP/vkbasalt/ReShade-LICENSE.md"
+cp packaging/licenses/stb-LICENSE "$TP/vkbasalt/stb-LICENSE"
 
 PKG=$OUT/$NAME
 rm -rf "$PKG" "$OUT/$NAME.zip"
 mkdir -p "$PKG/docs"
 cp "$RELEASE/CMR3Launcher.exe" README.md CHANGELOG.md THIRD_PARTY.md LICENSE-MIT LICENSE-APACHE "$PKG/"
+# The settings window's fonts (Barlow, SIL OFL), compiled into the exe.
+mkdir -p "$PKG/licenses"
+cp packaging/licenses/Barlow-OFL.txt "$PKG/licenses/Barlow-OFL.txt"
 cp -r docs/images "$PKG/docs/images"
 cp docs/ENHANCEMENTS.md "$PKG/docs/"
 cp -r "$TP" "$PKG/thirdparty"

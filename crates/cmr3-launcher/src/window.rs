@@ -197,7 +197,7 @@ fn draw_photo(ui: &egui::Ui, rect: Rect, portrait: Option<&TextureHandle>) {
     p.text(
         pos2(x, y),
         Align2::LEFT_BOTTOM,
-        "Photo: Carolyn Williams, CC BY 2.0",
+        "Photo: Carolyn (Flickr), CC BY 2.0",
         body(11.0),
         MUTED,
     );

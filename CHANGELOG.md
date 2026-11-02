@@ -4,6 +4,9 @@
 
 ### Added
 
+- The package carries the licence texts it lacked: Ultimate ASI Loader
+  (MIT), ReShade's FX compiler and stb inside vkBasalt, and the Barlow
+  fonts (OFL).
 - One option table (`config::OPTIONS`) declares every setting once:
   `--help`, the `launcher.cfg` template written on a first run, the file
   and flag parsing and the settings window's rows all come from it, and a
@@ -24,6 +27,10 @@
 
 ### Changed
 
+- The portrait credit follows Wikimedia Commons ("Carolyn" on Flickr,
+  CC BY 2.0); `THIRD_PARTY.md` lists every image in the window, README
+  and package. README images are JPEG (the 13 MB 4K capture is now a
+  400 KB 1080p one); a stray screenshot (`gs7.png`) is gone.
 - The game-folder messages say how to fix the problem they name.
 - Clearer names in the window: Texture sharpness (anisotropic
   filtering), Smooth edges (anti-aliasing), Car shadows, HD menus,
