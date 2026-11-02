@@ -101,6 +101,11 @@
 
 ### Fixed
 
+- The Windows builds link with LLD (`.cargo/config.toml`). GNU ld 2.47
+  left 13 of the launcher's kernel32 imports (`CreateProcessW`,
+  `GetModuleHandleW`, `CloseHandle`, …) outside every import table, so
+  Windows never filled them in and the launcher could crash on its first
+  such call. The SDK's `check-imports.sh` now finds none.
 - Unsetting a picture option no longer wipes the choice you made in the
   game's own menu: the launcher records what it wrote to
   `SilentPatchCMR3.ini` (`.cmr3-ini-owned` in the runtime folder) and
