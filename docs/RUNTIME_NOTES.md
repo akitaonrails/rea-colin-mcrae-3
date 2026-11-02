@@ -417,6 +417,35 @@ Screenshots for the owner (`.work/realgame/shots/`): `enhanced-1080p.jpg`
 (title, 1920×1080), `original-640x480.jpg`, `deck-1280x800.jpg`,
 `main-menu.jpg`, `postfx-color.jpg`.
 
+## 2026-11-02 — bundled DLLs under plain Wine (SDK v0.3.3)
+
+The launcher started by plain `wine` inside a headless gamescope, as
+Steam/Proton would start it (no `cmr3-play`, a scrubbed environment from
+`env -i`, no `WINEDLLOVERRIDES`), against the owner's game, with
+`WINEDEBUG=+loaddll`; then the same through `cmr3-play --play`. Same
+throwaway prefix under `.work/realgame/`, the runtime already built.
+Supervisor: `.work/realgame/plainwine.sh NAME KIT [helper]`; the
+`Loaded …` lines for the bundled DLLs are in
+`.work/realgame/logs/{before,after}-{plain,helper}/loaddll.txt`.
+
+| DLL (runtime folder) | before, plain wine | before, cmr3-play | after, plain wine | after, cmr3-play |
+| --- | --- | --- | --- | --- |
+| `DSOUND.dll` (ASI loader) → `SilentPatchCMR3.asi` | native, ASI loaded | native | native | native |
+| `DINPUT8.dll` (Xidi) | **builtin** (Wine's own: no Xidi, no Rally preset) | native | **native** | native |
+| `d3d9.dll` (DXVK) | native | native | native | native |
+
+Before, the launcher's `WINEDLLOVERRIDES` (logged) reached the game only
+in its environment block, which Wine's loader ignores: dsound and d3d9
+happened to load from the game folder anyway, dinput8 did not. After, the
+launcher logs `Wine DLL overrides for Rally_3PC.exe: dsound, dinput8, d3d9
+(native, then builtin)` and `wine reg query` shows the three values in
+`HKCU\Software\Wine\AppDefaults\Rally_3PC.exe\DllOverrides`; Xidi then
+loads Wine's `system32\dinput8.dll` itself, as its `[Import]` says. Each
+run ended with the game, launcher, wineserver and gamescope gone.
+
+Still pending: the same on real Proton (Steam, non-Steam game) and the
+Steam Deck.
+
 ## Platform matrix
 
 What has been checked in the real game, per STANDARDS "Platforms to
