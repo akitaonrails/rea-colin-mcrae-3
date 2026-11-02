@@ -1,0 +1,34 @@
+# Every file the release zip may hold (sdk/packaging/smoke-package.sh).
+# Game files never ship: anything not listed fails the build.
+CMR3Launcher.exe
+README.md
+CHANGELOG.md
+THIRD_PARTY.md
+LICENSE-MIT
+LICENSE-APACHE
+docs/ENHANCEMENTS.md
+docs/images/*.png
+linux/cmr3-play x
+linux/rea-play.sh
+linux/README.md
+linux/tests/*.sh
+thirdparty/silentpatch/SilentPatchCMR3.asi
+thirdparty/silentpatch/dinput8.dll
+thirdparty/silentpatch/ReadMe.txt
+thirdparty/silentpatch/LICENSE
+thirdparty/patcher/xdelta.exe
+thirdparty/patcher/efigs.xdelta
+thirdparty/patcher/polish.xdelta
+thirdparty/patcher/ReadMe-Patcher.txt
+thirdparty/patcher/LICENSE
+thirdparty/xidi/dinput8.dll
+thirdparty/xidi/LICENSE
+thirdparty/xidi/Xidi-LICENSE
+thirdparty/xidi/Xidi-Hookshot-LICENSE
+thirdparty/dxvk/d3d9.dll
+thirdparty/dxvk/LICENSE
+# The HD UI overlay (owner decision, THIRD_PARTY.md): Bekoha's own files.
+thirdparty/hd-ui/*
+thirdparty/vkbasalt/libvkbasalt.so
+thirdparty/vkbasalt/lib32/libvkbasalt.so
+thirdparty/vkbasalt/LICENSE

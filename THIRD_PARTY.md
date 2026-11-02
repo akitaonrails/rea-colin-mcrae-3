@@ -40,8 +40,8 @@ Codemasters download — the launcher links to it when a game needs it).
 
 | Component | Licence | Source |
 | --- | --- | --- |
-| Wine 11.20 (amd64, WoW64), Kron4ek's build of the unmodified WineHQ sources; licence and source notes inside the AppImage under `usr/share/doc/wine` | LGPL-2.1-or-later | https://dl.winehq.org/wine/source/11.x/wine-11.20.tar.xz , build scripts https://github.com/Kron4ek/Wine-Builds |
-| AppImage runtime (added by `appimagetool` 1.9.1) | MIT | https://github.com/AppImage/type2-runtime |
+| Wine 11.20 (amd64, WoW64), Kron4ek's build of the unmodified WineHQ sources, pinned by the shared rea-launcher-sdk packaging (`sdk/packaging/appimage/tools.pins`); licence and source notes inside the AppImage under `usr/share/doc/wine` | LGPL-2.1-or-later | https://dl.winehq.org/wine/source/11.x/wine-11.20.tar.xz , build scripts https://github.com/Kron4ek/Wine-Builds |
+| AppImage type2 runtime 20251108 (pinned by the shared rea-launcher-sdk packaging, packed by `appimagetool` 1.9.1) | MIT | https://github.com/AppImage/type2-runtime/releases/tag/20251108 |
 | The AppImage icon `packaging/appimage/cmr3-launcher.png` | ours (MIT OR Apache-2.0), set in Barlow (OFL) | this repository |
 
 ## Settings window artwork and fonts (compiled into CMR3Launcher.exe)

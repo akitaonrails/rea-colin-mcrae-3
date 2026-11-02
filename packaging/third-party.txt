@@ -1,5 +1,5 @@
 # The bundled components: fetched and checksummed when the package is
-# built (see .github/workflows/build.yml and packaging/appimage/build.sh).
+# built (see packaging/package.sh, run by .github/workflows/build.yml).
 #
 # Each line: name url sha256 [more urls...]
 # The first url that downloads AND matches the sha256 wins: later urls are
