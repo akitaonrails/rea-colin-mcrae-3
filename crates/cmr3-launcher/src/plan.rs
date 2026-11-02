@@ -44,8 +44,15 @@ pub struct Plan {
     /// The DLLs Wine must load from the game folder, when every bundled
     /// part installs.
     pub natives: Vec<&'static str>,
-    /// `WINEDLLOVERRIDES` for the game (Wine only).
+    /// `WINEDLLOVERRIDES` for the game (Wine only). Kept for `cmr3-play`
+    /// and the log; Wine's loader ignores it in the game's environment
+    /// block, so the registry overrides below are what count.
     pub wine_overrides: Option<String>,
+    /// Wine only: the per-program overrides (native, then builtin) set for
+    /// `Rally_3PC.exe`, and the bundled DLLs whose override is removed
+    /// ([`components::app_overrides`]).
+    pub app_overrides: Vec<&'static str>,
+    pub app_overrides_off: Vec<&'static str>,
     /// Read by `cmr3-play` on Linux, not the game: gamescope's filter and
     /// the post-processing layer.
     pub scaler: Scaler,
@@ -71,6 +78,11 @@ pub fn plan(settings: &Settings, env: &Env) -> Plan {
     let wine_overrides = env
         .wine
         .then(|| components::wine_overrides(env.overrides.as_deref(), &natives));
+    let (app_overrides, app_overrides_off) = if env.wine {
+        components::app_overrides(&natives)
+    } else {
+        (Vec::new(), Vec::new())
+    };
     Plan {
         display_mode,
         effective_mode,
@@ -84,6 +96,8 @@ pub fn plan(settings: &Settings, env: &Env) -> Plan {
         hd_ui: settings.hd_ui == Some(true),
         natives,
         wine_overrides,
+        app_overrides,
+        app_overrides_off,
         scaler: settings.scaler.unwrap_or(Scaler::Linear),
         postfx: settings.postfx.unwrap_or_default(),
     }
@@ -136,6 +150,20 @@ impl Plan {
                 .as_deref()
                 .unwrap_or("(not set: Windows)")
         ));
+        if !self.app_overrides.is_empty() || !self.app_overrides_off.is_empty() {
+            let list = |v: &[&str]| {
+                if v.is_empty() {
+                    "none".to_string()
+                } else {
+                    v.join(", ")
+                }
+            };
+            out.push_str(&format!(
+                "app DLL overrides (Rally_3PC.exe, native,builtin): {}; removed: {}\n",
+                list(&self.app_overrides),
+                list(&self.app_overrides_off)
+            ));
+        }
         out.push_str("game arguments: (none)\n");
         out.push_str(&format!(
             "cmr3-play (Linux): scaler {}, postfx {}\n",
@@ -178,6 +206,7 @@ mod tests {
         let p = plan(&settings(""), &Env::default());
         assert!(!p.dxvk);
         assert_eq!(p.wine_overrides, None);
+        assert!(p.app_overrides.is_empty() && p.app_overrides_off.is_empty());
         assert_eq!(p.effective_mode, DisplayMode::Fullscreen);
         assert_eq!(p.resolution, None);
     }
@@ -189,9 +218,15 @@ mod tests {
         assert_eq!(p.effective_mode, DisplayMode::Borderless);
         assert_eq!(p.resolution, Some((2560, 1440)));
         assert_eq!(p.wine_overrides.as_deref(), Some("dsound,dinput8,d3d9=n,b"));
+        // What Wine's loader reads for a game the launcher starts: the
+        // per-program registry key (the environment block is ignored).
+        assert_eq!(p.app_overrides, ["dsound", "dinput8", "d3d9"]);
+        assert!(p.app_overrides_off.is_empty());
         let p = plan(&settings("dxvk = off\ngamepad = off\n"), &WINE);
         assert_eq!(p.wine_overrides.as_deref(), Some("dsound=n,b"));
         assert_eq!(p.xidi_ini, None);
+        assert_eq!(p.app_overrides, ["dsound"]);
+        assert_eq!(p.app_overrides_off, ["dinput8", "d3d9"]);
         assert!(!p.choose_controller);
     }
 

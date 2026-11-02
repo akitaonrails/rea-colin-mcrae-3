@@ -140,6 +140,16 @@
 
 ### Fixed
 
+- SilentPatch's ASI loader, Xidi and DXVK now load when Steam or Proton
+  starts `CMR3Launcher.exe` directly, without `cmr3-play`. Wine ignores
+  `WINEDLLOVERRIDES` in the game's environment, so under plain Wine the
+  game loaded Wine's own `dinput8` and the gamepad preset never applied.
+  The launcher now writes Wine's per-program overrides for
+  `Rally_3PC.exe` (`HKCU\Software\Wine\AppDefaults\Rally_3PC.exe\DllOverrides`,
+  native then builtin) for the parts it installed, keeps a value the
+  player set, and removes its own when a part is turned off. The golden
+  snapshots gain an "app DLL overrides" line.
+
 - Starting the launcher a second time while the game runs now says the
   game is running. The settings window had the game's own window title
   ("Colin McRae Rally 3"), so the second start found the game's window,

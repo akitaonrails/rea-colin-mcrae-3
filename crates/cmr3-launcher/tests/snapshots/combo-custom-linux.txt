@@ -11,6 +11,7 @@ components:
   profile controller set to the pad when new: on
 patch sets: DRM-free xdelta (efigs, then polish) only for a protected official 1.1 Rally_3PC.exe
 WINEDLLOVERRIDES: dsound,dinput8,d3d9=n,b;winedbg=d
+app DLL overrides (Rally_3PC.exe, native,builtin): dsound, dinput8, d3d9; removed: none
 game arguments: (none)
 cmr3-play (Linux): scaler fsr, postfx cinematic
 ini log: WIDTH=1920, HEIGHT=1080, DISPLAY_MODE=1, VSYNC=0, ANISOTROPIC=2, FSAA=1, SHARPER_SHADOWS=0, EXTERIOR_FOV=90, INTERIOR_FOV=90

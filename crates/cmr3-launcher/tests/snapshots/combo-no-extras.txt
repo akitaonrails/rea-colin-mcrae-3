@@ -37,6 +37,7 @@ components:
   profile controller set to the pad when new: off
 patch sets: DRM-free xdelta (efigs, then polish) only for a protected official 1.1 Rally_3PC.exe
 WINEDLLOVERRIDES: dsound=n,b;winedbg=d
+app DLL overrides (Rally_3PC.exe, native,builtin): dsound; removed: dinput8, d3d9
 game arguments: (none)
 cmr3-play (Linux): scaler linear, postfx off
 ini log: WIDTH=2560, HEIGHT=1440, DISPLAY_MODE=2

@@ -205,6 +205,24 @@ pub fn install_dxvk(game: &Path, runtime: &Path, bundle: &Path, on: bool) -> io:
     Ok(put(&mut ledger, "d3d9.dll", bytes, &ours)?.unwrap_or(Installed::Done))
 }
 
+/// The DLLs the launcher puts beside the game that Wine also ships: dsound
+/// (the ASI loader), dinput8 (Xidi), d3d9 (DXVK).
+pub const BUNDLED_DLLS: [&str; 3] = ["dsound", "dinput8", "d3d9"];
+
+/// Wine's per-program DLL overrides for the game (`HKCU\Software\Wine\
+/// AppDefaults\Rally_3PC.exe\DllOverrides`, native then builtin), which
+/// Wine's loader reads even when the launcher was started without
+/// `cmr3-play` (it ignores `WINEDLLOVERRIDES` in the game's environment
+/// block): the installed `natives` to set, and the other bundled DLLs
+/// whose override of ours goes.
+pub fn app_overrides(natives: &[&'static str]) -> (Vec<&'static str>, Vec<&'static str>) {
+    let off = BUNDLED_DLLS
+        .into_iter()
+        .filter(|dll| !natives.contains(dll))
+        .collect();
+    (natives.to_vec(), off)
+}
+
 /// `WINEDLLOVERRIDES` for the game under Wine: `natives` (the DLL names
 /// the launcher installed beside it: dsound for the ASI loader, dinput8
 /// for Xidi, d3d9 for DXVK) load from the game folder first. The player's
@@ -504,6 +522,60 @@ mod tests {
         for d in [bundle, game, rt] {
             fs::remove_dir_all(d).unwrap();
         }
+    }
+
+    #[test]
+    fn app_overrides_cover_every_bundled_dll_once() {
+        assert_eq!(
+            app_overrides(&["dsound", "dinput8", "d3d9"]),
+            (vec!["dsound", "dinput8", "d3d9"], vec![])
+        );
+        // A part not installed (turned off, or the game's own DLL kept)
+        // loses the override we wrote for it.
+        assert_eq!(
+            app_overrides(&["dsound"]),
+            (vec!["dsound"], vec!["dinput8", "d3d9"])
+        );
+        assert_eq!(app_overrides(&[]), (vec![], BUNDLED_DLLS.to_vec()));
+    }
+
+    /// Under Wine (`sdk/scripts/wine-test`): the overrides reach the key
+    /// Wine's loader reads for the game, a part turned off loses ours, and
+    /// a player's own value stays.
+    #[cfg(windows)]
+    #[test]
+    fn app_overrides_reach_wines_registry() {
+        use rea_launcher_win32::reg::{Hive, Key};
+        use rea_launcher_win32::wine::{self, DllMode, app_defaults_key};
+        let exe = format!("cmr3-test-{}.exe", std::process::id());
+        let modes = |dlls: &[&'static str]| {
+            dlls.iter()
+                .map(|&d| (d, DllMode::NativeThenBuiltin))
+                .collect::<Vec<_>>()
+        };
+        let read = |dll: &str| {
+            Key::open_read(Hive::CurrentUser, &app_defaults_key(&exe))
+                .unwrap()
+                .and_then(|k| k.string(dll).unwrap())
+        };
+        assert!(wine::is_wine(), "run under Wine");
+        let (on, _) = app_overrides(&BUNDLED_DLLS);
+        wine::app_dll_overrides(&exe, &modes(&on)).unwrap();
+        for dll in BUNDLED_DLLS {
+            assert_eq!(read(dll).as_deref(), Some("native,builtin"), "{dll}");
+        }
+        // The player sets d3d9 to builtin; then the gamepad and DXVK go off.
+        Key::create(Hive::CurrentUser, &app_defaults_key(&exe))
+            .unwrap()
+            .set_string("d3d9", "builtin")
+            .unwrap();
+        let (on, off) = app_overrides(&["dsound"]);
+        wine::app_dll_overrides(&exe, &modes(&on)).unwrap();
+        let removed = wine::remove_app_dll_overrides(&exe, &modes(&off)).unwrap();
+        assert_eq!(removed, ["dinput8"]);
+        assert_eq!(read("dsound").as_deref(), Some("native,builtin"));
+        assert_eq!(read("dinput8"), None);
+        assert_eq!(read("d3d9").as_deref(), Some("builtin"));
     }
 
     #[test]

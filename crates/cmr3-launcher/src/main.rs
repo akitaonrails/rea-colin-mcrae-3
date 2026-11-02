@@ -44,6 +44,7 @@ mod app {
     use rea_launcher_win32::instance::{self as win32_instance, Window};
     use rea_launcher_win32::process::Launch;
     use rea_launcher_win32::report;
+    use rea_launcher_win32::wine::DllMode;
     use rea_launcher_win32::{display, gpu, wine};
 
     use crate::ui;
@@ -442,8 +443,43 @@ mod app {
                 Err(e) => log_line(&format!("warning: {e}")),
             }
         }
-        // Plain Proton/Wine runs get the overrides cmr3-play would set
-        // (only for the parts that did install).
+        // Wine's loader ignores WINEDLLOVERRIDES in the game's environment
+        // block: plain Proton/Wine runs (no cmr3-play) get the bundled DLLs
+        // through the per-program registry key, for the parts that did
+        // install; a part not installed loses the override we wrote.
+        if wine {
+            let (on, off) = components::app_overrides(&natives);
+            let modes = |dlls: &[&'static str]| {
+                dlls.iter()
+                    .map(|&d| (d, DllMode::NativeThenBuiltin))
+                    .collect::<Vec<_>>()
+            };
+            match wine::app_dll_overrides(EXE, &modes(&on)) {
+                Ok(applied) => {
+                    if !applied.written.is_empty() {
+                        log_line(&format!(
+                            "Wine DLL overrides for {EXE}: {} (native, then builtin)",
+                            applied.written.join(", ")
+                        ));
+                    }
+                    for (dll, value) in &applied.player {
+                        log_line(&format!(
+                            "Wine DLL override for {dll} kept as the player set it: {value:?}"
+                        ));
+                    }
+                }
+                Err(e) => log_line(&format!("warning: Wine DLL overrides: {e}")),
+            }
+            match wine::remove_app_dll_overrides(EXE, &modes(&off)) {
+                Ok(removed) if !removed.is_empty() => log_line(&format!(
+                    "Wine DLL overrides removed for {EXE}: {}",
+                    removed.join(", ")
+                )),
+                Ok(_) => {}
+                Err(e) => log_line(&format!("warning: Wine DLL overrides: {e}")),
+            }
+        }
+        // The environment value too: cmr3-play and the log read it.
         let overrides =
             wine.then(|| components::wine_overrides(env.overrides.as_deref(), &natives));
         if let Some(o) = &overrides {
