@@ -28,7 +28,7 @@ patcher https://github.com/CookiePLMonster/SilentPatchCMR3/releases/download/BUI
 # Wine; only the 32-bit file from the release tarball goes into the
 # package.
 dxvk https://github.com/doitsujin/dxvk/releases/download/v3.1.1/dxvk-3.1.1.tar.gz 40565b4a724aadc4433fa4e010b4b23916d9b1f1baeee64e17186db94f54e608 https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/dxvk-3.1.1.tar.gz
-dxvk-d3d9-sha256 265888c31ca78dffa290c39cb7e50bfb02762590e41927906e46fb32f01497fa
+dxvk-d3d9-sha256 - 265888c31ca78dffa290c39cb7e50bfb02762590e41927906e46fb32f01497fa
 
 # vkBasalt 0.3.2.10 (Zlib) — source for the 32/64-bit Vulkan post-processing
 # layers built by packaging/build-vkbasalt.sh.
