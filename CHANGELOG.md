@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- The DRM-free patcher never ran: the launcher passed xdelta its own path
+  as a first argument, and xdelta stopped with "too many filenames".
+
 ## [0.1.2] - 2026-11-02
 
 ### Changed

@@ -131,8 +131,9 @@ pub fn install_hd_ui(runtime: &Path, bundle: &Path) -> io::Result<usize> {
     Ok(n)
 }
 
-/// The xdelta command that turns the DRM `from` exe into the DRM-free exe
-/// of `variant` ("efigs" or "polish"), written to `to`. The variants are
+/// The xdelta arguments (after the program itself, which the process
+/// start adds) that turn the DRM `from` exe into the DRM-free exe of
+/// `variant` ("efigs" or "polish"), written to `to`. The variants are
 /// tried in order; xdelta fails on a mismatched source, which is how the
 /// patcher tells the game versions apart.
 pub fn xdelta_args(
@@ -146,7 +147,6 @@ pub fn xdelta_args(
         .unwrap_or(Path::new("."))
         .join(format!("{variant}.xdelta"));
     vec![
-        xdelta.as_os_str().into(),
         "-f".into(),
         "-d".into(),
         "-s".into(),
@@ -285,8 +285,7 @@ mod tests {
         assert_eq!(
             joined,
             vec![
-                xdelta.display().to_string(),
-                "-f".into(),
+                "-f".to_string(),
                 "-d".into(),
                 "-s".into(),
                 "C:\\rt\\Rally_3PC.exe".into(),
@@ -296,6 +295,38 @@ mod tests {
         );
         assert!(bundle.join("patcher/polish.xdelta").is_file());
         fs::remove_dir_all(&bundle).unwrap();
+    }
+
+    /// The arguments work with a real xdelta3 (skipped when none is on
+    /// PATH): encode a tiny patch, then decode it the launcher's way.
+    #[test]
+    fn xdelta_args_decode_with_a_real_xdelta() {
+        use std::process::Command;
+        if Command::new("xdelta3").arg("-V").output().is_err() {
+            eprintln!("xdelta3 not on PATH; skipped");
+            return;
+        }
+        let d = temp("xd-real");
+        fs::create_dir_all(d.join("patcher")).unwrap();
+        fs::write(d.join("old.exe"), b"the DRM executable bytes").unwrap();
+        fs::write(d.join("want.exe"), b"the DRM-free executable bytes").unwrap();
+        let encoded = Command::new("xdelta3")
+            .args(["-f", "-e", "-s"])
+            .arg(d.join("old.exe"))
+            .arg(d.join("want.exe"))
+            .arg(d.join("patcher/efigs.xdelta"))
+            .status()
+            .unwrap();
+        assert!(encoded.success());
+        let xdelta = d.join("patcher/xdelta.exe");
+        let args = xdelta_args(&xdelta, &d.join("old.exe"), "efigs", &d.join("new.exe"));
+        let decoded = Command::new("xdelta3").args(&args).status().unwrap();
+        assert!(decoded.success());
+        assert_eq!(
+            fs::read(d.join("new.exe")).unwrap(),
+            b"the DRM-free executable bytes"
+        );
+        fs::remove_dir_all(&d).unwrap();
     }
 
     #[test]
