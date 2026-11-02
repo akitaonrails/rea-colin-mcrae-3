@@ -18,7 +18,7 @@ Windows and on Linux (Proton/Wine). It is not a distribution of the game.
     content from regional releases. Players who want it can add it to
     their game folder themselves.
 - The user's game folder is read only. The launcher builds a separate
-  runtime folder from it and swaps whole files in (`runtime::install*`),
+  runtime folder from it and swaps whole files in (`rea_launcher::fsx`),
   never writing through a hard link back to the original.
 - Never commit a developer's absolute game path. Commands and code take an
   explicit path (or `CMR3_GAME` in examples).
@@ -59,3 +59,31 @@ Windows and on Linux (Proton/Wine). It is not a distribution of the game.
   same settings-window look, the same Linux helper — so improvements
   cross over easily. That launcher patches the game in memory; this one
   assembles open-source components around it.
+
+## Shared SDK
+
+- The generic launcher code lives in
+  [rea-launcher-sdk](https://github.com/akitaonrails/rea-launcher-sdk),
+  pinned by tag: the Rust crates `rea-launcher` (runtime sync, whole-file
+  swaps, save mirroring, the component ledger, ini and `launcher.cfg`
+  editing, Wine overrides, display and pad logic, the log),
+  `rea-launcher-win32` (all Win32 calls) and `rea-launcher-ui` (the
+  settings window's theme, widgets, sizing and pad navigation); the
+  Linux play library and packaging scripts, vendored under `sdk/`; and
+  the reusable CI, release and upstream-watch workflows.
+- This repository keeps the game's knowledge: the runtime `Policy`, the
+  profile, SilentPatch keys, Xidi presets, the HD UI record, the DRM-free
+  patcher, the look's colours and art, `cmr3-play`'s settings and
+  post-processing, the pins and the package contents.
+- Never fork SDK code locally, and never edit `sdk/` by hand. When the
+  SDK lacks something or has a bug, keep the game's own code for that
+  piece and propose the change upstream.
+- Bumping: change the tag in the root `Cargo.toml` (and the `@vX.Y.Z` of
+  the workflows in `.github/workflows/`), run
+  `../rea-launcher-sdk/scripts/sdk-sync .` from an SDK checkout at that
+  tag, commit `sdk/` with `sdk/VERSION`; CI's
+  `sdk-sync --check` fails on drift.
+- Tests and probes run headless by default: the Windows-target tests
+  under Wine with the SDK's `scripts/wine-test`, real-game runs in
+  `gamescope --backend headless`. Open a visible window (the settings
+  window, the game) only deliberately.

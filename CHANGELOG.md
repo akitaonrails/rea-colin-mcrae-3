@@ -4,7 +4,37 @@
 
 ### Added
 
-- Releases carry a `SHA256SUMS` file for the package and the AppImage.
+- Releases carry a `SHA256SUMS` file for the package and the AppImage,
+  provenance attestations, and the version's own changelog section as
+  notes.
+
+### Changed
+
+- The launcher is built on the shared
+  [rea-launcher-sdk](https://github.com/akitaonrails/rea-launcher-sdk)
+  v0.1.0, with the sibling launchers: the runtime copy, profile
+  mirroring, component ledger, settings file, settings window, Linux
+  helper (`cmr3-play` now sources `rea-play.sh`, shipped beside it) and
+  the AppImage come from there. Files, settings, commands and paths stay
+  as they were; existing runtime folders, ledgers and profile records
+  keep working (temp files of the older launcher are cleaned up once).
+- A file in the runtime folder that is neither the launcher's nor the
+  game folder's own (one you put there) is no longer overwritten by
+  SilentPatch, Xidi or DXVK: that component is left out, with a line in
+  `launcher.log` naming the file.
+- `launcher.cfg`: unknown settings are named in `launcher.log` (still
+  kept in the file); setting a key fills its `#key =` line in place; a
+  line starting with `;` is a comment; a file saved in a Windows code
+  page reads correctly, and one that cannot be read is never written
+  over. `SilentPatchCMR3.ini` keeps its own line endings and encoding.
+- The settings window shows where the keyboard or pad focus is; the
+  d-pad's left and right step through a row of choices. On Windows the
+  window is sized to the screen's DPI.
+- `launcher.log` starts afresh after 1 MiB.
+- `cmr3-play`: the settings window's errors go to
+  `~/.config/cmr3-launcher/settings.log`; `help`, `play` and `settings`
+  work as commands too; an interrupted AppImage run also ends the
+  prefix's Wine processes.
 
 ### Fixed
 
