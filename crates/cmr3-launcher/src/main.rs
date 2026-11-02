@@ -267,7 +267,7 @@ mod app {
         }
         let gamepad = settings.gamepad.unwrap_or_default();
         let gamepad_log = settings.gamepad_log == Some(true);
-        let xidi = match components::install_xidi(&rt, &bundle, gamepad, gamepad_log) {
+        let xidi = match components::install_xidi(&game, &rt, &bundle, gamepad, gamepad_log) {
             Ok(true) => {
                 log_line(&format!("Xidi installed ({gamepad:?})"));
                 true
@@ -293,7 +293,7 @@ mod app {
             }
         }
         let dxvk_on = settings.dxvk != Some(false) && wine;
-        match components::install_dxvk(&rt, &bundle, dxvk_on) {
+        match components::install_dxvk(&game, &rt, &bundle, dxvk_on) {
             Ok(true) => log_line(if dxvk_on {
                 "DXVK installed (d3d9 through Vulkan)"
             } else {

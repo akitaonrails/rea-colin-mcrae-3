@@ -17,6 +17,10 @@
 - Switching the HD UI off now takes it out: the game's own fonts and
   pictures come back. Upgrading: an overlay put in by an earlier launcher
   is not recorded, so switch the HD UI on for one launch, then off.
+- Gamepad "off" and DXVK off remove only the `dinput8.dll`, `Xidi.ini` and
+  `d3d9.dll` the launcher installed (recorded by checksum in
+  `.cmr3-launcher-components`), and bring back the game folder's own
+  `dinput8.dll`/`d3d9.dll` when it has one; a player's own files stay.
 
 ## [0.1.2] - 2026-11-02
 

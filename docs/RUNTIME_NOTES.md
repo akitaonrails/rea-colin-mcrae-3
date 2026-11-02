@@ -282,3 +282,6 @@ next release.
 - **HD UI off restores the game's files** (recorded in `.cmr3-hd-ui` in
   the runtime folder). Not yet verified: the menus and fonts look like the
   original game after switching it off.
+- **Component ownership ledger** (`.cmr3-launcher-components`). Not yet
+  verified: Gamepad off with a game folder that ships its own
+  `dinput8.dll` (the game should load it again), and DXVK off under Wine.

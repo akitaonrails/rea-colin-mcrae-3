@@ -75,6 +75,7 @@ fn syncs_a_runtime_and_installs_everything() {
     assert!(cmr3_launcher::components::install_silentpatch(&rt, &bundle).unwrap());
     assert!(
         cmr3_launcher::components::install_xidi(
+            &game,
             &rt,
             &bundle,
             cmr3_launcher::config::Gamepad::Rally,
@@ -82,7 +83,7 @@ fn syncs_a_runtime_and_installs_everything() {
         )
         .unwrap()
     );
-    assert!(cmr3_launcher::components::install_dxvk(&rt, &bundle, true).unwrap());
+    assert!(cmr3_launcher::components::install_dxvk(&game, &rt, &bundle, true).unwrap());
     let hd = cmr3_launcher::components::install_hd_ui(&rt, &bundle).unwrap();
     println!("hd ui: {hd} files");
     assert!(hd > 20);
