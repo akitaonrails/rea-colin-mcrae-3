@@ -409,7 +409,7 @@ Every run ended with the process table clean; no leftover.
 | Second `CMR3Launcher.exe` while the game runs | FAILED, fixed | it raised the game's window and said nothing (`another launcher is running: WindowRaised`): the settings window had the game's own title. Fixed (window title "Colin McRae Rally 3 launcher"); rerun: "Colin McRae Rally 3 is already running…", `GameRunning`, exit 0 |
 | Second `CMR3Launcher.exe` while the window is open | VERIFIED | private Xvfb: exit 0, `WindowRaised`, still one launcher window |
 | One-run flags `--play --scaler fsr --resolution 1280x720` | VERIFIED | helper "starting at 1280x720, scaler fsr", ini 1280×720, swapchain 1280×720, launcher.cfg unchanged; the next plain `--play` went back to "1920x1080, scaler linear" |
-| `postfx = color` with the layer set inside gamescope | VERIFIED | play.log: "postfx: color via …/thirdparty/vkbasalt", vkBasalt read `effects = lut:cas`, its first load after gamescope was up (none during gamescope's own Vulkan start); picture: screenshot for the owner (`shots/postfx-color.jpg`) |
+| `postfx = color` with the layer set inside gamescope | VERIFIED | play.log: "postfx: color via …/thirdparty/vkbasalt", vkBasalt read `effects = lut:cas`, its first load after gamescope was up (none during gamescope's own Vulkan start); picture: approved by the owner on 2026-11-02 after viewing `shots/postfx-color.jpg` — the Colour grade stays as it is |
 | LLD-linked build starts the game under Wine | VERIFIED | every run above |
 | VSync on/off visible in frame timing | NOT MEASURED | gamescope's `-T` stats file stayed empty headless; DXVK presents FIFO in both cases (its interval follows the game). Needs a frame-time overlay on a real display |
 
