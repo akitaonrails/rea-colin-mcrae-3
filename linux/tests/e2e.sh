@@ -6,16 +6,24 @@
 #
 # Needs the gaming distrobox, the test kit (launcher + thirdparty/ +
 # launcher.cfg) and a game — set:
-#   CMR3_E2E_KIT      the kit folder          (default /mnt/data/tmp-cmr3-test)
+#   CMR3_E2E_KIT      the kit folder          (required on the first run;
+#                                             remembered in .e2e-kit)
 #   CMR3_E2E_PREFIX   the wine prefix         (default $KIT/prefix)
 #   CMR3_E2E_PLAY     this repo's cmr3-play   (default ../cmr3-play)
+#   CMR3_E2E_PLAYLOG  the helper's play.log   (default: ~/.config/cmr3-launcher)
 #   CMR3_E2E_BOX      gamescope+wine wrapper  (default: distrobox enter gaming --)
 #   CMR3_E2E_ALIVE_AT seconds to wait first   (default 90)
 # Nothing here presses pad buttons or listens to music: those lines of the
 # checklist stay human.
 set -u
 HERE=$(dirname "$(readlink -f "$0")")
-KIT=${CMR3_E2E_KIT:-/mnt/data/tmp-cmr3-test}
+KIT=${CMR3_E2E_KIT:-}
+if [ -z "$KIT" ] && [ -f "$HERE/.e2e-kit" ]; then KIT=$(cat "$HERE/.e2e-kit"); fi
+if [ -z "$KIT" ]; then
+  echo "set CMR3_E2E_KIT to the test kit folder (launcher + thirdparty/ + launcher.cfg)"
+  exit 2
+fi
+mkdir -p "$HERE" && printf '%s\n' "$KIT" > "$HERE/.e2e-kit"
 PREFIX=${CMR3_E2E_PREFIX:-$KIT/prefix}
 PLAY=${CMR3_E2E_PLAY:-$HERE/../cmr3-play}
 BOX=${CMR3_E2E_BOX:-distrobox enter gaming --}
@@ -101,7 +109,7 @@ case "$postfx" in
   color|cinematic)
     playlog=""
     for pl in "$HOME/.config/cmr3-launcher/play.log" \
-              /mnt/data/distrobox/gaming/.config/cmr3-launcher/play.log; do
+              "${CMR3_E2E_PLAYLOG:-/nonexistent}"; do
       [ -f "$pl" ] && playlog=$pl && break
     done
     if [ -n "$playlog" ] && grep -q "vkBasalt info" "$playlog"; then

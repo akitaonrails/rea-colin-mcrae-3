@@ -6,16 +6,18 @@ these need a person at the machine, because they are exactly the
 regressions that pixel-and-log tests cannot see — the gamepad problem of
 2026-11-01 shipped green through every automated test.
 
-Setup: the gaming distrobox, the test kit at
-`/mnt/data/tmp-cmr3-test` (launcher + `thirdparty/` + `launcher.cfg`),
-a pad connected, and `linux/tests/e2e.sh` for the machine-checked parts.
+Setup: the gaming distrobox, a test kit folder (the launcher exe +
+`thirdparty/` + a `launcher.cfg` naming the game), a pad connected, and
+`linux/tests/e2e.sh` for the machine-checked parts.
 
 ## Automated, on the dev box
 
 ```sh
-sh linux/tests/e2e.sh          # boots the game through cmr3-play and
-                               # checks: alive at 90 s, no fault deadlock,
-                               # clean exit, settings written, pad logged
+CMR3_E2E_KIT=/path/to/kit sh linux/tests/e2e.sh
+# Boots the game through cmr3-play and checks: alive, no fault deadlock,
+# clean exit, components installed, settings written, postfx engaged.
+# When the helper runs inside a distrobox, CMR3_E2E_PLAYLOG points at
+# its play.log (the box's ~/.config/cmr3-launcher/play.log).
 ```
 
 ## By hand — Linux (gamescope path), then the AppImage, then Windows
