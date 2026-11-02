@@ -257,6 +257,14 @@ pub fn check_separate(game: &Path, runtime: &Path) -> Result<(), String> {
 /// original, whose attributes it shares.
 fn make_writable(path: &Path) -> io::Result<()> {
     let mut perm = fs::metadata(path)?.permissions();
+    // Unix: the owner's write bit only (set_readonly(false) would make
+    // the file writable by everyone).
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        perm.set_mode(perm.mode() | 0o200);
+    }
+    #[cfg(not(unix))]
     #[allow(clippy::permissions_set_readonly_false)]
     perm.set_readonly(false);
     fs::set_permissions(path, perm)
@@ -585,12 +593,8 @@ mod tests {
         fs::set_permissions(game.join("Data/a.dat"), fs::Permissions::from_mode(0o444)).unwrap();
         assert_eq!(sync(&game, &rt).unwrap(), (2, 1), "only b.dat is linked");
         assert_eq!(fs::read(rt.join("Data/a.dat")).unwrap(), b"data");
-        assert!(
-            !fs::metadata(rt.join("Data/a.dat"))
-                .unwrap()
-                .permissions()
-                .readonly()
-        );
+        let copied = fs::metadata(rt.join("Data/a.dat")).unwrap().permissions();
+        assert_eq!(copied.mode() & 0o777, 0o644, "writable by its owner only");
         fs::set_permissions(game.join("Data/a.dat"), fs::Permissions::from_mode(0o644)).unwrap();
         for d in [game, rt] {
             fs::remove_dir_all(d).unwrap();
