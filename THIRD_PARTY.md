@@ -52,7 +52,7 @@ decision).
 
 | File | Licence | Source |
 | --- | --- | --- |
-| `crates/cmr3-launcher/assets/portrait.jpg` — Colin McRae, photo by "Carolyn" (Flickr user 8365241@N02), cropped on Wikimedia Commons and resized here | CC BY 2.0 (credited in the window) | https://commons.wikimedia.org/wiki/File:Colin_Mcrae_crop.jpg (from https://www.flickr.com/photos/8365241@N02/1429137255/) |
+| `crates/cmr3-launcher/assets/portrait.jpg` — Colin McRae, photo by Carolyn Williams (Flickr user carolyn.will, 8365241@N02; Wikimedia Commons lists the author as "Carolyn"), cropped on Wikimedia Commons and resized here | CC BY 2.0 (credited in the window: "Photo: Carolyn Williams, CC BY 2.0 (via Wikimedia Commons)") | https://commons.wikimedia.org/wiki/File:Colin_Mcrae_crop.jpg (from https://www.flickr.com/photos/8365241@N02/1429137255/) |
 | Barlow and Barlow Condensed (`Barlow-*.ttf`, `BarlowCondensed-*.ttf`), bundled by the shared settings-window kit `rea-launcher-ui` (rea-launcher-sdk, `crates/rea-launcher-ui/assets/fonts`) | SIL OFL 1.1 (shipped as `licenses/Barlow-OFL.txt` in the package) | https://github.com/jpt/barlow |
 
 ## Images in the README and the package (`docs/images`)

@@ -318,7 +318,7 @@ CookiePLMonster (widescreen, display and compatibility fixes),
 [DXVK](https://github.com/doitsujin/dxvk), and
 [vkBasalt](https://github.com/DadSchoorse/vkBasalt), on the shared
 [rea-launcher-sdk](https://github.com/akitaonrails/rea-launcher-sdk). The settings window's
-Colin McRae photo is by "Carolyn" on Flickr (CC BY 2.0, via Wikimedia Commons); its Barlow fonts are
+Colin McRae photo is by Carolyn Williams, CC BY 2.0 (via Wikimedia Commons); its Barlow fonts are
 by Jeremy Tribby (SIL OFL). See [THIRD_PARTY.md](THIRD_PARTY.md) for the
 full component and licence list.
 

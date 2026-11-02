@@ -11,10 +11,10 @@
 
 use std::path::{Path, PathBuf};
 
-use rea_launcher_ui::egui::{self, Align2, Rect, Response, TextureHandle, pos2, vec2};
+use rea_launcher_ui::egui::{self, Rect, Response, TextureHandle, pos2, vec2};
 use rea_launcher_ui::spec::{mark_rendered, spec_row, toggle_text};
-use rea_launcher_ui::theme::{body, decal, semibold};
-use rea_launcher_ui::widgets::{self, Chip, Crop, LookCard};
+use rea_launcher_ui::theme::{body, decal};
+use rea_launcher_ui::widgets::{self, CaptionStyle, Chip, Crop, LookCard};
 use rea_launcher_ui::window::Layout;
 
 use crate::config::{self, DisplayMode, Gamepad, Postfx, Scaler, Settings, ShadowStyle};
@@ -184,35 +184,31 @@ pub fn draw(
     play
 }
 
-fn draw_photo(ui: &egui::Ui, rect: Rect, portrait: Option<&TextureHandle>) {
-    let p = ui.painter();
+/// What the portrait shows, for screen readers.
+pub const PHOTO_ALT: &str = "Colin McRae, smiling, in a cap and racing suit";
+
+/// The portrait's credit (THIRD_PARTY.md), two lines to fit the strip.
+pub const PHOTO_CREDIT: [&str; 2] = [
+    "Photo: Carolyn Williams, CC BY 2.0",
+    "(via Wikimedia Commons)",
+];
+
+fn draw_photo(ui: &mut egui::Ui, rect: Rect, portrait: Option<&TextureHandle>) {
     // Fill the height; keep the left of the picture (Colin's face).
-    widgets::hero_image(p, rect, portrait, Crop::Start, look::BASE);
+    widgets::hero_image(ui.painter(), rect, portrait, Crop::Start, look::BASE);
     // The caption sits on a solid band, never on the photo itself.
-    let band = Rect::from_min_max(pos2(rect.left(), rect.bottom() - 82.0), rect.max);
-    p.rect_filled(band, 0.0, look::BASE);
-    let x = rect.left() + 20.0;
-    let y = rect.bottom() - 16.0;
-    p.text(
-        pos2(x, y),
-        Align2::LEFT_BOTTOM,
-        "Photo: Carolyn (Flickr), CC BY 2.0",
-        body(11.0),
-        MUTED,
-    );
-    p.text(
-        pos2(x, y - 16.0),
-        Align2::LEFT_BOTTOM,
-        "1968–2007, World Rally Champion 1995",
-        body(13.0),
-        MUTED,
-    );
-    p.text(
-        pos2(x, y - 34.0),
-        Align2::LEFT_BOTTOM,
-        "Colin McRae",
-        semibold(19.0),
-        INK,
+    let band = Rect::from_min_max(pos2(rect.left(), rect.bottom() - 104.0), rect.max);
+    ui.painter().rect_filled(band, 0.0, look::BASE);
+    widgets::photo_caption(
+        ui,
+        rect,
+        PHOTO_ALT,
+        &[
+            ("Colin McRae", CaptionStyle::Title),
+            ("1968–2007, World Rally Champion 1995", CaptionStyle::Text),
+            (PHOTO_CREDIT[0], CaptionStyle::Credit),
+            (PHOTO_CREDIT[1], CaptionStyle::Credit),
+        ],
     );
 }
 
@@ -594,6 +590,24 @@ mod tests {
         tab(&mut ui, "Controls");
         ui.get_by_role_and_label(Role::RadioGroup, "Gamepad");
         ui.get_by_role_and_label(Role::Switch, "Gamepad log");
+    }
+
+    #[test]
+    fn the_portrait_and_its_full_credit_reach_screen_readers() {
+        let ui = open("", false);
+        ui.get_by_role_and_label(Role::Image, PHOTO_ALT);
+        // The caption is one label, its lines joined.
+        ui.get_by_role_and_label(
+            Role::Label,
+            &format!(
+                "Colin McRae. 1968–2007, World Rally Champion 1995. {}. {}",
+                PHOTO_CREDIT[0], PHOTO_CREDIT[1]
+            ),
+        );
+        assert_eq!(
+            PHOTO_CREDIT.join(" "),
+            "Photo: Carolyn Williams, CC BY 2.0 (via Wikimedia Commons)"
+        );
     }
 
     #[test]

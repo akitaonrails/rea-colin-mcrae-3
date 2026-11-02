@@ -49,6 +49,10 @@
 - The VSync, Texture sharpness, Smooth edges and Car shadows rows are the
   SDK's option rows with an "As the game" chip (it was a local copy).
   Their descriptions now sit under the label, like Display mode's.
+- The portrait credit names the photographer in full: "Photo: Carolyn
+  Williams, CC BY 2.0 (via Wikimedia Commons)", in the window, README and
+  `THIRD_PARTY.md`. The caption is the SDK's `photo_caption`, so screen
+  readers hear the photo described and the caption read out.
 - The portrait credit follows Wikimedia Commons ("Carolyn" on Flickr,
   CC BY 2.0); `THIRD_PARTY.md` lists every image in the window, README
   and package. README images are JPEG (the 13 MB 4K capture is now a

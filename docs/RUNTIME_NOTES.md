@@ -349,6 +349,9 @@ below was run in the real game yet.
 - **One-run flags through the SDK** (`REA_HELPER_KEYS`). Pending:
   `cmr3-play --play --scaler fsr` (play.log shows `-F fsr`), then a plain
   `cmr3-play --play` (back to launcher.cfg's scaler).
+- **Window**: the SDK's "As the game" rows (VSync, Texture sharpness,
+  Smooth edges, Car shadows) and the four-line portrait caption on a
+  taller band. Not yet looked at on screen.
 
 ## Platform matrix
 
