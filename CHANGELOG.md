@@ -8,6 +8,12 @@
 
 ### Fixed
 
+- A profile the player copied into the saves folder (a backup, say) is
+  used even when it is older than the game's copy; the newer copy used to
+  win and could later overwrite it. The launcher records each profile's
+  state at the last mirror (`.cmr3-profile-state` in the runtime folder):
+  a saves copy changed since then wins, else a runtime copy the last
+  session did not get to save.
 - The DRM-free patcher never ran: the launcher passed xdelta its own path
   as a first argument, and xdelta stopped with "too many filenames".
 - The runtime copy no longer touches the game folder's files through hard

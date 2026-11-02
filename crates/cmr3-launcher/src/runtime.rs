@@ -438,6 +438,89 @@ pub fn mirror_file(from: &Path, to: &Path) -> io::Result<bool> {
     Ok(true)
 }
 
+/// The profile's stamp as of the last time it was mirrored, kept in the
+/// runtime folder: it tells which copy changed since.
+pub const PROFILE_STATE: &str = ".cmr3-profile-state";
+
+fn stamp_of(path: &Path) -> Option<Stamp> {
+    let meta = fs::metadata(path).ok().filter(|m| m.is_file())?;
+    Some(Stamp {
+        size: meta.len(),
+        mtime: mtime_secs(&meta),
+    })
+}
+
+fn read_state(path: &Path) -> Option<Stamp> {
+    let text = fs::read_to_string(path).ok()?;
+    let (size, mtime) = text.trim().split_once('\t')?;
+    Some(Stamp {
+        size: size.parse().ok()?,
+        mtime: mtime.parse().ok()?,
+    })
+}
+
+fn write_state(path: &Path, stamp: Option<Stamp>) -> io::Result<()> {
+    match stamp {
+        Some(s) => install(path, format!("{}\t{}\n", s.size, s.mtime).as_bytes()),
+        None => remove(path),
+    }
+}
+
+/// Copies `from` over `to` with `from`'s modification time.
+fn copy_stamped(from: &Path, to: &Path) -> io::Result<()> {
+    let mtime = stamp_of(from).map_or(0, |s| s.mtime);
+    install_copy(from, to)?;
+    let file = fs::OpenOptions::new().write(true).open(to)?;
+    file.set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(mtime))
+}
+
+/// Before the game starts: brings the runtime's profile (`runtime`) and
+/// the player's copy (`saves`) into step, using the stamp recorded at
+/// the last mirror (`state`). A saves copy that changed since wins (the
+/// player restored or copied one in, even an older one); otherwise a
+/// runtime copy that changed wins (the last session ended before the
+/// launcher saved it). Without a record, the newer copy wins. Returns a
+/// log line when something was copied.
+pub fn profile_before(
+    runtime: &Path,
+    saves: &Path,
+    state: &Path,
+) -> io::Result<Option<&'static str>> {
+    let Some(last) = read_state(state) else {
+        let mut did = None;
+        if runtime.is_file() && mirror_file(runtime, saves)? {
+            did = Some("saved to the saves folder (newer)");
+        }
+        if mirror_file(saves, runtime)? {
+            did = Some("restored from the saves folder (newer)");
+        }
+        write_state(state, stamp_of(runtime))?;
+        return Ok(did);
+    };
+    let did = if saves.is_file() && stamp_of(saves) != Some(last) {
+        copy_stamped(saves, runtime)?;
+        Some("restored from the saves folder (changed there)")
+    } else if runtime.is_file() && stamp_of(runtime) != Some(last) {
+        copy_stamped(runtime, saves)?;
+        Some("saved to the saves folder (the last session ended before it was)")
+    } else {
+        None
+    };
+    write_state(state, stamp_of(runtime))?;
+    Ok(did)
+}
+
+/// After the game exits: the runtime's profile goes to the saves folder
+/// when it differs, and the record follows. True when it was copied.
+pub fn profile_after(runtime: &Path, saves: &Path, state: &Path) -> io::Result<bool> {
+    let changed = runtime.is_file() && stamp_of(runtime) != stamp_of(saves);
+    if changed {
+        copy_stamped(runtime, saves)?;
+    }
+    write_state(state, stamp_of(runtime))?;
+    Ok(changed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -621,6 +704,86 @@ mod tests {
             fs::metadata(game.join("real.dat")).unwrap().ino()
         );
         for d in [game, rt] {
+            fs::remove_dir_all(d).unwrap();
+        }
+    }
+
+    /// A profile file with `bytes` and a modification time `secs` ago.
+    fn put_profile(path: &Path, bytes: &[u8], secs_ago: u64) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, bytes).unwrap();
+        let f = fs::OpenOptions::new().write(true).open(path).unwrap();
+        f.set_modified(SystemTime::now() - Duration::from_secs(secs_ago))
+            .unwrap();
+    }
+
+    fn profile_dirs(name: &str) -> (PathBuf, PathBuf, PathBuf, PathBuf) {
+        let rt = temp(&format!("{name}-rt"));
+        let saves = temp(&format!("{name}-saves"));
+        fs::create_dir_all(&rt).unwrap();
+        let state = rt.join(PROFILE_STATE);
+        (rt.join("CMR3"), saves.join("CMR3"), state, saves)
+    }
+
+    #[test]
+    fn a_normal_session_saves_the_profile_at_exit() {
+        let (rt, saves, state, saves_dir) = profile_dirs("profile-exit");
+        put_profile(&saves, b"start", 100);
+        assert!(profile_before(&rt, &saves, &state).unwrap().is_some());
+        assert_eq!(fs::read(&rt).unwrap(), b"start");
+        assert_eq!(profile_before(&rt, &saves, &state).unwrap(), None);
+        put_profile(&rt, b"played", 0);
+        assert!(profile_after(&rt, &saves, &state).unwrap());
+        assert_eq!(fs::read(&saves).unwrap(), b"played");
+        assert!(!profile_after(&rt, &saves, &state).unwrap());
+        assert_eq!(profile_before(&rt, &saves, &state).unwrap(), None);
+        for d in [rt.parent().unwrap(), &saves_dir] {
+            fs::remove_dir_all(d).unwrap();
+        }
+    }
+
+    #[test]
+    fn a_restored_older_backup_wins() {
+        let (rt, saves, state, saves_dir) = profile_dirs("profile-backup");
+        put_profile(&saves, b"start", 1000);
+        profile_before(&rt, &saves, &state).unwrap();
+        put_profile(&rt, b"latest", 10);
+        profile_after(&rt, &saves, &state).unwrap();
+        // The player copies an older backup into the saves folder.
+        put_profile(&saves, b"backup", 5000);
+        assert!(profile_before(&rt, &saves, &state).unwrap().is_some());
+        assert_eq!(fs::read(&rt).unwrap(), b"backup");
+        assert!(!profile_after(&rt, &saves, &state).unwrap());
+        assert_eq!(fs::read(&saves).unwrap(), b"backup");
+        for d in [rt.parent().unwrap(), &saves_dir] {
+            fs::remove_dir_all(d).unwrap();
+        }
+    }
+
+    #[test]
+    fn a_session_killed_before_saving_is_recovered() {
+        let (rt, saves, state, saves_dir) = profile_dirs("profile-crash");
+        put_profile(&saves, b"start", 1000);
+        profile_before(&rt, &saves, &state).unwrap();
+        // The game saved, then the launcher was killed: no profile_after.
+        put_profile(&rt, b"progress", 10);
+        assert!(profile_before(&rt, &saves, &state).unwrap().is_some());
+        assert_eq!(fs::read(&saves).unwrap(), b"progress");
+        assert_eq!(fs::read(&rt).unwrap(), b"progress");
+        for d in [rt.parent().unwrap(), &saves_dir] {
+            fs::remove_dir_all(d).unwrap();
+        }
+    }
+
+    #[test]
+    fn without_a_record_the_newer_copy_wins() {
+        let (rt, saves, state, saves_dir) = profile_dirs("profile-first");
+        put_profile(&saves, b"old", 1000);
+        put_profile(&rt, b"new", 10);
+        profile_before(&rt, &saves, &state).unwrap();
+        assert_eq!(fs::read(&saves).unwrap(), b"new");
+        assert!(state.is_file(), "recorded from now on");
+        for d in [rt.parent().unwrap(), &saves_dir] {
             fs::remove_dir_all(d).unwrap();
         }
     }

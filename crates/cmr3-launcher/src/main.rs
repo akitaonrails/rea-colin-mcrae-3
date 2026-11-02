@@ -226,21 +226,14 @@ mod app {
         let saves = settings.saves.clone().unwrap_or_else(default_saves);
         let rt_profile = rt.join(runtime::PROFILE);
         let save_profile = saves.join(runtime::PROFILE);
-        // The newer copy wins. One here is newer when the last session
+        // A copy changed since the last mirror wins: one the player put in
+        // the saves folder, or else the runtime's when the last session
         // ended (a crash) before the launcher could save it.
-        if rt_profile.is_file() {
-            fs::create_dir_all(&saves)
-                .map_err(|e| format!("cannot create {}: {e}", saves.display()))?;
-            if runtime::mirror_file(&rt_profile, &save_profile)
-                .map_err(|e| format!("cannot save {}: {e}", save_profile.display()))?
-            {
-                log_line(&format!("profile: saved to {}", save_profile.display()));
-            }
-        }
-        if runtime::mirror_file(&save_profile, &rt_profile)
-            .map_err(|e| format!("cannot restore the profile: {e}"))?
-        {
-            log_line("profile: restored");
+        let profile_state = rt.join(runtime::PROFILE_STATE);
+        match runtime::profile_before(&rt_profile, &save_profile, &profile_state) {
+            Ok(Some(what)) => log_line(&format!("profile: {what}")),
+            Ok(None) => {}
+            Err(e) => return Err(format!("cannot prepare the profile: {e}")),
         }
 
         // DRM-free: the patcher itself tells the game versions apart (it
@@ -382,7 +375,7 @@ mod app {
         let code = win32::run(&rt.join(EXE), &rt, overrides.as_deref())?;
         log_line(&format!("game exited with {code}"));
         if rt_profile.is_file() {
-            match runtime::mirror_file(&rt_profile, &save_profile) {
+            match runtime::profile_after(&rt_profile, &save_profile, &profile_state) {
                 Ok(true) => log_line("profile: saved"),
                 Ok(false) => {}
                 Err(e) => log_line(&format!(

@@ -305,3 +305,7 @@ next release.
 - **Paths on volumes without canonicalization** (RAM disk, `subst`
   drive): compared lexically. Not yet verified: a game on such a drive on
   Windows launches.
+- **Profile sync by recorded state.** Not yet verified in the game:
+  restoring an older `CMR3` backup into the saves folder loads it on the
+  next launch; ending the game with `cmr3-play stop` (no write-back) and
+  launching again keeps the progress.
