@@ -14,6 +14,9 @@
 - Files the launcher puts in the runtime copy are written beside it and
   renamed into place: an interrupted or failed write no longer leaves a
   missing or half-written file (the settings ini, a DLL, the patched exe).
+- Switching the HD UI off now takes it out: the game's own fonts and
+  pictures come back. Upgrading: an overlay put in by an earlier launcher
+  is not recorded, so switch the HD UI on for one launch, then off.
 
 ## [0.1.2] - 2026-11-02
 

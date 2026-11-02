@@ -305,6 +305,18 @@ pub fn install_copy(from: &Path, path: &Path) -> io::Result<()> {
     })
 }
 
+/// Puts the game's own `rel` back in the runtime folder (linked or
+/// copied, as a sync would), or removes it when the game has none.
+pub fn restore(game: &Path, runtime: &Path, rel: &str) -> io::Result<()> {
+    let from = native(game, rel);
+    let to = native(runtime, rel);
+    if from.is_file() {
+        bring_over(&from, &to, rel).map(|_| ())
+    } else {
+        remove(&to)
+    }
+}
+
 /// Removes a file the launcher put in the runtime folder, writable or not.
 pub fn remove(path: &Path) -> io::Result<()> {
     if path.exists() {

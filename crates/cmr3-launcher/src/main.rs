@@ -307,7 +307,14 @@ mod app {
         if settings.hd_ui == Some(true) {
             match components::install_hd_ui(&rt, &bundle) {
                 Ok(n) if n > 0 => log_line(&format!("HD UI: {n} files")),
-                _ => log_line("HD UI: not bundled"),
+                Ok(_) => log_line("HD UI: not bundled"),
+                Err(e) => log_line(&format!("warning: HD UI: {e}")),
+            }
+        } else {
+            match components::remove_hd_ui(&game, &rt) {
+                Ok(0) => {}
+                Ok(n) => log_line(&format!("HD UI off: {n} files back to the game's")),
+                Err(e) => log_line(&format!("warning: HD UI off: {e}")),
             }
         }
         let resolution = settings.display_resolution().or_else(|| {

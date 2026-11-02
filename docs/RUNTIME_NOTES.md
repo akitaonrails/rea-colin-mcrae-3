@@ -279,3 +279,6 @@ next release.
   install) on Windows and under Wine, with the HD UI on (it replaces
   linked `Data\` files) and the DRM-free patch (it replaces the linked
   exe).
+- **HD UI off restores the game's files** (recorded in `.cmr3-hd-ui` in
+  the runtime folder). Not yet verified: the menus and fonts look like the
+  original game after switching it off.

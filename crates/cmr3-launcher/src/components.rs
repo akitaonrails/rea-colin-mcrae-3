@@ -114,6 +114,10 @@ pub fn install_dxvk(runtime: &Path, bundle: &Path, on: bool) -> io::Result<bool>
     Ok(true)
 }
 
+/// The runtime's record of the files the HD UI overlay put in, so
+/// switching it off can put the game's own back.
+const HD_UI_FILES: &str = ".cmr3-hd-ui";
+
 /// Overlays the HD UI pack (Data/, fonts/) into the runtime folder.
 /// Returns how many files went in; 0 when not bundled.
 pub fn install_hd_ui(runtime: &Path, bundle: &Path) -> io::Result<usize> {
@@ -121,14 +125,38 @@ pub fn install_hd_ui(runtime: &Path, bundle: &Path) -> io::Result<usize> {
     if !from.is_dir() {
         return Ok(0);
     }
-    let mut n = 0;
-    for rel in runtime::list(&from)?.keys() {
-        let src = runtime::native(&from, rel);
-        let dst = runtime::native(runtime, rel);
-        runtime::install_copy(&src, &dst)?;
-        n += 1;
+    let rels: Vec<String> = runtime::list(&from)?.into_keys().collect();
+    // Recorded first, so an interrupted overlay can still be undone.
+    let mut owned = hd_ui_files(runtime);
+    owned.extend(rels.iter().cloned());
+    let text: String = owned.iter().map(|r| format!("{r}\n")).collect();
+    runtime::install(&runtime.join(HD_UI_FILES), text.as_bytes())?;
+    for rel in &rels {
+        runtime::install_copy(&runtime::native(&from, rel), &runtime::native(runtime, rel))?;
     }
-    Ok(n)
+    Ok(rels.len())
+}
+
+fn hd_ui_files(runtime: &Path) -> std::collections::BTreeSet<String> {
+    fs::read_to_string(runtime.join(HD_UI_FILES))
+        .unwrap_or_default()
+        .lines()
+        // Only plain relative paths below the runtime folder.
+        .filter(|r| !r.is_empty() && !r.starts_with('/') && !r.split('/').any(|p| p == ".."))
+        .map(str::to_owned)
+        .collect()
+}
+
+/// Takes the HD UI overlay back out: every file it put in becomes the
+/// game's own again, or goes when the game has none. Returns how many
+/// files were restored; 0 when the overlay is not installed.
+pub fn remove_hd_ui(game: &Path, runtime: &Path) -> io::Result<usize> {
+    let owned = hd_ui_files(runtime);
+    for rel in &owned {
+        runtime::restore(game, runtime, rel)?;
+    }
+    runtime::remove(&runtime.join(HD_UI_FILES))?;
+    Ok(owned.len())
 }
 
 /// The xdelta arguments (after the program itself, which the process
@@ -266,6 +294,33 @@ mod tests {
         assert!(rt.join("fonts/hel_18pt.dds").is_file());
         fs::remove_dir_all(&bundle).unwrap();
         fs::remove_dir_all(&rt).unwrap();
+    }
+
+    #[test]
+    fn hd_ui_off_puts_the_games_files_back() {
+        let bundle = temp("hd-off-bundle");
+        let game = temp("hd-off-game");
+        let rt = temp("hd-off-rt");
+        fs::create_dir_all(bundle.join("hd-ui/Data/Boot")).unwrap();
+        fs::create_dir_all(bundle.join("hd-ui/fonts")).unwrap();
+        fs::write(bundle.join("hd-ui/Data/Boot/colin3.dds"), b"high").unwrap();
+        fs::write(bundle.join("hd-ui/fonts/hel_18pt.dds"), b"hd").unwrap();
+        fs::create_dir_all(game.join("Data/Boot")).unwrap();
+        fs::write(game.join("Data/Boot/colin3.dds"), b"low").unwrap();
+        runtime::sync(&game, &rt).unwrap();
+
+        assert_eq!(install_hd_ui(&rt, &bundle).unwrap(), 2);
+        assert_eq!(remove_hd_ui(&game, &rt).unwrap(), 2);
+        assert_eq!(fs::read(rt.join("Data/Boot/colin3.dds")).unwrap(), b"low");
+        assert!(!rt.join("fonts/hel_18pt.dds").exists(), "overlay-only file");
+        assert_eq!(fs::read(game.join("Data/Boot/colin3.dds")).unwrap(), b"low");
+        // Off again: nothing recorded, nothing to do.
+        assert_eq!(remove_hd_ui(&game, &rt).unwrap(), 0);
+        // And a sync afterwards brings nothing (the manifest still holds).
+        assert_eq!(runtime::sync(&game, &rt).unwrap().0, 0);
+        for d in [bundle, game, rt] {
+            fs::remove_dir_all(d).unwrap();
+        }
     }
 
     #[test]
