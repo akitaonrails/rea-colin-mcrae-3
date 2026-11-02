@@ -10,6 +10,10 @@
   the same runtime folder. `--check` still runs alongside. On Linux,
   `cmr3-play --play` already refused a second session; a test now covers
   it.
+- `.github/workflows/sdk-update.yml`: every Monday the SDK's
+  `sdk-update` workflow opens or updates a pull request that moves the
+  launcher to the newest rea-launcher-sdk tag and lists its Migration
+  items. It never merges.
 - Golden snapshots (`crates/cmr3-launcher/tests/snapshots/`) of `--help`,
   the `launcher.cfg` template, and what each look and two option
   combinations write (components, `SilentPatchCMR3.ini`, `Xidi.ini`,
