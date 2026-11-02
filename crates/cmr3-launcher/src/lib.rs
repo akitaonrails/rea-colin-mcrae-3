@@ -13,6 +13,7 @@ pub mod components;
 pub mod config;
 pub mod edition;
 pub mod form;
+pub mod profile;
 pub mod runtime;
 pub mod sp;
 pub mod xidi;

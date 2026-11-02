@@ -28,7 +28,7 @@ pub struct Picture {
     /// Unset keeps the game's shadow style.
     pub shadows: Option<ShadowStyle>,
     /// Linux only, opt-in: the post-processing pass.
-    pub postfx: Option<Postfx>,
+    pub postfx: Postfx,
 }
 
 impl Picture {
@@ -43,7 +43,7 @@ impl Picture {
         fov: None,
         hd_ui: false,
         shadows: None,
-        postfx: None,
+        postfx: Postfx::Off,
     };
 
     /// The recommended look for a screen: its own size, fullscreen,
@@ -60,7 +60,7 @@ impl Picture {
             fov: Some(75),
             hd_ui: true,
             shadows: None,
-            postfx: None,
+            postfx: Postfx::Off,
         }
     }
 
@@ -75,7 +75,7 @@ impl Picture {
         fov: Some(75),
         hd_ui: true,
         shadows: None,
-        postfx: None,
+        postfx: Postfx::Off,
     };
 }
 
@@ -148,10 +148,10 @@ pub const SHADOWS: [(Option<ShadowStyle>, &str); 3] = [
     (Some(ShadowStyle::Sharp), "Sharp"),
     (Some(ShadowStyle::Soft), "Soft"),
 ];
-pub const POSTFX: [(Option<Postfx>, &str); 3] = [
-    (None, "Off"),
-    (Some(Postfx::Color), "Colour"),
-    (Some(Postfx::Cinematic), "Cinematic"),
+pub const POSTFX: [(Postfx, &str); 3] = [
+    (Postfx::Off, "Off"),
+    (Postfx::Color, "Colour"),
+    (Postfx::Cinematic, "Cinematic"),
 ];
 pub const GAMEPADS: [(Gamepad, &str); 3] = [
     (Gamepad::Rally, "Rally"),
@@ -284,7 +284,7 @@ impl Form {
             fov: s.fov,
             hd_ui: s.hd_ui == Some(true),
             shadows: s.shadows,
-            postfx: s.postfx,
+            postfx: s.postfx.unwrap_or_default(),
         };
         Form {
             game: path(&s.game),
@@ -374,7 +374,10 @@ impl Form {
             p.fsaa.map(|b| if b { "on".into() } else { "off".into() }),
         );
         put("shadows", p.shadows.map(|m| m.key().into()));
-        put("postfx", p.postfx.map(|m| m.key().into()));
+        put(
+            "postfx",
+            (p.postfx != Postfx::Off).then(|| p.postfx.key().into()),
+        );
         put("fov", p.fov.map(|f| f.to_string()));
         put(
             "hd_ui",
@@ -467,7 +470,7 @@ mod tests {
             fov: Some(90),
             hd_ui: false,
             shadows: Some(crate::config::ShadowStyle::Soft),
-            postfx: Some(Postfx::Cinematic),
+            postfx: Postfx::Cinematic,
         };
         f.gamepad = Gamepad::Standard;
         f.dxvk = false;

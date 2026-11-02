@@ -42,8 +42,7 @@ Follow **With Steam** above in Desktop Mode, then play from Game Mode:
 
 - Pick the **Steam Deck** look: 1280×800 at the panel's 60 Hz.
 - The buttons follow the **Rally** gamepad preset: the triggers are the
-  pedals (both at once), A selects, B goes back, the bumpers change gear,
-  the d-pad works the menus and Start pauses.
+  pedals (both at once), and the d-pad and A work the menus.
 - The touchscreen and the right trackpad drive the settings window.
 
 ## With your own Wine and gamescope

@@ -50,13 +50,14 @@ never changed: the launcher works on its own private copy.
 
 **Gamepads**
 
-- **Xidi** (bundled) makes modern XInput pads work through the game's
-  DirectInput, with a mapping validated on real hardware: the triggers
-  are the pedals (both at once — left-foot braking), resting thumbs can't
-  open the throttle, the d-pad and Start work the menus, and pads can be
-  swapped while the game runs.
-- In the menus, the d-pad navigates (a SilentPatch change from the
-  console releases).
+- **Xidi** (bundled) makes modern XInput pads a game controller in the
+  game's DirectInput, with a mapping validated on real hardware: the
+  triggers are the pedals (both at once — left-foot braking), resting
+  thumbs can't open the throttle, and pads can be swapped while the game
+  runs. The game's menus answer only the keyboard, so the d-pad and A
+  also press the arrow keys and Enter.
+- A new profile starts with the pad chosen in Options → Controls and
+  vibration at Medium; a profile you set up yourself is left as it is.
 
 **Comfort**
 
@@ -137,11 +138,10 @@ edit by hand. Starting `CMR3Launcher.exe` with any option (for example
 | `anisotropic = 16` | `off`, 2, 4, 8 or 16; sharpens the road at a distance. | 16 (Enhanced) |
 | `fsaa = off` | Anti-aliasing (its rendering bugs are fixed by SilentPatch). | off |
 | `fov = 75` | Field of view for both cameras, 30–150 in steps of 5. | 75 |
-| `shadows = sharp` | `sharp` or `soft` car shadows; unset keeps the game's choice. | unset |
 | `hd_ui = on` | The 4K interface pack. | on (Enhanced) |
 | `shadows = sharp` | Car shadows: `sharp` (the 2005 look) or `soft` (2003's blur). | the game's |
-| `postfx = cinematic` | Linux only: post-processing over the finished frame — `color` (grade + CAS sharpening) or `cinematic` (plus depth-based ambient occlusion when you supply the shader, see `docs/ENHANCEMENTS.md`). | off |
-| `gamepad = rally` | `rally` (the triggers are the pedals, the d-pad and Start work the menus), `standard`, or `off`. | rally |
+| `postfx = cinematic` | Linux only: post-processing over the finished frame — `off`, `color` (grade + CAS sharpening) or `cinematic` (plus depth-based ambient occlusion when you supply the shader, see `docs/ENHANCEMENTS.md`). | off |
+| `gamepad = rally` | `rally` (the triggers are the pedals; the d-pad and A also work the menus), `standard`, or `off` (no Xidi). | rally |
 | `dxvk = on` | Linux only: draw through Vulkan instead of Wine's OpenGL translator. | on |
 | `scaler = linear` | Linux only: how gamescope enlarges the picture. | linear |
 | `postfx = color` | Linux `cmr3-play` only: `color` for CAS sharpening, or `cinematic` to add ambient occlusion when the shaders are supplied. | off |
@@ -157,7 +157,10 @@ folder.
 ### Gamepad
 
 Pick the **Rally** preset (the default) and play: left stick steers, the
-triggers are the pedals, the d-pad works the menus, Start pauses. Under
+triggers are the pedals, the d-pad and A work the menus. A new profile
+starts with the pad chosen as its controller and vibration at Medium. A
+profile from an earlier install that points at the keyboard keeps it:
+choose the Xidi controller once in the game's Options → Controls. Under
 Steam the Deck's controls arrive as an Xbox-style pad; on 8BitDo pads use
 X-input mode. If you prefer the game's own handling, set `gamepad` to
 `standard` (bind the pedals to the left stick's Y axis in the game's

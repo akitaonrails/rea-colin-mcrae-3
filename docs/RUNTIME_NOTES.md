@@ -187,3 +187,52 @@ of that prefix. This was test setup, not a code-path change.
   dialog while the game carried on). The launcher now sets
   `ShowCrashDialog=0` (the `winetricks nocrashdialog` verb) in its prefix;
   the faulting thread still ends, quietly.
+
+## 2026-11-01 — v0.1.1: the pad on a new profile, issues #1 and #2
+
+All on the gaming box through the v0.1.0 AppImage's own Wine (11.20),
+with a fresh prefix under `.work/`.
+
+- **Issue #1's `Map Controllers` diagnosis does not hold.** A 32-bit
+  probe calling `XInputGetState` on brand-new prefixes saw the 8BitDo
+  with no WineBus settings at all, and with `Map Controllers=1` or
+  `DisableHidraw=1` (HKLM, where winebus reads them) or the issue's HKCU
+  keys alike. Moving the stick changed its state in every case.
+  `SDL_JOYSTICK_DEVICE=/dev/input/js0` made the pad appear twice (two
+  `IG_00` devices, slots 0 and 1); `cmr3-play` no longer sets it.
+- **What left the pad dead in the game:** a new profile has no
+  controller chosen (Options → Controls). Xidi's log showed the game
+  binding virtual controller 1 normally. One false lead along the way:
+  another session's `py-evdev-uinput` script was creating a virtual
+  "Microsoft X-Box 360 pad" that took XInput slot 1 and then vanished
+  ("Physical controller 1: Hardware disconnected").
+- **The profile (`CMR3`), from Rally_3PC.exe 1.1:** the save routine at
+  0x4142B0 copies 0x42A20 bytes of settings, writes 1 at 0x42A20 and a
+  CRC at 0x42A24: the routine at 0x412380, MSB-first CRC-32
+  (0x04C11DB7, init and final inverted; CRC-32/BZIP2) over the whole file
+  with the CRC field zeroed. It matched every profile the game wrote.
+  Diffs of profiles saved after single changes: player 1's joystick block
+  at 0x1DB98 (device index, -1 none, then bindings), keyboard block at
+  0x191D4 (0x300 once Keyboard is chosen), vibration at 0x1DB94 (80 =
+  Medium). A fresh profile the game wrote with the launcher's change
+  applied equals, byte for byte, the one the game wrote when the player
+  chose the controller, apart from vibration and a two-byte counter at
+  0x429E0 (the ignored test `matches_the_games_own_choice`). Confirmed in
+  the game: Options → Controls showed the Xidi controller and vibration
+  Medium on a new profile.
+- **Rally preset:** with the d-pad as keys only, Xidi's controller lost
+  its hat (17 → 16 elements) and the game's stored bindings no longer
+  matched: no steering or pedals. `Compound(Pov(...), Keyboard(...))` and
+  `Compound(Button(4), Keyboard(Enter))` keep StandardGamepad's layout;
+  verified: d-pad and A work the main menu, stick and triggers drive.
+  The Controls menu reads the hat too, so there the d-pad moves two rows.
+- **The gameplay crash** ("Unhandled page fault on read access to
+  61726170", the address being ASCII text) happened twice in races, at
+  0x7A068212 and 0x7A05A516: both inside DXVK's `d3d9.dll`, mapped at
+  0x79E60000 (from `/proc/<pid>/maps`), not Wine's `ntdll` as the entry
+  above guessed. With `winedbg=d` now really in effect under the
+  AppImage, the game ended instead of freezing. Cause not found yet.
+- After a crash the launcher never copies the profile back; the next
+  start used to restore the older saved one over it. `mirror_file` now
+  only copies onto an older file, and the launcher saves a newer runtime
+  profile first.

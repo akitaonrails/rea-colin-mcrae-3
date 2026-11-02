@@ -24,18 +24,20 @@ CMR3_E2E_KIT=/path/to/kit sh linux/tests/e2e.sh
 
 **Gamepad** (Xidi, the `rally` preset)
 
-- [ ] Menus: d-pad moves, Start selects, Back/Esc goes back.
-- [ ] **A, B, X, Y work somewhere**: A selects in menus; in a race they
-      are handbrake / view / gears as bound in Options → Controls.
+- [ ] On a new profile, Options → Controls already shows the Xidi
+      controller and vibration Medium.
+- [ ] Menus: d-pad moves, A selects (the arrow keys and Enter).
+- [ ] **A, B, X, Y work in a race** as bound in Options → Controls.
 - [ ] Steering on the left stick; **both** triggers at once (left-foot
       braking); resting the left stick does not creep.
 - [ ] If anything fails: rerun with `--gamepad-log on`, press every
       button once at the menu, quit, and read the log Xidi drops on the
       prefix's desktop — it shows what the game asked for and what each
       control sent. Attach it to the issue.
-- [ ] In-game once: Options → Controls → Control Method is JOYSTICK 1
-      (not keyboard) — a profile carried from an old install can point
-      elsewhere; re-selecting it fixes the buttons for good.
+- [ ] An older profile set to the keyboard keeps it: Options → Controls
+      → pick the Xidi controller once.
+- [ ] No other program adds a virtual pad meanwhile (a uinput test
+      script took the first XInput slot on 2026-11-01).
 
 **Picture**
 

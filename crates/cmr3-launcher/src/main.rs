@@ -33,8 +33,9 @@ mod app {
     use std::path::{Path, PathBuf};
 
     use cmr3_launcher::components;
-    use cmr3_launcher::config::{self, Settings};
+    use cmr3_launcher::config::{self, Gamepad, Settings};
     use cmr3_launcher::edition;
+    use cmr3_launcher::profile;
     use cmr3_launcher::runtime;
 
     use crate::{ui, win32};
@@ -225,17 +226,20 @@ mod app {
         let saves = settings.saves.clone().unwrap_or_else(default_saves);
         let rt_profile = rt.join(runtime::PROFILE);
         let save_profile = saves.join(runtime::PROFILE);
-        if !save_profile.is_file() {
-            if rt_profile.is_file() {
-                fs::create_dir_all(&saves)
-                    .map_err(|e| format!("cannot create {}: {e}", saves.display()))?;
-                runtime::mirror_file(&rt_profile, &save_profile)
-                    .map_err(|e| format!("cannot create {}: {e}", save_profile.display()))?;
-                log_line(&format!("profile: created {}", save_profile.display()));
+        // The newer copy wins. One here is newer when the last session
+        // ended (a crash) before the launcher could save it.
+        if rt_profile.is_file() {
+            fs::create_dir_all(&saves)
+                .map_err(|e| format!("cannot create {}: {e}", saves.display()))?;
+            if runtime::mirror_file(&rt_profile, &save_profile)
+                .map_err(|e| format!("cannot save {}: {e}", save_profile.display()))?
+            {
+                log_line(&format!("profile: saved to {}", save_profile.display()));
             }
-        } else {
-            runtime::mirror_file(&save_profile, &rt_profile)
-                .map_err(|e| format!("cannot restore the profile: {e}"))?;
+        }
+        if runtime::mirror_file(&save_profile, &rt_profile)
+            .map_err(|e| format!("cannot restore the profile: {e}"))?
+        {
             log_line("profile: restored");
         }
 
@@ -263,12 +267,30 @@ mod app {
         }
         let gamepad = settings.gamepad.unwrap_or_default();
         let gamepad_log = settings.gamepad_log == Some(true);
-        match components::install_xidi(&rt, &bundle, gamepad, gamepad_log) {
-            Ok(true) => log_line(&format!("Xidi installed ({gamepad:?})")),
-            Ok(false) => log_line(
-                "warning: Xidi not bundled; the gamepad runs through the game's own DirectInput",
-            ),
-            Err(e) => log_line(&format!("warning: Xidi: {e}")),
+        let xidi = match components::install_xidi(&rt, &bundle, gamepad, gamepad_log) {
+            Ok(true) => {
+                log_line(&format!("Xidi installed ({gamepad:?})"));
+                true
+            }
+            Ok(false) => {
+                log_line(
+                    "warning: Xidi not bundled; the gamepad runs through the game's own DirectInput",
+                );
+                false
+            }
+            Err(e) => {
+                log_line(&format!("warning: Xidi: {e}"));
+                false
+            }
+        };
+        // A new profile has no controller chosen: pick Xidi's, as the
+        // player would in Options → Controls (see `profile`).
+        if xidi && gamepad != Gamepad::Off {
+            match profile::choose_first_controller_in(&rt_profile) {
+                Ok(true) => log_line("profile: controller set to the gamepad"),
+                Ok(false) => {}
+                Err(e) => log_line(&format!("warning: profile controller: {e}")),
+            }
         }
         let dxvk_on = settings.dxvk != Some(false) && wine;
         match components::install_dxvk(&rt, &bundle, dxvk_on) {

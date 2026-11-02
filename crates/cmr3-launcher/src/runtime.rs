@@ -257,10 +257,11 @@ pub fn sync(game: &Path, runtime: &Path) -> io::Result<(usize, usize)> {
     Ok((plan.copy.len(), linked))
 }
 
-/// Copies `from` over `to` when `to` is missing or older (by size and
-/// modification time). Returns true when a copy was made. Used to keep the
-/// player's profile (`saves` setting) and the runtime's `CMR3` file in
-/// step, in either direction.
+/// Copies `from` over `to` when `to` is missing or older: an earlier
+/// modification time, or the same second with another size. Returns true
+/// when a copy was made. Used to keep the player's profile (`saves`
+/// setting) and the runtime's `CMR3` file in step, in either direction —
+/// never putting an older profile over a newer one.
 pub fn mirror_file(from: &Path, to: &Path) -> io::Result<bool> {
     let Ok(meta) = fs::metadata(from) else {
         return Ok(false);
@@ -269,11 +270,11 @@ pub fn mirror_file(from: &Path, to: &Path) -> io::Result<bool> {
         size: meta.len(),
         mtime: mtime_secs(&meta),
     };
-    if let Ok(dst) = fs::metadata(to)
-        && dst.len() == stamp.size
-        && mtime_secs(&dst) == stamp.mtime
-    {
-        return Ok(false);
+    if let Ok(dst) = fs::metadata(to) {
+        let dst_mtime = mtime_secs(&dst);
+        if dst_mtime > stamp.mtime || (dst_mtime == stamp.mtime && dst.len() == stamp.size) {
+            return Ok(false);
+        }
     }
     install_copy(from, to)?;
     let file = fs::OpenOptions::new().write(true).open(to)?;
@@ -398,6 +399,18 @@ mod tests {
         assert!(!mirror_file(&a.join("missing"), &b.join("CMR3")).unwrap());
         fs::write(a.join("CMR3"), b"two!").unwrap();
         assert!(mirror_file(&a.join("CMR3"), &b.join("CMR3")).unwrap());
+        assert_eq!(fs::read(b.join("CMR3")).unwrap(), b"two!");
+        // A newer copy (the game saved, then the launcher never got to
+        // copy it back) is never overwritten by the older one.
+        let newer = fs::OpenOptions::new()
+            .write(true)
+            .open(b.join("CMR3"))
+            .unwrap();
+        newer
+            .set_modified(SystemTime::now() + Duration::from_secs(60))
+            .unwrap();
+        fs::write(a.join("CMR3"), b"old").unwrap();
+        assert!(!mirror_file(&a.join("CMR3"), &b.join("CMR3")).unwrap());
         assert_eq!(fs::read(b.join("CMR3")).unwrap(), b"two!");
         for d in [a, b] {
             fs::remove_dir_all(d).unwrap();

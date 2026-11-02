@@ -15,9 +15,10 @@
 
 use std::path::{Path, PathBuf};
 
-use cmr3_launcher::config::{self, Gamepad, Settings};
+use cmr3_launcher::config::{self, Settings};
 use cmr3_launcher::edition;
 use cmr3_launcher::form::{self, Form, Look, PadAction, Picture};
+use cmr3_launcher::xidi;
 use eframe::egui::{
     self, Align2, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Key, Mesh,
     Rect, Sense, Shape, Stroke, StrokeKind, TextureHandle, Vec2, pos2, vec2,
@@ -720,17 +721,7 @@ impl Window<'_> {
             field(ui, "Gamepad");
             chips(ui, &form::GAMEPADS, gamepad);
         });
-        let note = match self.form.gamepad {
-            Gamepad::Off => {
-                "The game's own DirectInput handling: triggers and the d-pad may not work."
-            }
-            Gamepad::Standard => {
-                "Xidi's plain StandardGamepad passes the pad through as it reports itself. In the game, bind steering, accelerator and brake to the left stick's Y axis."
-            }
-            Gamepad::Rally => {
-                "Xidi maps the triggers to the game's pedal axis (both at once: left-foot braking), ignores the resting left-stick Y and puts the d-pad and Start on the menu keys. Pads can be swapped while the game runs."
-            }
-        };
+        let note = xidi::note(self.form.gamepad);
         ui.label(egui::RichText::new(note).font(font(13.0)).color(MUTED));
         ui.add_space(12.0);
         let pads = match self.pads {
@@ -742,8 +733,9 @@ impl Window<'_> {
         ui.add_space(8.0);
         ui.label(
             egui::RichText::new(
-                "In the game the menus move with the d-pad (a SilentPatch change); in a race the \
-                 F5 key hides the HUD.",
+                "A new profile starts with the pad as its controller. An older one set to the \
+                 keyboard keeps that: pick the Xidi controller once in the game's Options > \
+                 Controls. In a race F5 hides the HUD.",
             )
             .font(font(13.0))
             .color(MUTED),

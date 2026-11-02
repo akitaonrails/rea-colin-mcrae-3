@@ -87,6 +87,27 @@ gpu_env() {
   fi
 }
 
+# Wine's DLL choices for the game: the launcher installs Xidi and the ASI
+# loader into its own copy of the game (native, then Wine's builtin when
+# they misbehave), and DXVK's d3d9.dll for the Vulkan path. winedbg is
+# disabled so a crash in Wine's parts (a video-decoder regression, say)
+# ends the game instead of freezing it in a hidden debugger. Overrides
+# already set (the AppImage's, a player's) are kept after ours.
+dll_overrides() {
+  echo "dinput8,dsound,d3d9=n,b;winedbg=d${WINEDLLOVERRIDES:+;$WINEDLLOVERRIDES}"
+}
+
+# One-time prefix settings: no crash dialog (winetricks' nocrashdialog),
+# which would otherwise pop up over the game when a Wine part faults.
+prepare_prefix() {
+  grep -qs '"ShowCrashDialog"=dword:00000000' "$PREFIX/user.reg" && return 0
+  $RUN env WINEPREFIX="$PREFIX" wine reg add 'HKCU\Software\Wine\WineDbg' \
+    /v ShowCrashDialog /t REG_DWORD /d 0 /f >/dev/null 2>&1
+  # Its wineserver must end first, or the game would join it outside
+  # gamescope (see settings).
+  $RUN env WINEPREFIX="$PREFIX" wineserver -w 2>/dev/null
+}
+
 # The game's window mode from launcher.cfg: gamescope only makes sense for
 # the fullscreen one (windowed and borderless sizes themselves).
 display_mode() { get_key display_mode; }
@@ -110,17 +131,13 @@ sleep 3; while pgrep -x Rally_3PC.exe >/dev/null; do sleep 1; done
 wineserver -k
 INNER
   chmod +x "$inner"
-  # The launcher installs Xidi and the ASI loader into its own copy of the
-  # game (native, then Wine's builtin when they misbehave), and DXVK's
-  # d3d9.dll for the Vulkan path. winedbg is disabled so a crash in Wine's
-  # parts (a video-decoder regression, say) ends the game instead of
-  # freezing it in a hidden debugger.
-  export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-dinput8,dsound,d3d9=n,b;winedbg=d}"
+  export WINEDLLOVERRIDES="$(dll_overrides)"
+  # Pads reach the game through Wine's SDL backend (Xidi reads them as
+  # XInput). SDL finds every pad itself; naming a device as well
+  # (SDL_JOYSTICK_DEVICE) would add the same pad a second time.
   export SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS="${SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS:-1}"
   export SDL_JOYSTICK_HIDAPI="${SDL_JOYSTICK_HIDAPI:-0}"
-  if [ -z "${SDL_JOYSTICK_DEVICE:-}" ] && [ -e /dev/input/js0 ]; then
-    export SDL_JOYSTICK_DEVICE=/dev/input/js0
-  fi
+  prepare_prefix
   # Already inside gamescope (a Steam Deck in Game Mode), a windowed mode,
   # or no gamescope installed: the game runs directly (a second gamescope
   # inside one fails).

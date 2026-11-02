@@ -2,12 +2,15 @@
 //! `dinput8.dll` (Xidi by samuelgr, BSD-3-Clause).
 //!
 //! Colin McRae Rally 3 reads its pad through DirectInput with the
-//! accelerator and brake bound to the left stick's Y axis, and its menus on
-//! the keyboard. The `rally` mapping — validated in the distrobox-gaming
-//! setup — puts the triggers on that pedal axis (both at once: left-foot
-//! braking), ignores the physical left-stick Y so resting thumbs can't
-//! open the throttle, and gives the d-pad and Start the menu keys. Xidi
-//! also lets pads be plugged in and swapped while the game runs.
+//! accelerator and brake bound to the left stick's Y axis. The `rally`
+//! mapping puts the triggers on that pedal axis (both at once: left-foot
+//! braking) and ignores the physical left-stick Y so resting thumbs can't
+//! open the throttle. The game's menus answer only the keyboard, so the
+//! d-pad and A also press the arrow keys and Enter — on top of their
+//! controller hat and button, never instead: the game stores its pad
+//! bindings by the controller's layout (see `profile`), which must stay
+//! StandardGamepad's. Xidi also lets pads be plugged in and swapped while
+//! the game runs.
 
 use crate::config::Gamepad;
 
@@ -31,12 +34,11 @@ StickLeftX = Axis(X)\n\
 StickLeftY = Null\n\
 TriggerRT = Axis(Y, -)\n\
 TriggerLT = Axis(Y, +)\n\
-DpadUp = Keyboard(UpArrow)\n\
-DpadDown = Keyboard(DownArrow)\n\
-DpadLeft = Keyboard(LeftArrow)\n\
-DpadRight = Keyboard(RightArrow)\n\
-ButtonStart = Keyboard(Enter)\n\
-ButtonBack = Keyboard(Esc)\n"
+DpadUp = Compound(Pov(Up), Keyboard(UpArrow))\n\
+DpadDown = Compound(Pov(Down), Keyboard(DownArrow))\n\
+DpadLeft = Compound(Pov(Left), Keyboard(LeftArrow))\n\
+DpadRight = Compound(Pov(Right), Keyboard(RightArrow))\n\
+ButtonA = Compound(Button(4), Keyboard(Enter))\n"
         }
     };
     Some(format!(
@@ -69,11 +71,19 @@ ActiveVirtualControllerMask = 0x01\n",
 pub fn note(preset: Gamepad) -> &'static str {
     match preset {
         Gamepad::Rally => {
-            "Left stick steers, the triggers are the pedals (both at once), \
-             the d-pad and Start work the menus."
+            "Left stick steers, the triggers are the pedals (both at once: \
+             left-foot braking) and a resting thumb can't open the throttle. \
+             The d-pad and A also work the menus, as the arrow keys and \
+             Enter."
         }
-        Gamepad::Standard => "The pad passes through as it reports itself.",
-        Gamepad::Off => "No Xidi: the game's own DirectInput handling.",
+        Gamepad::Standard => {
+            "Xidi passes the pad through as it reports itself; bind steering \
+             and the pedals in the game's Options > Controls."
+        }
+        Gamepad::Off => {
+            "No Xidi: the game reads the pad through DirectInput, where the \
+             triggers may share one axis and new profiles start on the keyboard."
+        }
     }
 }
 
@@ -88,9 +98,20 @@ mod tests {
         assert!(t.contains("StickLeftY = Null"));
         assert!(t.contains("TriggerRT = Axis(Y, -)"));
         assert!(t.contains("TriggerLT = Axis(Y, +)"));
-        assert!(t.contains("DpadUp = Keyboard(UpArrow)"));
-        assert!(t.contains("ButtonStart = Keyboard(Enter)"));
-        assert!(t.contains("ButtonBack = Keyboard(Esc)"));
+        // The menu controls press keys as well, never instead: every key
+        // rides along with the StandardGamepad hat or button it replaces
+        // nothing of (the game's bindings follow that layout).
+        let keys: Vec<&str> = t.lines().filter(|l| l.contains("Keyboard(")).collect();
+        assert_eq!(
+            keys,
+            [
+                "DpadUp = Compound(Pov(Up), Keyboard(UpArrow))",
+                "DpadDown = Compound(Pov(Down), Keyboard(DownArrow))",
+                "DpadLeft = Compound(Pov(Left), Keyboard(LeftArrow))",
+                "DpadRight = Compound(Pov(Right), Keyboard(RightArrow))",
+                "ButtonA = Compound(Button(4), Keyboard(Enter))",
+            ]
+        );
         assert!(t.contains("DeadzonePercentStickLeft = 5"));
         assert!(t.contains("dinput8.dll = C:\\Windows\\system32\\dinput8.dll"));
         assert!(t.contains("Enabled = no"));

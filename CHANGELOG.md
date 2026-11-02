@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.1.1] - 2026-11-01
+
+### Changed
+
+- New profiles start on the gamepad: with a Xidi preset on, a profile
+  whose controls were never set gets Xidi's controller and Medium
+  vibration chosen in Options > Controls, as the game itself would write
+  them. Profiles set up by hand, keyboard included, are left alone.
+- The Rally preset keeps every control a game-controller control; the
+  d-pad and A also press the arrow keys and Enter, because the game's
+  menus answer only the keyboard. (Start and Back no longer act as keys.)
+- The settings window and `launcher.cfg` describe what each preset does,
+  from one shared text.
+
+### Fixed
+
+- Under the AppImage, Wine's debugger stayed on and Xidi/DXVK overrides
+  were skipped: the AppImage's own `WINEDLLOVERRIDES` replaced the
+  launcher's instead of joining them. A Wine fault could freeze the game
+  instead of ending it.
+- Wine's crash dialog is turned off in the launcher's prefix, as the
+  0.1.0 notes said but the code never did.
+- Every pad appeared twice to the game under Linux: `cmr3-play` named
+  `/dev/input/js0` to SDL, which found the same pad on its own.
+- After a game crash, the next launch could put the older saved profile
+  over the newer one the game had written; the newer copy now wins.
+- `postfx = off`, `--postfx`, `--shadows` and `--gamepad-log` were
+  documented but rejected; the command line and `launcher.cfg` now share
+  one parser.
+
+### Known issues
+
+- Native Windows and Steam Deck still need hands-on verification.
+- Some Linux races end on a page fault inside DXVK's `d3d9.dll` (a
+  corrupted pointer, read as text); 0.1.0's notes blamed Wine's `ntdll`.
+  The game now ends instead of freezing; the cause is not fixed yet.
+- A brand-new player's very first session runs before the game has
+  created its profile, so the pad is chosen from the second start on (or
+  once by hand in Options > Controls).
+- In the game's Controls menu the d-pad moves two rows per press: that
+  menu reads the controller's hat as well as the arrow key.
+
 ## [0.1.0] - 2026-11-01
 
 First packaged release of the launcher and its Linux helper.
@@ -42,4 +84,5 @@ First packaged release of the launcher and its Linux helper.
 - One Linux gameplay session stopped on a Wine `ntdll` heap fault. The
   originating module was not isolated, so this release does not claim a fix.
 
+[0.1.1]: https://github.com/akitaonrails/rea-colin-mcrae-3/releases/tag/v0.1.1
 [0.1.0]: https://github.com/akitaonrails/rea-colin-mcrae-3/releases/tag/v0.1.0

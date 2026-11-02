@@ -53,8 +53,11 @@ pub struct Settings {
 
 /// Post-processing over the finished frame (opt-in; Linux, via
 /// `cmr3-play`'s vkBasalt layer).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Postfx {
+    /// The game's own picture.
+    #[default]
+    Off,
     /// Grade, bloom and CAS sharpening — no depth buffer needed.
     Color,
     /// The colour pass plus depth-based ambient occlusion (needs the AO
@@ -63,10 +66,11 @@ pub enum Postfx {
 }
 
 impl Postfx {
-    pub const ALL: [Postfx; 2] = [Postfx::Color, Postfx::Cinematic];
+    pub const ALL: [Postfx; 3] = [Postfx::Off, Postfx::Color, Postfx::Cinematic];
 
     pub fn key(self) -> &'static str {
         match self {
+            Postfx::Off => "off",
             Postfx::Color => "color",
             Postfx::Cinematic => "cinematic",
         }
@@ -291,9 +295,13 @@ game =
 # control sent — turn it on when a button doesn't arrive.
 #gamepad_log = off
 
-# Gamepad through Xidi: rally maps the triggers to the game's pedal axis
-# and the d-pad and Start to the menu keys; standard passes the pad through
-# as it reports itself; off runs the game's own DirectInput handling.
+# Gamepad through Xidi, as a game controller: rally puts the triggers on
+# the game's pedal axis (both at once), ignores the resting left-stick Y,
+# and has the d-pad and A also press the arrow keys and Enter for the
+# menus (which answer only the keyboard); standard passes the pad through as it
+# reports itself. With either, a new profile starts with the pad chosen
+# in the game's Options > Controls. off: no Xidi, the game's own
+# DirectInput.
 #gamepad = rally
 
 # Linux only: play through DXVK (Vulkan) instead of Wine's OpenGL
@@ -307,10 +315,10 @@ game =
 #scaler = linear
 
 # Linux (cmr3-play) only: post-processing over the finished frame, on
-# top of the game's own picture. color: grade and CAS sharpening.
-# cinematic: the same plus depth-based ambient occlusion, which lifts
-# the flat look (needs the AO shaders; docs/ENHANCEMENTS.md). Off by
-# default: the faithful picture.
+# top of the game's own picture. off (the default): the faithful
+# picture. color: grade and CAS sharpening. cinematic: the same plus
+# depth-based ambient occlusion, which lifts the flat look (needs the AO
+# shaders; docs/ENHANCEMENTS.md).
 #postfx = cinematic
 ";
 
@@ -333,7 +341,7 @@ CMR3Launcher [options]
   --hd-ui on|off           the HD UI pack
   --shadows <style>        sharp or soft car shadows
   --postfx <style>         off, color or cinematic (Linux)
-  --gamepad <preset>       rally, standard or off
+  --gamepad <preset>       rally, standard (Xidi controller) or off
   --gamepad-log on|off     Xidi's log of what the game and the pad exchange
   --dxvk on|off            DXVK under Wine (Linux only)
 
@@ -409,7 +417,63 @@ fn entry(line: &str) -> Option<(&str, &str)> {
     (!value.is_empty()).then_some((key.trim(), value))
 }
 
+/// Why a setting was not used.
+enum Rejected {
+    /// Not a key this launcher knows.
+    Unknown,
+    /// The values the key takes, for the message.
+    Needs(&'static str),
+}
+
 impl Settings {
+    /// Sets one value by its `launcher.cfg` key. The command line's
+    /// `--some-key` is `some_key`, so the file and the flags read alike.
+    fn apply(&mut self, key: &str, value: &str) -> Result<(), Rejected> {
+        fn need<T>(v: Option<T>, what: &'static str) -> Result<T, Rejected> {
+            v.ok_or(Rejected::Needs(what))
+        }
+        const ON_OFF: &str = "on or off";
+        match key {
+            "game" => self.game = Some(value.into()),
+            "runtime" => self.runtime = Some(value.into()),
+            "saves" => self.saves = Some(value.into()),
+            "resolution" => {
+                let r = need(parse_resolution(value), "WIDTHxHEIGHT or original")?;
+                self.resolution = Some(r);
+                self.original_resolution = r == (640, 480);
+            }
+            "display_mode" => {
+                let m = DisplayMode::parse(value);
+                self.display_mode = Some(need(m, "fullscreen, windowed or borderless")?);
+            }
+            "vsync" => self.vsync = Some(need(parse_bool(value), ON_OFF)?),
+            "anisotropic" => {
+                let a = parse_anisotropic(value);
+                self.anisotropic = Some(need(a, "off, 2, 4, 8 or 16")?);
+            }
+            "fsaa" => self.fsaa = Some(need(parse_bool(value), ON_OFF)?),
+            "fov" => self.fov = Some(need(parse_fov(value), "a number from 30 to 150")?),
+            "shadows" => self.shadows = Some(need(ShadowStyle::parse(value), "sharp or soft")?),
+            "hd_ui" => self.hd_ui = Some(need(parse_bool(value), ON_OFF)?),
+            "gamepad_log" => self.gamepad_log = Some(need(parse_bool(value), ON_OFF)?),
+            "gamepad" => {
+                let g = Gamepad::parse(value);
+                self.gamepad = Some(need(g, "rally, standard or off")?);
+            }
+            "dxvk" => self.dxvk = Some(need(parse_bool(value), ON_OFF)?),
+            "postfx" => {
+                let p = Postfx::parse(value);
+                self.postfx = Some(need(p, "off, color or cinematic")?);
+            }
+            "scaler" => {
+                let f = Scaler::parse(value);
+                self.scaler = Some(need(f, "nearest, pixel, fsr or linear")?);
+            }
+            _ => return Err(Rejected::Unknown),
+        }
+        Ok(())
+    }
+
     /// Reads a settings file; the second value lists lines it could not use.
     pub fn parse_file(text: &str) -> (Settings, Vec<String>) {
         let mut s = Settings::default();
@@ -418,70 +482,11 @@ impl Settings {
             let Some((key, value)) = entry(line) else {
                 continue;
             };
-            let mut bad = |what: &str| {
-                warnings.push(format!("{FILE_NAME} line {}: {what} {value:?}", n + 1));
-            };
-            match key {
-                "game" => s.game = Some(value.into()),
-                "runtime" => s.runtime = Some(value.into()),
-                "saves" => s.saves = Some(value.into()),
-                "resolution" => match parse_resolution(value) {
-                    Some((640, 480)) => {
-                        s.resolution = Some((640, 480));
-                        s.original_resolution = true;
-                    }
-                    Some(r) => s.resolution = Some(r),
-                    None => bad("resolution needs WIDTHxHEIGHT or original, not"),
-                },
-                "display_mode" => match DisplayMode::parse(value) {
-                    Some(m) => s.display_mode = Some(m),
-                    None => bad("display_mode needs fullscreen, windowed or borderless, not"),
-                },
-                "vsync" => match parse_bool(value) {
-                    Some(b) => s.vsync = Some(b),
-                    None => bad("vsync needs true or false, not"),
-                },
-                "anisotropic" => match parse_anisotropic(value) {
-                    Some(a) => s.anisotropic = Some(a),
-                    None => bad("anisotropic needs off, 2, 4, 8 or 16, not"),
-                },
-                "fsaa" => match parse_bool(value) {
-                    Some(b) => s.fsaa = Some(b),
-                    None => bad("fsaa needs on or off, not"),
-                },
-                "fov" => match parse_fov(value) {
-                    Some(f) => s.fov = Some(f),
-                    None => bad("fov needs a number from 30 to 150, not"),
-                },
-                "shadows" => match ShadowStyle::parse(value) {
-                    Some(m) => s.shadows = Some(m),
-                    None => bad("shadows needs sharp or soft, not"),
-                },
-                "hd_ui" => match parse_bool(value) {
-                    Some(b) => s.hd_ui = Some(b),
-                    None => bad("hd_ui needs on or off, not"),
-                },
-                "gamepad_log" => match parse_bool(value) {
-                    Some(b) => s.gamepad_log = Some(b),
-                    None => bad("gamepad_log needs on or off, not"),
-                },
-                "gamepad" => match Gamepad::parse(value) {
-                    Some(g) => s.gamepad = Some(g),
-                    None => bad("gamepad needs rally, standard or off, not"),
-                },
-                "dxvk" => match parse_bool(value) {
-                    Some(b) => s.dxvk = Some(b),
-                    None => bad("dxvk needs on or off, not"),
-                },
-                "postfx" => match Postfx::parse(value) {
-                    Some(m) => s.postfx = Some(m),
-                    None => bad("postfx needs off, color or cinematic, not"),
-                },
-                "scaler" => match Scaler::parse(value) {
-                    Some(f) => s.scaler = Some(f),
-                    None => bad("scaler needs nearest, pixel, fsr or linear, not"),
-                },
-                _ => {}
+            if let Err(Rejected::Needs(what)) = s.apply(key, value) {
+                warnings.push(format!(
+                    "{FILE_NAME} line {}: {key} needs {what}, not {value:?}",
+                    n + 1
+                ));
             }
         }
         (s, warnings)
@@ -519,62 +524,28 @@ impl Settings {
     pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Settings, String> {
         let mut s = Settings::default();
         let mut args = args.into_iter();
-        while let Some(arg) = args.next() {
-            let mut value = |name: &str| {
-                args.next()
-                    .ok_or_else(|| format!("{name} needs a value\n\n{USAGE}"))
+        while let Some(flag) = args.next() {
+            if matches!(flag.as_str(), "--help" | "-h" | "/?") {
+                return Err(USAGE.into());
+            }
+            let unknown = || format!("unknown argument {flag}\n\n{USAGE}");
+            let key = flag
+                .strip_prefix("--")
+                .ok_or_else(unknown)?
+                .replace('-', "_");
+            let Some(value) = args.next() else {
+                // A known key with its value missing, or no such key.
+                return Err(match Settings::default().apply(&key, "") {
+                    Err(Rejected::Unknown) => unknown(),
+                    _ => format!("{flag} needs a value\n\n{USAGE}"),
+                });
             };
-            match arg.as_str() {
-                "--game" => s.game = Some(value("--game")?.into()),
-                "--saves" => s.saves = Some(value("--saves")?.into()),
-                "--runtime" => s.runtime = Some(value("--runtime")?.into()),
-                "--resolution" => {
-                    let v = value("--resolution")?;
-                    let r = parse_resolution(&v).ok_or_else(|| {
-                        format!("--resolution needs WIDTHxHEIGHT or original, not {v}\n\n{USAGE}")
-                    })?;
-                    s.resolution = Some(r);
-                    s.original_resolution = r == (640, 480);
+            match s.apply(&key, &value) {
+                Ok(()) => {}
+                Err(Rejected::Unknown) => return Err(unknown()),
+                Err(Rejected::Needs(what)) => {
+                    return Err(format!("{flag} needs {what}, not {value}\n\n{USAGE}"));
                 }
-                "--display-mode" => {
-                    let v = value("--display-mode")?;
-                    s.display_mode = Some(DisplayMode::parse(&v).ok_or_else(|| {
-                        format!(
-                            "--display-mode needs fullscreen, windowed or borderless, not {v}\n\n{USAGE}"
-                        )
-                    })?);
-                }
-                "--anisotropic" => {
-                    let v = value("--anisotropic")?;
-                    s.anisotropic = Some(parse_anisotropic(&v).ok_or_else(|| {
-                        format!("--anisotropic needs off, 2, 4, 8 or 16, not {v}\n\n{USAGE}")
-                    })?);
-                }
-                "--fov" => {
-                    let v = value("--fov")?;
-                    s.fov = Some(parse_fov(&v).ok_or_else(|| {
-                        format!("--fov needs a number from 30 to 150, not {v}\n\n{USAGE}")
-                    })?);
-                }
-                "--gamepad" => {
-                    let v = value("--gamepad")?;
-                    s.gamepad = Some(Gamepad::parse(&v).ok_or_else(|| {
-                        format!("--gamepad needs rally, standard or off, not {v}\n\n{USAGE}")
-                    })?);
-                }
-                flag @ ("--vsync" | "--fsaa" | "--hd-ui" | "--dxvk") => {
-                    let v = value(flag)?;
-                    let b = parse_bool(&v)
-                        .ok_or_else(|| format!("{flag} needs on or off, not {v}\n\n{USAGE}"))?;
-                    match flag {
-                        "--vsync" => s.vsync = Some(b),
-                        "--fsaa" => s.fsaa = Some(b),
-                        "--hd-ui" => s.hd_ui = Some(b),
-                        _ => s.dxvk = Some(b),
-                    }
-                }
-                "--help" | "-h" | "/?" => return Err(USAGE.into()),
-                other => return Err(format!("unknown argument {other}\n\n{USAGE}")),
             }
         }
         Ok(s)
@@ -753,6 +724,45 @@ mod tests {
         assert!(args(&["--fov"]).is_err());
         assert!(args(&["--bogus"]).is_err());
         assert!(args(&["--help"]).unwrap_err().contains("CMR3Launcher"));
+    }
+
+    #[test]
+    fn every_documented_flag_is_accepted() {
+        // Each `--flag` in USAGE parses (they share launcher.cfg's keys).
+        for line in USAGE.lines() {
+            let Some(flag) = line.trim().strip_prefix("--") else {
+                continue;
+            };
+            let flag = flag.split_whitespace().next().unwrap();
+            if matches!(flag, "no-window" | "settings" | "linux" | "check") {
+                continue; // taken by main before parse_args
+            }
+            if let Err(e) = args(&[&format!("--{flag}"), "?"]) {
+                assert!(!e.starts_with("unknown"), "--{flag}: {e}");
+            }
+        }
+        let s = args(&[
+            "--shadows",
+            "soft",
+            "--postfx",
+            "color",
+            "--gamepad-log",
+            "on",
+        ])
+        .unwrap();
+        assert_eq!(s.shadows, Some(ShadowStyle::Soft));
+        assert_eq!(s.postfx, Some(Postfx::Color));
+        assert_eq!(s.gamepad_log, Some(true));
+    }
+
+    #[test]
+    fn postfx_off_is_a_value_that_overrides() {
+        let (file, warnings) = Settings::parse_file("postfx = off\n");
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(file.postfx, Some(Postfx::Off));
+        let (cinematic, _) = Settings::parse_file("postfx = cinematic\n");
+        let m = cinematic.merged(args(&["--postfx", "off"]).unwrap());
+        assert_eq!(m.postfx, Some(Postfx::Off));
     }
 
     #[test]
