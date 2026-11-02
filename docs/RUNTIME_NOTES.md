@@ -352,6 +352,21 @@ below was run in the real game yet.
 - **Window**: the SDK's "As the game" rows (VSync, Texture sharpness,
   Smooth edges, Car shadows) and the four-line portrait caption on a
   taller band. Not yet looked at on screen.
+- **Clean exit, single instance** (STANDARDS). Done: the named mutex
+  (`instance`), tested under Wine; `cmr3-play --play` while a session
+  runs starts nothing (shell test with fakes). The launcher never stops
+  the game itself (it waits for it), so `close_gracefully` has no caller.
+  Pending, in the real game, headless (`gamescope --backend headless`),
+  with the process table checked afterwards (no `Rally_3PC.exe`,
+  launcher, `wineserver` or gamescope left):
+  - the game's own Quit;
+  - Alt+F4 / the window's close button (`WM_CLOSE`), and whether the game
+    honours it at all;
+  - Steam's "Stop" (non-Steam game);
+  - `cmr3-play stop`, Ctrl+C and SIGTERM to `cmr3-play`;
+  - gamescope being closed;
+  - a second `CMR3Launcher.exe` on Windows while the window is open (the
+    window comes forward) and while the game runs (the message).
 
 ## Platform matrix
 

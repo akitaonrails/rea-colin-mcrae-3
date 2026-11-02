@@ -17,6 +17,7 @@ pub mod components;
 pub mod config;
 pub mod edition;
 pub mod form;
+pub mod instance;
 #[cfg(any(windows, test))]
 pub mod look;
 pub mod plan;

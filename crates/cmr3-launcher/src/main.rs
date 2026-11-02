@@ -33,13 +33,16 @@ mod app {
     use cmr3_launcher::components::{self, Installed};
     use cmr3_launcher::config::{self, Settings};
     use cmr3_launcher::edition;
+    use cmr3_launcher::instance::{self, SecondStart};
     use cmr3_launcher::plan::{self, Env};
     use cmr3_launcher::profile;
     use cmr3_launcher::runtime;
+    use cmr3_launcher::window;
     use rea_launcher::cfg::ArgError;
     use rea_launcher::log::Log;
     use rea_launcher::{cfg, fsx, paths};
     use rea_launcher_win32::dialog::{self, Icon};
+    use rea_launcher_win32::instance::{self as win32_instance, Window};
     use rea_launcher_win32::process::Launch;
     use rea_launcher_win32::{console, display, gpu, wine};
 
@@ -160,6 +163,26 @@ mod app {
         let no_window = switch("--no-window");
         let check_only = switch("--check");
         let other_options = given > switches.len() || check_only;
+        // One launcher at a time, held until the game this run starts has
+        // ended: a second start raises the window or says the game runs
+        // (`instance`). --check only reads and runs alongside.
+        let _instance = if check_only {
+            None
+        } else {
+            match win32_instance::single(instance::NAME) {
+                Ok(guard) => Some(guard),
+                Err(running) => {
+                    let second =
+                        SecondStart::new(running.bring_to_front(Window::Title(window::TITLE)));
+                    log_line(&format!("another launcher is running: {second:?}"));
+                    if let Some(message) = second.message() {
+                        say(message, Icon::Info);
+                    }
+                    // cmr3-play --settings: nothing was started.
+                    return Ok(if settings_only { WINDOW_CLOSED } else { 0 });
+                }
+            }
+        };
         if settings_only || (!other_options && !no_window) {
             // A window under Wine draws through OpenGL: GLX, not Wine 11's
             // default EGL (software on NVIDIA boxes without egl-x11).

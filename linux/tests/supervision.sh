@@ -76,6 +76,10 @@ rea_start > /dev/null
 i=0; while ! rea_running && [ "$i" -lt 20 ]; do sleep 0.05; i=$((i + 1)); done
 if rea_running; then ok "a background launch is running"; else fail "background launch not running"; fi
 rea_read_lock; SESSION=$REA_LOCK_PID
+# A second Play while the game runs starts nothing (one instance).
+rm -f "$T/ran"
+out=$(REA_RUN=$T/fake-run rea_main --play)
+if [ "$out" = "already running" ] && [ ! -f "$T/ran" ]; then ok "a second --play while running starts nothing"; else fail "second --play: $out $(cat "$T/ran" 2>/dev/null)"; fi
 rea_stop
 sleep 0.2
 if kill -0 "$SESSION" 2>/dev/null; then fail "stop left the session"; else ok "stop ends our session"; fi

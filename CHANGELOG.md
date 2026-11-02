@@ -4,6 +4,12 @@
 
 ### Added
 
+- One launcher at a time. Starting it again while it is open brings the
+  open window to the front. While the game is running, a second start
+  only tells you so, and Play can't start a second copy of the game from
+  the same runtime folder. `--check` still runs alongside. On Linux,
+  `cmr3-play --play` already refused a second session; a test now covers
+  it.
 - Golden snapshots (`crates/cmr3-launcher/tests/snapshots/`) of `--help`,
   the `launcher.cfg` template, and what each look and two option
   combinations write (components, `SilentPatchCMR3.ini`, `Xidi.ini`,
