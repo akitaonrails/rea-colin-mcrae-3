@@ -22,6 +22,22 @@ and depth-aware effects — which address precisely the missing contact
 shading — plus grading, bloom and sharpening. That is the same leap
 ReShade presets give other fixed-function-era games.
 
+## Status (2026-11-01, evening)
+
+- **Shipped and verified on the box**: the `shadows` setting (SilentPatch's
+  `SHARPER_SHADOWS`) and the **`postfx` colour tier** — a bundled vkBasalt
+  (built from the pinned source, both bitnesses) engaged over DXVK inside
+  gamescope, confirmed by the layer's own log and `linux/tests/e2e.sh`.
+  The loading chain that finally worked: two layer manifests (one per
+  bitness, distinct names) requested together — Wine drops
+  `LD_LIBRARY_PATH` on its children, so bare sonames cannot resolve, and
+  a WoW64 prefix loads the 64-bit loader even for the 32-bit game.
+- **The cinematic tier**: drop `MxAO.fx` (and its includes) into
+  `~/.config/cmr3-launcher/vkbasalt/shaders/` and `postfx = cinematic`
+  picks it up — licences keep us from shipping it. Depth capture through
+  DXVK is the one thing still to verify on a real run.
+- **Windows (ReShade)**: next; the `d3d9.dll` slot is free there.
+
 ## Recommendation ladder
 
 ### 1. Post-processing presets (do this) — the ~90% win

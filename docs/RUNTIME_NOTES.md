@@ -172,3 +172,18 @@ portrait monitor (2160×3840) in the shared test prefix. Restored the
 player's saved settings through the normal `cmr3-play` path and verified
 `WIDTH=3840`, `HEIGHT=2160`, `DISPLAY_MODE=0` before stopping further use
 of that prefix. This was test setup, not a code-path change.
+
+## 2026-11-01 — postfx first light, and the crash dialog
+
+- The vkBasalt layer chain, measured: `VK_INSTANCE_LAYERS` accepts a
+  colon-separated list; wine passes `VK_*` through to the game but drops
+  `LD_LIBRARY_PATH`, so the manifests use absolute paths; a WoW64 prefix
+  loads the 64-bit Vulkan loader even for the 32-bit game, so both
+  bitnesses ship under their own layer names. With that, "vkBasalt info:
+  config file:" appears in play.log — the layer runs (CAS at 0.65,
+  `postfx = color`), verified by e2e.
+- The Windows-style error box on every launch was wine's crash dialog for
+  the quartz fault (`winedbg` disabled turned the old hang into a visible
+  dialog while the game carried on). The launcher now sets
+  `ShowCrashDialog=0` (the `winetricks nocrashdialog` verb) in its prefix;
+  the faulting thread still ends, quietly.

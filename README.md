@@ -139,6 +139,8 @@ edit by hand. Starting `CMR3Launcher.exe` with any option (for example
 | `fov = 75` | Field of view for both cameras, 30–150 in steps of 5. | 75 |
 | `shadows = sharp` | `sharp` or `soft` car shadows; unset keeps the game's choice. | unset |
 | `hd_ui = on` | The 4K interface pack. | on (Enhanced) |
+| `shadows = sharp` | Car shadows: `sharp` (the 2005 look) or `soft` (2003's blur). | the game's |
+| `postfx = cinematic` | Linux only: post-processing over the finished frame — `color` (grade + CAS sharpening) or `cinematic` (plus depth-based ambient occlusion when you supply the shader, see `docs/ENHANCEMENTS.md`). | off |
 | `gamepad = rally` | `rally` (the triggers are the pedals, the d-pad and Start work the menus), `standard`, or `off`. | rally |
 | `dxvk = on` | Linux only: draw through Vulkan instead of Wine's OpenGL translator. | on |
 | `scaler = linear` | Linux only: how gamescope enlarges the picture. | linear |

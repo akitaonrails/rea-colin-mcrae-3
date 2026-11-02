@@ -37,3 +37,8 @@ vkbasalt https://github.com/DadSchoorse/vkBasalt/archive/refs/tags/v0.3.2.10.tar
 # HD UI v1.0.1 by Bekoha — fonts and race graphics redrawn for 4K (owner
 # decision, like the 1998 game's HD art pack; credited in THIRD_PARTY.md).
 hd-ui https://github.com/bekoha/bekoha.github.io/releases/download/cmr3-hdui-1.0.1/CMR3_HD_UI_v1.0.1.zip b3193f037fe4d0a22d9700f561be56774f8c296b6e3a221eb6f2bb79b6eda3b7 https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/CMR3_HD_UI_v1.0.1.zip
+
+# vkBasalt v0.3.2.10 (zlib) — the post-processing layer (postfx), built
+# from source by CI for both bitnesses (see build.yml); the mirror below
+# carries the last good build.
+vkbasalt https://github.com/DadSchoorse/vkBasalt/archive/refs/tags/v0.3.2.10.tar.gz eb196ff446fa36ec0ca99c4406d753c1fa210afddeec5e7a76e1c2e74ed605e3

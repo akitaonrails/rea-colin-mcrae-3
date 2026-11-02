@@ -8,3 +8,4 @@ patcher CookiePLMonster/SilentPatchCMR3 CMR3Patcher.zip
 xidi samuelgr/Xidi Xidi-
 dxvk doitsujin/dxvk dxvk-
 hd-ui bekoha/bekoha.github.io CMR3_HD_UI
+vkbasalt DadSchoorse/vkBasalt v

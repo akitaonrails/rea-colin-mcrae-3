@@ -93,6 +93,26 @@ height=$(sed -n 's/^HEIGHT=//p' "$INI" | tail -1)
   || bad "no WIDTH/HEIGHT in the ini"
 grep -q "DISPLAY_MODE=" "$INI" && ok "display mode recorded" || bad "no DISPLAY_MODE"
 
+# Post-processing, when the settings ask for it: the layer must engage
+# (vkBasalt announces itself in the game's play.log, wherever the box
+# keeps the helper's state).
+postfx=$(sed -n 's|^postfx *= *||p' "$KIT/launcher.cfg" 2>/dev/null | tail -1)
+case "$postfx" in
+  color|cinematic)
+    playlog=""
+    for pl in "$HOME/.config/cmr3-launcher/play.log" \
+              /mnt/data/distrobox/gaming/.config/cmr3-launcher/play.log; do
+      [ -f "$pl" ] && playlog=$pl && break
+    done
+    if [ -n "$playlog" ] && grep -q "vkBasalt info" "$playlog"; then
+      ok "postfx layer engaged"
+    else
+      bad "postfx configured but the layer never engaged"
+    fi
+    ;;
+  *) ok "postfx off (or unset)" ;;
+esac
+
 # The user's game folder is read-only for us: our marker must not be
 # there (their own Xidi.ini may be; it predates this launcher).
 game=$(sed -n 's|^game = \(.*\)$|\1|p' "$KIT/launcher.cfg" | tail -1 | sed 's|^Z:||; s|\\|/|g')

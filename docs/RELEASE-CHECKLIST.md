@@ -37,6 +37,10 @@ sh linux/tests/e2e.sh          # boots the game through cmr3-play and
 
 **Picture**
 
+- [ ] With `postfx = color`: the frame is visibly sharpened and the game
+      still runs at full speed; with `cinematic` (and the AO shader
+      dropped in): shading gains contact depth. Off restores the
+      untouched picture.
 - [ ] Menu and race fill the screen, correct aspect (no left-side crop:
       that was Wine's exclusive fullscreen picking a portrait monitor —
       keep `DisplayMode::effective` and its test).
