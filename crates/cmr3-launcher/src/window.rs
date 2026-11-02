@@ -283,7 +283,7 @@ fn play_tab(ui: &mut egui::Ui, state: &mut State, pick: Pick<'_>) {
     } else {
         "The folder with your installed Rally_3PC.exe"
     };
-    if widgets::folder_field(ui, &mut state.form.game, game_hint, || {
+    if widgets::folder_field(ui, &mut state.form.game, game.label, game_hint, || {
         pick("Choose the folder with your Rally_3PC.exe")
     }) {
         state.error = None;
@@ -338,6 +338,7 @@ fn play_tab(ui: &mut egui::Ui, state: &mut State, pick: Pick<'_>) {
                 selected: state.form.look == look,
                 badge: (look == best).then_some("Recommended"),
                 title_size: 0.0,
+                disabled: None,
             };
             if widgets::look_card(ui, vec2(w, 104.0), &card).clicked() {
                 state.form.set_look(look, state.screen);
@@ -355,6 +356,7 @@ fn play_tab(ui: &mut egui::Ui, state: &mut State, pick: Pick<'_>) {
     widgets::folder_field(
         ui,
         &mut state.form.saves,
+        saves.label,
         "Saved Games\\Colin McRae Rally 3 (the default)",
         || pick("Choose where your profile is kept"),
     );
@@ -537,9 +539,16 @@ mod tests {
     #[test]
     fn each_tab_renders_its_labelled_controls() {
         let mut ui = open("", true);
-        ui.get_by_label(
-            "The folder with your Rally_3PC.exe, e.g. Z:\\home\\you\\Games\\Colin McRae Rally 3",
+        // The folder fields are named by their headings; the hint is the
+        // description (SDK v0.3.0 folder_field).
+        let game = ui.get_by_role_and_label(Role::TextInput, "Game folder");
+        assert_eq!(
+            testing::description(&game).as_deref(),
+            Some(
+                "The folder with your Rally_3PC.exe, e.g. Z:\\home\\you\\Games\\Colin McRae Rally 3"
+            )
         );
+        ui.get_by_role_and_label(Role::TextInput, "Profile folder");
         ui.get_by_role_and_label(Role::RadioButton, "Enhanced");
         tab(&mut ui, "Picture");
         for key in [
