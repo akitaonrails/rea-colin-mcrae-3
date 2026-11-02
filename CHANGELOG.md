@@ -4,6 +4,14 @@
 
 ### Added
 
+- README: the full settings table (window, file and flag names), exit
+  codes, an Uninstall section, "built on rea-launcher-sdk", a developer
+  section (shell tests, `wine-test`, `sdk-sync`) and where issues go
+  (here or the SDK). `docs/RESEARCH.md` (community components, licences,
+  decisions), `docs/CONTRIBUTIONS.md` (drafts C1–C2, not posted) and a
+  platform matrix in `docs/RUNTIME_NOTES.md`. AGENTS.md points to the
+  SDK's standards and playbooks and records the owner's DRM decision of
+  2026-11-02.
 - The package carries the licence texts it lacked: Ultimate ASI Loader
   (MIT), ReShade's FX compiler and stb inside vkBasalt, and the Barlow
   fonts (OFL).

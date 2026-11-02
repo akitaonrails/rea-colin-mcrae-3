@@ -153,33 +153,46 @@ Wine needed), Steam with Proton, or your own Wine with gamescope through
 Everything is optional; the first run's Enhanced look gives you the
 modern experience out of the box. The settings window covers all of it:
 **Play** (the game folder, the look, your profile folder), **Picture**
-and **Controls**. They are kept in `launcher.cfg`, which you can also
-edit by hand. Starting `CMR3Launcher.exe` with any option (for example
-`--resolution 1920x1080`) skips the window and plays straight away.
+and **Controls**, each control with a line saying what it changes. They
+are kept in `launcher.cfg`, which you can also edit by hand. Starting
+`CMR3Launcher.exe` with any option (for example `--resolution
+1920x1080`) skips the window and plays straight away; `--no-window`
+plays with the saved settings.
 
-| Setting | What it does | Default |
-| --- | --- | --- |
-| `resolution = 3840x2160` | The display resolution, any aspect ratio. `original` is the 640×480 of 2003. | the desktop's size |
-| `display_mode = fullscreen` | `fullscreen`, `windowed` or `borderless`. | fullscreen |
-| `vsync = true` | Waits for the screen's refresh (no tearing). | on |
-| `anisotropic = 16` | `off`, 2, 4, 8 or 16; sharpens the road at a distance. | 16 (Enhanced) |
-| `fsaa = off` | Anti-aliasing (its rendering bugs are fixed by SilentPatch). | off |
-| `fov = 75` | Field of view for both cameras, 30–150 in steps of 5. | 75 |
-| `hd_ui = on` | The 4K interface pack. | on (Enhanced) |
-| `shadows = sharp` | Car shadows: `sharp` (the 2005 look) or `soft` (2003's blur). | the game's |
-| `postfx = cinematic` | Linux only: post-processing over the finished frame — `off`, `color` (real blacks and fuller contrast for the game's washed-out picture, plus CAS sharpening) or `cinematic` (a stronger grade, plus depth-based ambient occlusion when you supply the shader, see `docs/ENHANCEMENTS.md`). Needs `dxvk = on`: it works on the game's Vulkan. | off |
-| `gamepad = rally` | `rally` (the triggers are the pedals; the d-pad and A also work the menus), `standard`, or `off` (no Xidi). | rally |
-| `dxvk = on` | Linux only: draw through Vulkan instead of Wine's OpenGL translator. | on |
-| `scaler = linear` | Linux only: how gamescope enlarges the picture. | linear |
+Every setting has the same name in the window, in `launcher.cfg` and as
+a flag (`hd_ui` is `--hd-ui`). Unset means the game keeps its own value;
+if you set one and later unset it, the game's earlier value comes back
+unless you changed it in the game's own menu since.
 
-Flags: `--game`, `--saves`, `--runtime`, `--resolution`, `--display-mode`,
-`--vsync on|off`, `--anisotropic`, `--fsaa on|off`, `--fov`, `--shadows`,
-`--hd-ui on|off`, `--postfx`, `--gamepad`, `--gamepad-log`, `--dxvk on|off`,
-`--scaler`.
-Only `--game` is remembered; the
-others override `launcher.cfg` for one run. `CMR3Launcher.exe --help`
-lists them, and `CMR3Launcher.exe --check --game <folder>` checks a game
-folder.
+| `launcher.cfg` / flag | In the window | What it does | Unset |
+| --- | --- | --- | --- |
+| `game` / `--game` | Play: Game folder | The folder with your `Rally_3PC.exe` (only read). Remembered. | found next to the launcher |
+| `saves` / `--saves` | Play: Profile folder | Where your profile (`CMR3`) is kept. | `Saved Games\Colin McRae Rally 3` |
+| `runtime` / `--runtime` | — (file and flag only) | Where the launcher's private copy goes (about 3 GB). | `%LOCALAPPDATA%\CMR3Launcher\Rally3` |
+| `resolution` / `--resolution` | Picture: Resolution | Any size and aspect ratio; `original` is the 640×480 of 2003. | the desktop's size |
+| `display_mode` / `--display-mode` | Picture: Display mode | `fullscreen`, `windowed` or `borderless` (fullscreen plays borderless under Wine without gamescope). | fullscreen |
+| `vsync` / `--vsync` | Picture: VSync | `on`/`off`: wait for the screen's refresh (no tearing). | the game's (Enhanced: on) |
+| `anisotropic` / `--anisotropic` | Picture: Texture sharpness | `off`, `2`, `4`, `8`, `16`: the road stays sharp into the distance. | the game's (Enhanced: 16) |
+| `fsaa` / `--fsaa` | Picture: Smooth edges | `on`/`off` anti-aliasing (its rendering bugs are fixed by SilentPatch). | the game's (Enhanced: off) |
+| `fov` / `--fov` | Picture: Field of view | 30–150 degrees in steps of 5, both cameras. | the game's (75) |
+| `shadows` / `--shadows` | Picture: Car shadows | `sharp` (the 2005 look) or `soft` (2003's blur). | the game's |
+| `hd_ui` / `--hd-ui` | Picture: HD menus | Bekoha's 4K interface. | off (Enhanced: on) |
+| `dxvk` / `--dxvk` | Picture: Vulkan (DXVK), Linux | Draw through Vulkan instead of Wine's OpenGL translator. Ignored on Windows. | on |
+| `scaler` / `--scaler` | Picture: Upscaling, Linux | gamescope's filter: `nearest`, `pixel`, `fsr` or `linear`. Read by `cmr3-play`. | `linear` |
+| `postfx` / `--postfx` | Picture: Post-processing, Linux | `off`, `color` (real blacks, fuller contrast, sharpening) or `cinematic` (a stronger grade; ambient occlusion only if you add the MxAO shader, see `docs/ENHANCEMENTS.md`). Needs DXVK. Read by `cmr3-play`. | off |
+| `gamepad` / `--gamepad` | Controls: Gamepad | `rally` (the triggers are the pedals; the d-pad and A work the menus), `standard`, or `off` (no Xidi). | `rally` |
+| `gamepad_log` / `--gamepad-log` | Controls: Gamepad log | `on`: Xidi logs what the game asks and what each control sent, for bug reports. | off |
+
+Only `--game` is remembered; the others override `launcher.cfg` for one
+run (with `cmr3-play --play …` too, the gamescope ones included).
+`CMR3Launcher.exe --help` prints this list (generated from the same
+table as the window). `CMR3Launcher.exe --check --game <folder>` checks
+a game folder, its executable (with its SHA-256) and the bundled parts
+without playing: the report goes to the terminal and `launcher.log`, and
+it exits 0 when ready, 1 when something is missing or unknown. Exit
+codes for scripts: 2 for an unknown flag or a bad value; with
+`--settings` (what `cmr3-play` uses), 0 Play pressed, 3 closed without
+Play, 4 no window possible.
 
 ### Gamepad
 
@@ -207,9 +220,12 @@ Under Wine and Proton these are inside the Wine prefix (for Steam:
 
 ## Troubleshooting
 
-- **"the DRM-free patch did not apply"** — your executable is not an
-  official 1.1 one (an unofficial no-CD, or still v1.0). Re-install the
-  official 1.1 patch and try again.
+- **"This Rally_3PC.exe is not a version the launcher knows"** — your
+  executable is neither a DRM-free 1.1 build nor an official 1.1 one the
+  bundled patcher converts (an unofficial no-CD, or still v1.0).
+  Re-install the official 1.1 patch and try again. If it is a 1.1 build
+  anyway, [report it](https://github.com/akitaonrails/rea-colin-mcrae-3/issues/new?template=bug.yml)
+  with the SHA-256 the message shows and `launcher.log`.
 - **The game crawls at 4K under Wine** — DXVK is off; turn it on in the
   settings window (Linux) or keep `thirdparty/dxvk/d3d9.dll` next to the
   launcher.
@@ -226,21 +242,71 @@ Under Wine and Proton these are inside the Wine prefix (for Steam:
   launcher picks the rest up from there.
 - Only the official 1.1 executables (and the DRM-free ones) are
   supported; v1.0 needs the official patch first.
-- Not yet tested on native Windows or a Steam Deck.
+- Not yet tested on native Windows, a Steam Deck, or Proton without
+  `cmr3-play`; the full list of what was and wasn't checked is in
+  [docs/RUNTIME_NOTES.md](docs/RUNTIME_NOTES.md#platform-matrix).
+
+## Uninstall
+
+1. Delete the folder you unpacked the launcher into (or the AppImage).
+2. **Back up your profile first:** `%USERPROFILE%\Saved Games\Colin McRae
+   Rally 3` (or your `saves` folder) holds your progress. Then delete
+   `%LOCALAPPDATA%\CMR3Launcher` (settings, log and the launcher's ~3 GB
+   copy of the game).
+3. Linux: the same folders live in the Wine prefix
+   `~/.local/share/cmr3-launcher/prefix` (the profile under
+   `drive_c/users/<you>/Saved Games`); back up the profile, then delete
+   the prefix and `~/.config/cmr3-launcher` (`cmr3-play`'s logs).
+
+Your game folder was never changed, so there is nothing to undo there.
 
 ## For developers
 
+Built on [rea-launcher-sdk](https://github.com/akitaonrails/rea-launcher-sdk)
+(pinned by tag in `Cargo.toml`; its shell and packaging files are
+vendored in `sdk/` by `scripts/sdk-sync`). The SDK's
+[standards](https://github.com/akitaonrails/rea-launcher-sdk/blob/master/docs/STANDARDS.md)
+apply here.
+
 ```text
-cargo test                                          # host tests
-cargo build --release --target i686-pc-windows-gnu  # needs i686-w64-mingw32-gcc;
-                                                    # builds CMR3Launcher.exe
+cargo test --workspace                       # host tests, the settings window headless
+for t in linux/tests/*.sh; do sh "$t"; done  # cmr3-play (e2e.sh needs a game; skipped by default)
+cargo clippy --release --target i686-pc-windows-gnu --workspace -- -D warnings
+cargo build --release --target i686-pc-windows-gnu   # CMR3Launcher.exe (MinGW + lld)
+sdk/scripts/wine-test --locked --workspace   # the Windows-target tests under Wine, headless
+cargo deny check
+sh <sdk>/scripts/sdk-sync --check .          # sdk/ matches the pinned SDK
 ```
 
-GitHub Actions builds the Windows package (with the checksummed
-components from `packaging/third-party.txt`) and the Linux AppImage on
-every push, and publishes a release for tags named `v…`. How it all fits
-together, the research behind it and what's left: [docs/PLAN.md](docs/PLAN.md).
-Rules for contributors are in [AGENTS.md](AGENTS.md).
+MinGW, lld and Wine can live in a container (the `gaming` distrobox from
+github.com/akitaonrails/distrobox-gaming): run the commands there with an
+absolute path. GitHub Actions (the SDK's reusable workflows) runs the
+same checks, the Windows-target tests under Wine, builds the Windows
+package (with the checksummed components from
+`packaging/third-party.txt`) and the Linux AppImage on every push, and
+publishes a release for tags named `v…`. Design notes: [docs/PLAN.md](docs/PLAN.md);
+community fixes and decisions: [docs/RESEARCH.md](docs/RESEARCH.md);
+rules for contributors and agents: [AGENTS.md](AGENTS.md).
+
+## Contributing
+
+Issues and pull requests are welcome. Where they go depends on what they
+touch:
+
+- **Here** (this repository): anything about Colin McRae Rally 3 — the
+  game's versions, SilentPatch/Xidi/DXVK settings, the profile, the HD
+  UI, the looks, `cmr3-play`'s settings and post-processing, packaging
+  pins, this README.
+- **[rea-launcher-sdk](https://github.com/akitaonrails/rea-launcher-sdk/issues)**:
+  the shared parts every rea launcher uses — the runtime folder and its
+  syncing, the settings window's widgets and theme, `rea-play.sh`
+  (`sdk/rea-play.sh`), the packaging scripts and AppImage builder
+  (`sdk/packaging`), the CI workflows, anything under `sdk/`.
+
+Not sure? If the same problem would happen with another rea launcher,
+it's the SDK's; otherwise report it here and we'll move it. Never patch
+`sdk/` or copy SDK code into this repository: change the SDK and bump the
+pinned version instead.
 
 ## Credits
 
@@ -250,7 +316,8 @@ CookiePLMonster (widescreen, display and compatibility fixes),
 [Bekoha's HD UI](https://bekoha.github.io/cmr3/),
 [Xidi](https://github.com/samuelgr/Xidi) by samuelgr,
 [DXVK](https://github.com/doitsujin/dxvk), and
-[vkBasalt](https://github.com/DadSchoorse/vkBasalt). The settings window's
+[vkBasalt](https://github.com/DadSchoorse/vkBasalt), on the shared
+[rea-launcher-sdk](https://github.com/akitaonrails/rea-launcher-sdk). The settings window's
 Colin McRae photo is by "Carolyn" on Flickr (CC BY 2.0, via Wikimedia Commons); its Barlow fonts are
 by Jeremy Tribby (SIL OFL). See [THIRD_PARTY.md](THIRD_PARTY.md) for the
 full component and licence list.

@@ -315,3 +315,42 @@ next release.
   notes above measured (1.5x on 4K). Not yet verified: with `winecfg` DPI
   at 144 and 192 on a 4K screen the window fits the screen (about 1.5x
   overall) and is fully drawn under XWayland with fractional scaling.
+
+## Unreleased — rea-launcher-sdk v0.2.0 pass (host- and Wine-tested only)
+
+Host tests and `sdk/scripts/wine-test` (the settings window headless
+under Wine) pass; none of this was run in the real game yet.
+
+- **Unset gives back the game's value** (`.cmr3-ini-owned`). Not yet
+  verified: set vsync On, play, set it in the game's menu to Off, unset
+  it in the launcher: the game's Off stays; unset an untouched value: the
+  game's own value comes back.
+- **Unknown builds refused.** Not yet verified in the game: a v1.0 or
+  no-CD `Rally_3PC.exe` is refused with its SHA-256 at Play and by
+  `--check` (exit 1); the official 1.1 exe is still converted (the
+  result must now be one of the known DRM-free builds).
+- **`--check` and `--help` in the terminal** (`console::attach_parent`).
+  Not yet verified: from `cmd.exe` on Windows (text in the console) and
+  by double-click (a message box).
+- **One-run flags in `cmr3-play`** (`--play --scaler fsr --resolution
+  1280x720`): tested with fakes; not yet in a real gamescope session.
+- **Window**: anti-aliasing tri-state, 4×, 75°, the gamepad log switch,
+  descriptions under every row (the Picture tab now scrolls on a
+  1080p screen). Not yet looked at on screen.
+
+## Platform matrix
+
+What has been checked in the real game, per STANDARDS "Platforms to
+verify". Update a row when it is run.
+
+| Platform | Status |
+| --- | --- |
+| Linux, Wine 11.x + DXVK through `cmr3-play` and gamescope, 4K, NVIDIA | verified 2026-11-01/02 (sections above) |
+| Linux AppImage (portable Wine) | verified 2026-11-02 (the README video) |
+| Native Windows 10/11 | **pending** — no run on record |
+| Steam Deck, Game Mode, as a non-Steam game (controller, 1280×800, suspend/resume) | **pending**; the Steam Deck look is made of individually verified values (1280×800, vsync, 16×, HD UI) |
+| Proton without `cmr3-play` (the launcher's own WINEDLLOVERRIDES) | **pending** |
+| Multi-monitor under Wine | verified: exclusive fullscreen picks the wrong (portrait) monitor, so fullscreen plays borderless outside gamescope (2026-11-01) |
+| HiDPI / 4K settings window | verified at Wine 96 DPI on 4K (1.5×); 144/192 DPI **pending** |
+| Ultrawide (21:9) | **pending** (SilentPatch supports any aspect ratio; not seen here) |
+| Old-game trouble spots | timers/multi-core: SilentPatch's fixes; audio (DirectSound, no EAX needed): plays under Wine; CD audio: none; intro videos: Wine's quartz fault noted above (crash dialog off); focus loss: **pending** |

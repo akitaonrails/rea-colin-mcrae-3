@@ -1,5 +1,39 @@
 # Project rules
 
+**Read first:** the SDK's binding
+[docs/STANDARDS.md](https://github.com/akitaonrails/rea-launcher-sdk/blob/master/docs/STANDARDS.md)
+(vendored version: the tag in `sdk/VERSION`) and its playbooks
+(`docs/playbooks/` in rea-launcher-sdk):
+
+- `new-launcher.md` — research community fixes first (record them in
+  `docs/RESEARCH.md`), then build; headless verification.
+- `community-components.md` — pinning, bundling, download-on-request,
+  licences, mirrors.
+- `binary-patching.md` — exact identity (SHA-256) before patching,
+  all-or-nothing sites, unknown builds refused with the digest.
+- `contribute-back.md` — drafts in `docs/CONTRIBUTIONS.md`; the owner
+  posts; credentials (e.g. `~/.config/rea/pcgamingwiki.txt`) are never
+  printed, logged, committed, passed as arguments or handed to agents.
+- `sdk-change.md` — SDK gaps go upstream, never patched locally; bumps
+  and golden snapshots.
+
+What those rules mean here:
+
+- **Settings window:** any change to its look or layout goes through a
+  design skill (`frontend-design`, then a `web-design-guidelines`
+  review), within the SDK theme; accessibility first (palette and text
+  size tests in `look.rs`).
+- **GUI/CLI parity:** every option is a row of `config::OPTIONS`; the
+  window test `every_option_has_a_control_in_the_window` fails when one
+  lacks a control or a flag. Every option has end-to-end tests (flag →
+  `launcher.cfg` → `SilentPatchCMR3.ini` / `Xidi.ini` / overrides, in
+  `plan.rs`; window clicks → saved values, in `window.rs`).
+- **Headless testing:** host tests and `sdk/scripts/wine-test` never
+  open windows; the real game runs only in `gamescope --backend
+  headless`, and only when a check needs it.
+- **Golden snapshots** (`tests/snapshots/`): a diff must match an
+  intended change or an SDK Migration item; never regenerate blindly.
+
 This repository builds a self-contained compatibility package that runs the
 user's own copy of the 2003 PC game **Colin McRae Rally 3** on modern
 Windows and on Linux (Proton/Wine). It is not a distribution of the game.
@@ -13,6 +47,13 @@ Windows and on Linux (Proton/Wine). It is not a distribution of the game.
   - The HD UI overlay (`thirdparty/hd-ui`, Bekoha's redrawn fonts and
     interface art) ships with the package, fetched and checksummed at
     build time from `packaging/third-party.txt`; it is never committed.
+  - The DRM-free conversion: **owner decision, 2026-11-02** — the
+    SilentPatch project's community xdelta patcher, which turns an
+    official 1.1 executable into the publisher's own DRM-free 1.1 build,
+    is the approved way to remove the disc protection (also recorded in
+    `THIRD_PARTY.md`). We never write a crack of our own; any build the
+    patcher doesn't convert to a known DRM-free build is refused with its
+    SHA-256 and the issue link.
   - SilentPatch's Language Pack (original translations and co-driver
     audio) is **not** bundled and never will be: it is original game
     content from regional releases. Players who want it can add it to
@@ -77,7 +118,11 @@ Windows and on Linux (Proton/Wine). It is not a distribution of the game.
   post-processing, the pins and the package contents.
 - Never fork SDK code locally, and never edit `sdk/` by hand. When the
   SDK lacks something or has a bug, keep the game's own code for that
-  piece and propose the change upstream.
+  piece and propose the change upstream (issues and PRs about shared code
+  go to rea-launcher-sdk, not here).
+- Windows code must be run, not only linted: link the i686 build and run
+  `sdk/scripts/wine-test --locked --workspace` (MinGW and Wine may live
+  in the `gaming` distrobox; call it with absolute paths).
 - Bumping: change the tag in the root `Cargo.toml` (and the `@vX.Y.Z` of
   the workflows in `.github/workflows/`), run
   `../rea-launcher-sdk/scripts/sdk-sync .` from an SDK checkout at that

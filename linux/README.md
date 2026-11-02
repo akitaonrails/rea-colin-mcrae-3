@@ -55,8 +55,8 @@ If you have Wine and
 ~/Games/cmr3-launcher/linux/cmr3-play
 ```
 
-It shows the settings window first (with two more choices: the gamescope
-scaler, and DXVK), then starts the game in gamescope. When Wine and
+It shows the settings window first (with three more rows: DXVK, the
+gamescope upscaling and post-processing), then starts the game in gamescope. When Wine and
 gamescope live in a [distrobox](https://github.com/containers/distrobox)
 container, run it through the container:
 
@@ -64,8 +64,9 @@ container, run it through the container:
 CMR3_RUN="distrobox enter gaming --" ~/Games/cmr3-launcher/linux/cmr3-play
 ```
 
-`cmr3-play` also understands `--play` (no settings window), `stop` and
-`status`. They look only at the session `cmr3-play` itself started (its
+`cmr3-play` also understands `--play` (no settings window; launcher
+flags may follow for one run, e.g. `cmr3-play --play --scaler fsr
+--resolution 1280x720`, and reach gamescope too), `stop` and `status`. They look only at the session `cmr3-play` itself started (its
 own process group, recorded by pid and start time): `stop` ends that
 session and the prefix's Wine processes, and a `Rally_3PC.exe` started
 some other way is neither reported nor stopped.
