@@ -133,12 +133,19 @@ pub fn pick_folder(title: &str) -> Option<std::path::PathBuf> {
     }
 }
 
-/// True when running under Wine or Proton.
+/// True when running under Wine or Proton. Some Wine builds hide
+/// `wine_get_version`, so the environment cmr3-play and Proton always set
+/// counts too.
 pub fn is_wine() -> bool {
-    unsafe {
+    // SAFETY: read-only loader queries with NUL-terminated names.
+    let exported = unsafe {
         let ntdll = GetModuleHandleW(wide("ntdll.dll").as_ptr());
         !ntdll.is_null() && GetProcAddress(ntdll, c"wine_get_version".as_ptr().cast()).is_some()
-    }
+    };
+    exported
+        || ["WINEPREFIX", "WINELOADER", "STEAM_COMPAT_DATA_PATH"]
+            .into_iter()
+            .any(|name| std::env::var_os(name).is_some())
 }
 
 /// Under Wine: draw OpenGL through GLX (`UseEGL` = N). Wine 11 draws
@@ -295,10 +302,36 @@ impl Drop for Child {
     }
 }
 
+/// This process's environment with `WINEDLLOVERRIDES` set to
+/// `overrides`, as a CreateProcessW block.
+fn environment_block(overrides: &str) -> Vec<u16> {
+    let mut vars: Vec<(OsString, OsString)> = std::env::vars_os()
+        .filter(|(name, _)| !name.eq_ignore_ascii_case("WINEDLLOVERRIDES"))
+        .collect();
+    vars.push(("WINEDLLOVERRIDES".into(), overrides.into()));
+    vars.sort_by_key(|(name, _)| name.to_string_lossy().to_uppercase());
+    let mut block = Vec::new();
+    for (name, value) in vars {
+        block.extend(name.encode_wide());
+        block.push('=' as u16);
+        block.extend(value.encode_wide());
+        block.push(0);
+    }
+    block.push(0);
+    block
+}
+
 /// Starts `exe` (with `args`, working in `workdir`) and waits for it.
-/// `hidden` starts it without a console window (the bundled patcher).
-/// Returns the exit code.
-fn run_process(exe: &Path, args: &[OsString], workdir: &Path, hidden: bool) -> Result<u32, String> {
+/// `hidden` starts it without a console window (the bundled patcher);
+/// `overrides` replaces the child's `WINEDLLOVERRIDES`. Returns the exit
+/// code.
+fn run_process(
+    exe: &Path,
+    args: &[OsString],
+    workdir: &Path,
+    hidden: bool,
+    overrides: Option<&str>,
+) -> Result<u32, String> {
     let mut cmdline = wide(format!(
         "\"{}\"{}",
         exe.display(),
@@ -310,11 +343,15 @@ fn run_process(exe: &Path, args: &[OsString], workdir: &Path, hidden: bool) -> R
     let mut si: STARTUPINFOW = unsafe { std::mem::zeroed() };
     si.cb = size_of::<STARTUPINFOW>() as u32;
     let mut info: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
-    let flags = if hidden {
+    let mut flags = if hidden {
         windows_sys::Win32::System::Threading::CREATE_NO_WINDOW
     } else {
         0
     };
+    let env = overrides.map(environment_block);
+    if env.is_some() {
+        flags |= windows_sys::Win32::System::Threading::CREATE_UNICODE_ENVIRONMENT;
+    }
     // SAFETY: the strings live across the call; `cmdline` is writable.
     let ok = unsafe {
         CreateProcessW(
@@ -324,7 +361,7 @@ fn run_process(exe: &Path, args: &[OsString], workdir: &Path, hidden: bool) -> R
             std::ptr::null(),
             0,
             flags,
-            std::ptr::null(),
+            env.as_ref().map_or(std::ptr::null(), |e| e.as_ptr().cast()),
             dir.as_ptr(),
             &si,
             &mut info,
@@ -345,13 +382,14 @@ fn run_process(exe: &Path, args: &[OsString], workdir: &Path, hidden: bool) -> R
 
 /// Runs the game and waits for it to exit, returning its exit code. This
 /// is how the game starts: no memory patching (the fixes live in the
-/// bundled SilentPatch), so the process runs as it is.
-pub fn run(exe: &Path, workdir: &Path) -> Result<u32, String> {
-    run_process(exe, &[], workdir, false)
+/// bundled SilentPatch), so the process runs as it is. Under Wine,
+/// `overrides` is its `WINEDLLOVERRIDES`.
+pub fn run(exe: &Path, workdir: &Path, overrides: Option<&str>) -> Result<u32, String> {
+    run_process(exe, &[], workdir, false, overrides)
 }
 
 /// Runs the bundled xdelta patcher hidden (no console window flashes);
 /// false when the patch did not apply (a mismatched source file).
 pub fn run_hidden(exe: &Path, args: &[OsString], workdir: &Path) -> Result<bool, String> {
-    Ok(run_process(exe, args, workdir, true)? == 0)
+    Ok(run_process(exe, args, workdir, true, None)? == 0)
 }

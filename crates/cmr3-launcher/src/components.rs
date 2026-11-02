@@ -198,6 +198,35 @@ pub fn install_dxvk(game: &Path, runtime: &Path, bundle: &Path, on: bool) -> io:
     Ok(true)
 }
 
+/// `WINEDLLOVERRIDES` for the game under Wine: `natives` (the DLL names
+/// the launcher installed beside it: dsound for the ASI loader, dinput8
+/// for Xidi, d3d9 for DXVK) load from the game folder first. The player's
+/// own rules (`existing`) are kept, except for those names, so ours apply.
+pub fn wine_overrides(existing: Option<&str>, natives: &[&str]) -> String {
+    let mut rules = Vec::new();
+    if !natives.is_empty() {
+        rules.push(format!("{}=n,b", natives.join(",")));
+    }
+    for rule in existing.into_iter().flat_map(|r| r.split(';')) {
+        if rule.trim().is_empty() {
+            continue;
+        }
+        let Some((names, action)) = rule.split_once('=') else {
+            rules.push(rule.to_owned());
+            continue;
+        };
+        let kept: Vec<_> = names
+            .split(',')
+            .map(str::trim)
+            .filter(|n| !n.is_empty() && !natives.iter().any(|o| n.eq_ignore_ascii_case(o)))
+            .collect();
+        if !kept.is_empty() {
+            rules.push(format!("{}={action}", kept.join(",")));
+        }
+    }
+    rules.join(";")
+}
+
 /// The runtime's record of the files the HD UI overlay put in, so
 /// switching it off can put the game's own back.
 const HD_UI_FILES: &str = ".cmr3-hd-ui";
@@ -396,6 +425,28 @@ mod tests {
         for d in [bundle, game, rt] {
             fs::remove_dir_all(d).unwrap();
         }
+    }
+
+    #[test]
+    fn wine_overrides_put_ours_first_and_keep_the_players() {
+        assert_eq!(wine_overrides(None, &[]), "");
+        assert_eq!(
+            wine_overrides(None, &["dsound", "dinput8", "d3d9"]),
+            "dsound,dinput8,d3d9=n,b"
+        );
+        // cmr3-play's own rules: ours replace the names we install, the
+        // rest (winedbg, the AppImage's mscoree) stays.
+        assert_eq!(
+            wine_overrides(
+                Some("dinput8,dsound,d3d9=n,b;winedbg=d;mscoree,mshtml="),
+                &["dsound", "d3d9"]
+            ),
+            "dsound,d3d9=n,b;dinput8=n,b;winedbg=d;mscoree,mshtml="
+        );
+        assert_eq!(
+            wine_overrides(Some("D3D9=b;;xinput1_3"), &["d3d9"]),
+            "d3d9=n,b;xinput1_3"
+        );
     }
 
     #[test]

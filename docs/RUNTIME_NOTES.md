@@ -285,3 +285,8 @@ next release.
 - **Component ownership ledger** (`.cmr3-launcher-components`). Not yet
   verified: Gamepad off with a game folder that ships its own
   `dinput8.dll` (the game should load it again), and DXVK off under Wine.
+- **WINEDLLOVERRIDES from the launcher** (`dsound,dinput8,d3d9=n,b` for
+  what it installed, merged with the caller's rules). Not yet verified:
+  CMR3Launcher.exe added to Steam as a non-Steam game and run with Proton
+  (no `cmr3-play`): SilentPatch, Xidi and DXVK should all load (the
+  launcher log shows the overrides; DXVK's HUD or log shows it drawing).

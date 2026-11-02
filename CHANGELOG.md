@@ -21,6 +21,11 @@
   `d3d9.dll` the launcher installed (recorded by checksum in
   `.cmr3-launcher-components`), and bring back the game folder's own
   `dinput8.dll`/`d3d9.dll` when it has one; a player's own files stay.
+- Started from plain Proton or Wine (without `cmr3-play`), the game now
+  loads the installed ASI loader, Xidi and DXVK: the launcher gives it
+  `WINEDLLOVERRIDES` for them, keeping the player's other rules. Wine is
+  also recognised by `WINEPREFIX`, `WINELOADER` or
+  `STEAM_COMPAT_DATA_PATH` when `wine_get_version` is hidden.
 
 ## [0.1.2] - 2026-11-02
 

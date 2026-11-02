@@ -257,9 +257,14 @@ mod app {
         let wine = win32::is_wine();
         let gamescope = std::env::var_os("GAMESCOPE_WAYLAND_DISPLAY").is_some();
 
-        // The bundled parts.
+        // The bundled parts, and the DLL names Wine must then load from
+        // the game folder.
+        let mut natives = Vec::new();
         match components::install_silentpatch(&rt, &bundle) {
-            Ok(true) => log_line("SilentPatch installed"),
+            Ok(true) => {
+                natives.push("dsound");
+                log_line("SilentPatch installed")
+            }
             Ok(false) => log_line(
                 "warning: SilentPatch not bundled; the widescreen and compatibility fixes are off",
             ),
@@ -270,6 +275,9 @@ mod app {
         let xidi = match components::install_xidi(&game, &rt, &bundle, gamepad, gamepad_log) {
             Ok(true) => {
                 log_line(&format!("Xidi installed ({gamepad:?})"));
+                if gamepad != Gamepad::Off {
+                    natives.push("dinput8");
+                }
                 true
             }
             Ok(false) => {
@@ -294,11 +302,11 @@ mod app {
         }
         let dxvk_on = settings.dxvk != Some(false) && wine;
         match components::install_dxvk(&game, &rt, &bundle, dxvk_on) {
-            Ok(true) => log_line(if dxvk_on {
-                "DXVK installed (d3d9 through Vulkan)"
-            } else {
-                "DXVK not active"
-            }),
+            Ok(true) if dxvk_on => {
+                natives.push("d3d9");
+                log_line("DXVK installed (d3d9 through Vulkan)")
+            }
+            Ok(true) => log_line("DXVK not active"),
             Ok(false) => log_line(
                 "warning: DXVK not bundled; Wine's own OpenGL translator will draw (slow at 4K)",
             ),
@@ -364,8 +372,16 @@ mod app {
                 Err(e) => log_line(&format!("warning: {e}")),
             }
         }
+        // Plain Proton/Wine runs get the overrides cmr3-play would set.
+        let overrides = wine.then(|| {
+            let existing = std::env::var("WINEDLLOVERRIDES").ok();
+            components::wine_overrides(existing.as_deref(), &natives)
+        });
+        if let Some(o) = &overrides {
+            log_line(&format!("WINEDLLOVERRIDES={o}"));
+        }
         log_line("starting the game");
-        let code = win32::run(&rt.join(EXE), &rt)?;
+        let code = win32::run(&rt.join(EXE), &rt, overrides.as_deref())?;
         log_line(&format!("game exited with {code}"));
         if rt_profile.is_file() {
             match runtime::mirror_file(&rt_profile, &save_profile) {
