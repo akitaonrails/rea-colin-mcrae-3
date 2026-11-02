@@ -36,4 +36,28 @@ case "$VK_INSTANCE_LAYERS" in
   *post_processing:*post_processing32) echo "ok   both bitnesses requested" ;;
   *) echo "FAIL layer names: $VK_INSTANCE_LAYERS"; fails=$((fails + 1)) ;;
 esac
+conf=$STATE/vkbasalt/vkBasalt.conf
+if grep -qx "effects = lut:cas" "$conf" && grep -qx "lutFile = $STATE/vkbasalt/grade.cube" "$conf"; then
+  echo "ok   colour grades through the LUT, then sharpens"
+else
+  echo "FAIL vkBasalt.conf: $(tr '\n' '|' < "$conf")"
+  fails=$((fails + 1))
+fi
+if [ "$(grep -c '^[0-9]' "$STATE/vkbasalt/grade.cube")" = 35937 ] \
+   && head -1 "$STATE/vkbasalt/grade.cube" | grep -qx "LUT_3D_SIZE 33"; then
+  echo "ok   the LUT has every entry"
+else
+  echo "FAIL grade.cube"
+  fails=$((fails + 1))
+fi
+# Cinematic with the player's MxAO: the effect is declared by its file.
+printf 'postfx = cinematic\n' > "$T/launcher.cfg"
+mkdir -p "$STATE/vkbasalt/shaders"; : > "$STATE/vkbasalt/shaders/MxAO.fx"
+postfx_env > /dev/null
+if grep -qx "effects = mxao:lut:cas" "$conf" && grep -qx "mxao = $STATE/vkbasalt/shaders/MxAO.fx" "$conf"; then
+  echo "ok   cinematic declares MxAO and chains it first"
+else
+  echo "FAIL cinematic: $(tr '\n' '|' < "$conf")"
+  fails=$((fails + 1))
+fi
 [ "$fails" = 0 ] && echo "all passed" || { echo "$fails failed"; exit 1; }

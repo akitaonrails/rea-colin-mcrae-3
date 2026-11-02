@@ -58,9 +58,10 @@ pub enum Postfx {
     /// The game's own picture.
     #[default]
     Off,
-    /// Grade, bloom and CAS sharpening — no depth buffer needed.
+    /// Real blacks and fuller contrast (a colour lookup table) and CAS
+    /// sharpening — no depth buffer needed.
     Color,
-    /// The colour pass plus depth-based ambient occlusion (needs the AO
+    /// A stronger grade, plus depth-based ambient occlusion (needs the AO
     /// shaders; see docs/ENHANCEMENTS.md).
     Cinematic,
 }
@@ -315,9 +316,10 @@ game =
 #scaler = linear
 
 # Linux (cmr3-play) only: post-processing over the finished frame, on
-# top of the game's own picture. off (the default): the faithful
-# picture. color: grade and CAS sharpening. cinematic: the same plus
-# depth-based ambient occlusion, which lifts the flat look (needs the AO
+# top of the game's own picture. off (the default): the faithful,
+# washed-out picture. color: real blacks, fuller contrast and CAS
+# sharpening. cinematic: a stronger grade, plus depth-based ambient
+# occlusion, which lifts the flat look (needs the AO
 # shaders; docs/ENHANCEMENTS.md).
 #postfx = cinematic
 ";

@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.1.2] - 2026-11-02
+
+### Changed
+
+- The Colour and Cinematic looks (Linux) grade the game's washed-out
+  picture: a colour lookup table gives real blacks and fuller contrast
+  (Cinematic more strongly) before the CAS sharpening.
+- New profiles steer with the left stick and brake/accelerate with the
+  triggers, with no remapping: the game's own defaults pointed both at the
+  right stick. The bindings are the ones saved by the game after a remap
+  on real hardware.
+- The Rally preset's d-pad is the arrow keys only again, so the Controls
+  menu moves one row per press; A still presses Enter as well as its
+  button.
+
+### Fixed
+
+- Cinematic's depth pass (a player-supplied MxAO) could never load: the
+  vkBasalt effect list used a space instead of colons and never declared
+  the shader.
+
+### Upgrading
+
+- A profile whose pad was bound under 0.1.1 (where the d-pad was a hat)
+  steers from the wrong stick now: remap steering and the pedals once in
+  Options > Controls. Profiles from 0.1.0 are unaffected.
+
 ## [0.1.1] - 2026-11-01
 
 ### Changed
@@ -84,5 +111,6 @@ First packaged release of the launcher and its Linux helper.
 - One Linux gameplay session stopped on a Wine `ntdll` heap fault. The
   originating module was not isolated, so this release does not claim a fix.
 
+[0.1.2]: https://github.com/akitaonrails/rea-colin-mcrae-3/releases/tag/v0.1.2
 [0.1.1]: https://github.com/akitaonrails/rea-colin-mcrae-3/releases/tag/v0.1.1
 [0.1.0]: https://github.com/akitaonrails/rea-colin-mcrae-3/releases/tag/v0.1.0

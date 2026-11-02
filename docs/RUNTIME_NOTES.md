@@ -236,3 +236,31 @@ with a fresh prefix under `.work/`.
   start used to restore the older saved one over it. `mirror_file` now
   only copies onto an older file, and the launcher saves a newer runtime
   profile first.
+
+## 2026-11-02 — v0.1.2: the washed-out picture, pad bindings by layout
+
+- **Picture.** A 4K frame from a gravel stage (Cinematic of 0.1.1, CAS
+  only) measured 30/255 at the darkest 2 % of the scene, 59 at the median
+  and 143 at the 99th percentile: a picture squeezed into 25–160. The
+  looks now grade through a vkBasalt `.cube` LUT that `cmr3-play` writes
+  (levels from a black and white point, a gamma that keeps the midtones,
+  a saturation lift): Colour 0.08/0.90/γ1.15/×1.08 brings the darkest 2 %
+  to 18, Cinematic 0.10/0.86/γ1.12/×1.14 to 10, midtones within a few
+  levels. Judged in the game: both good, Cinematic the stronger.
+- vkBasalt's effect list is colon-separated, and a ReShade effect needs
+  `name = file.fx`: Cinematic's `effects = mxao cas` never loaded MxAO.
+- **Pad bindings depend on the controller's layout.** The game stores
+  axis codes; with a hat on the d-pad (0.1.1's `Compound(Pov(...))`) the
+  left stick's X and the triggers' Y are 14/15, without one (0.1.0 and
+  now) 12/13. The game's own defaults point at the right stick in both.
+  Bindings measured by remapping on the keys-only layout: steering in
+  words 9–10, pedals in 23–24 of player 1's joystick block. Verified on a
+  new profile with no remap: left stick steers, triggers are the pedals.
+  The 0.1.1 note that "the keys-only d-pad broke the stored bindings" was
+  this: the defaults then pointed at the right stick.
+- **Local Windows builds from the gaming distrobox** (MinGW GCC 16.2,
+  binutils 2.47, Rust 1.99.1) crashed the launcher in `win32::is_wine`,
+  jumping into unrelated code (`f32::from_str`); the same source built by
+  CI (Ubuntu's MinGW, same Rust) runs. Test with CI builds (`gh workflow
+  run build.yml --ref <branch>`); the cause in the local toolchain is not
+  isolated.

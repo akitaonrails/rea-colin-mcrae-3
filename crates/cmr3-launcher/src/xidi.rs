@@ -6,11 +6,11 @@
 //! mapping puts the triggers on that pedal axis (both at once: left-foot
 //! braking) and ignores the physical left-stick Y so resting thumbs can't
 //! open the throttle. The game's menus answer only the keyboard, so the
-//! d-pad and A also press the arrow keys and Enter — on top of their
-//! controller hat and button, never instead: the game stores its pad
-//! bindings by the controller's layout (see `profile`), which must stay
-//! StandardGamepad's. Xidi also lets pads be plugged in and swapped while
-//! the game runs.
+//! d-pad is the arrow keys (no hat: the Controls menu would read both and
+//! move twice) and A presses Enter as well as its button. The game stores
+//! pad bindings by the controller's layout; `profile` writes the ones
+//! validated on this layout. Xidi also lets pads be plugged in and
+//! swapped while the game runs.
 
 use crate::config::Gamepad;
 
@@ -34,10 +34,10 @@ StickLeftX = Axis(X)\n\
 StickLeftY = Null\n\
 TriggerRT = Axis(Y, -)\n\
 TriggerLT = Axis(Y, +)\n\
-DpadUp = Compound(Pov(Up), Keyboard(UpArrow))\n\
-DpadDown = Compound(Pov(Down), Keyboard(DownArrow))\n\
-DpadLeft = Compound(Pov(Left), Keyboard(LeftArrow))\n\
-DpadRight = Compound(Pov(Right), Keyboard(RightArrow))\n\
+DpadUp = Keyboard(UpArrow)\n\
+DpadDown = Keyboard(DownArrow)\n\
+DpadLeft = Keyboard(LeftArrow)\n\
+DpadRight = Keyboard(RightArrow)\n\
 ButtonA = Compound(Button(4), Keyboard(Enter))\n"
         }
     };
@@ -98,17 +98,16 @@ mod tests {
         assert!(t.contains("StickLeftY = Null"));
         assert!(t.contains("TriggerRT = Axis(Y, -)"));
         assert!(t.contains("TriggerLT = Axis(Y, +)"));
-        // The menu controls press keys as well, never instead: every key
-        // rides along with the StandardGamepad hat or button it replaces
-        // nothing of (the game's bindings follow that layout).
+        // The layout `profile`'s bindings were validated on: the d-pad is
+        // keys only, A keeps its button and adds Enter, nothing else is a key.
         let keys: Vec<&str> = t.lines().filter(|l| l.contains("Keyboard(")).collect();
         assert_eq!(
             keys,
             [
-                "DpadUp = Compound(Pov(Up), Keyboard(UpArrow))",
-                "DpadDown = Compound(Pov(Down), Keyboard(DownArrow))",
-                "DpadLeft = Compound(Pov(Left), Keyboard(LeftArrow))",
-                "DpadRight = Compound(Pov(Right), Keyboard(RightArrow))",
+                "DpadUp = Keyboard(UpArrow)",
+                "DpadDown = Keyboard(DownArrow)",
+                "DpadLeft = Keyboard(LeftArrow)",
+                "DpadRight = Keyboard(RightArrow)",
                 "ButtonA = Compound(Button(4), Keyboard(Enter))",
             ]
         );

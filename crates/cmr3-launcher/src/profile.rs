@@ -30,11 +30,15 @@ const JOYSTICK: usize = 0x1DB98;
 /// Vibration at Medium, as the game stores it.
 const VIBRATION_MEDIUM: u32 = 80;
 
-/// The joystick block the game itself writes when the player chooses the
-/// first controller (Xidi's virtual controller 1): device 0 and the
-/// game's default bindings for it.
+/// Player 1's joystick block for the first controller (Xidi's virtual
+/// controller 1): device 0 and bindings for the Rally layout (`xidi`).
+/// The game's own defaults point steering and the pedals at the right
+/// stick; these, saved by the game after remapping on real hardware, put
+/// steering (words 9–10) on the left stick's X axis (12) and the pedals
+/// (words 23–24) on the triggers' Y axis (13). Axis codes follow the
+/// controller's layout: a d-pad hat would shift them by 2.
 const FIRST_CONTROLLER: [i32; 31] = [
-    0, 15, 15, -1, -1, 14, 14, 15, 15, 14, 14, 15, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 15, 15, -1,
+    0, -1, -1, -1, -1, -1, -1, -1, -1, 12, 12, -1, -1, 0, -1, 1, 3, 4, 5, 6, 7, 8, 9, 13, 13, -1,
     -1, -1, -1, 1, 65535,
 ];
 
@@ -135,7 +139,8 @@ mod tests {
         assert!(choose_first_controller(&mut p));
         assert!(is_valid(&p), "the checksum follows the change");
         assert_eq!(word(&p, JOYSTICK), 0, "device 0: Xidi's controller 1");
-        assert_eq!(word(&p, JOYSTICK + 4), 15);
+        assert_eq!(word(&p, JOYSTICK + 4 * 9), 12, "steering on the left stick");
+        assert_eq!(word(&p, JOYSTICK + 4 * 23), 13, "pedals on the triggers");
         assert_eq!(word(&p, VIBRATION), VIBRATION_MEDIUM);
         assert_eq!(p[0x10], 0x42, "nothing else changes");
         assert!(!choose_first_controller(&mut p), "only once");
@@ -177,7 +182,8 @@ mod tests {
 
     /// Against profiles the game wrote (never committed): a new one, and
     /// the same after choosing the first controller in Options → Controls
-    /// (vibration left off there; ours turns it to Medium).
+    /// (vibration left off there; ours turns it to Medium, and binds the
+    /// validated axes instead of the game's defaults).
     ///   CMR3_PROFILE_NEW=… CMR3_PROFILE_CHOSEN=… cargo test -- --ignored
     #[test]
     #[ignore]
@@ -188,9 +194,14 @@ mod tests {
         assert!(is_valid(&ours) && is_valid(&game));
         assert!(choose_first_controller(&mut ours));
         let differ: Vec<usize> = (0..CHECKSUM).filter(|&i| ours[i] != game[i]).collect();
-        // Only vibration and the game's own two-byte counter may differ.
-        let expected =
-            |i: usize| (VIBRATION..VIBRATION + 4).contains(&i) || (0x429E0..0x429E2).contains(&i);
+        // Only vibration, the bindings after the device index, and the
+        // game's own two-byte counter may differ.
+        let bindings = JOYSTICK + 4..JOYSTICK + 4 * FIRST_CONTROLLER.len();
+        let expected = |i: usize| {
+            (VIBRATION..VIBRATION + 4).contains(&i)
+                || bindings.contains(&i)
+                || (0x429E0..0x429E2).contains(&i)
+        };
         assert!(differ.iter().all(|&i| expected(i)), "{differ:x?}");
         assert_eq!(word(&ours, VIBRATION), VIBRATION_MEDIUM);
     }

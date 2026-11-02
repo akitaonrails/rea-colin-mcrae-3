@@ -223,18 +223,27 @@ JSON
     echo "postfx: no vkBasalt library beside $lib; continuing without"
     return 0
   fi
-  effects=cas
+  # The game's picture is washed out (blacks sit near 30/255, whites
+  # under 170): both styles grade it through a colour lookup table first,
+  # cinematic more strongly, then sharpen.
+  case "$fx" in
+    color) grade 0.08 0.90 1.15 1.08 ;;
+    cinematic) grade 0.10 0.86 1.12 1.14 ;;
+  esac > "$STATE/vkbasalt/grade.cube"
+  effects=lut:cas
   extra=""
   if [ "$fx" = cinematic ] && [ -f "$STATE/vkbasalt/shaders/MxAO.fx" ]; then
     # The depth pass: only when the player supplied MxAO (licences keep
     # us from shipping it; docs/ENHANCEMENTS.md explains where from).
-    effects="mxao cas"
-    extra="reshadeIncludePath = $STATE/vkbasalt/shaders
+    effects=mxao:lut:cas
+    extra="mxao = $STATE/vkbasalt/shaders/MxAO.fx
+reshadeIncludePath = $STATE/vkbasalt/shaders
 reshadeTexturePath = $STATE/vkbasalt/shaders"
   fi
   {
     echo "effects = $effects"
     [ -n "$extra" ] && echo "$extra"
+    echo "lutFile = $STATE/vkbasalt/grade.cube"
     echo "casSharpness = 0.65"
     echo "executeAt = end"
   } > "$STATE/vkbasalt/vkBasalt.conf"
@@ -243,6 +252,29 @@ reshadeTexturePath = $STATE/vkbasalt/shaders"
   export VKBASALT_CONFIG_FILE="$STATE/vkbasalt/vkBasalt.conf"
   echo "postfx: $fx via $lib ($names)"
   return 0
+}
+
+# A 33-point colour lookup table (.cube, red fastest) that grades the
+# picture: levels from black point $1 and white point $2 (0..1), gamma $3
+# (above 1 lifts the midtones the levels darken), saturation $4.
+grade() {
+  awk -v b="$1" -v w="$2" -v g="$3" -v s="$4" '
+  function clamp(v) { return v < 0 ? 0 : (v > 1 ? 1 : v) }
+  BEGIN {
+    n = 33
+    print "LUT_3D_SIZE " n
+    for (z = 0; z < n; z++) for (y = 0; y < n; y++) for (x = 0; x < n; x++) {
+      c[0] = x / (n - 1); c[1] = y / (n - 1); c[2] = z / (n - 1)
+      for (i = 0; i < 3; i++) {
+        c[i] = clamp((c[i] - b) / (w - b)) ^ (1 / g)
+      }
+      l = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+      for (i = 0; i < 3; i++) {
+        c[i] = clamp(l + (c[i] - l) * s)
+      }
+      printf "%.6f %.6f %.6f\n", c[0], c[1], c[2]
+    }
+  }'
 }
 
 # The settings window; its exit code says what to do next.

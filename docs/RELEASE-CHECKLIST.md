@@ -25,7 +25,8 @@ CMR3_E2E_KIT=/path/to/kit sh linux/tests/e2e.sh
 **Gamepad** (Xidi, the `rally` preset)
 
 - [ ] On a new profile, Options → Controls already shows the Xidi
-      controller and vibration Medium.
+      controller and vibration Medium, and with no remapping the left
+      stick steers and the triggers are the pedals.
 - [ ] Menus: d-pad moves, A selects (the arrow keys and Enter).
 - [ ] **A, B, X, Y work in a race** as bound in Options → Controls.
 - [ ] Steering on the left stick; **both** triggers at once (left-foot
@@ -41,8 +42,9 @@ CMR3_E2E_KIT=/path/to/kit sh linux/tests/e2e.sh
 
 **Picture**
 
-- [ ] With `postfx = color`: the frame is visibly sharpened and the game
-      still runs at full speed; with `cinematic` (and the AO shader
+- [ ] With `postfx = color`: blacks are black (not grey), shadows still
+      readable, the frame is sharpened and the game still runs at full
+      speed; `cinematic` grades more strongly; with `cinematic` (and the AO shader
       dropped in): shading gains contact depth. Off restores the
       untouched picture.
 - [ ] Menu and race fill the screen, correct aspect (no left-side crop:
