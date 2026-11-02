@@ -24,6 +24,7 @@
 
 ### Changed
 
+- The game-folder messages say how to fix the problem they name.
 - Clearer names in the window: Texture sharpness (anisotropic
   filtering), Smooth edges (anti-aliasing), Car shadows, HD menus,
   Vulkan (DXVK), Upscaling (the gamescope scaler).

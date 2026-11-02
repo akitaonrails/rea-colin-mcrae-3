@@ -61,7 +61,7 @@ pub fn check_game(folder: &str) -> Check {
     }
     let dir = Path::new(folder);
     if !dir.is_dir() {
-        return Check::Problem("No such folder.".into());
+        return Check::Problem("No such folder. Check the path, or use Browse… to pick it.".into());
     }
     let Some(exe) = std::fs::read_dir(dir).ok().and_then(|entries| {
         entries.flatten().map(|e| e.path()).find(|p| {
@@ -69,14 +69,19 @@ pub fn check_game(folder: &str) -> Check {
                 .is_some_and(|n| n.eq_ignore_ascii_case("rally_3pc.exe"))
         })
     }) else {
-        return Check::Problem("There is no Rally_3PC.exe in this folder.".into());
+        return Check::Problem(
+            "There is no Rally_3PC.exe in this folder. Choose the folder the game is installed in."
+                .into(),
+        );
     };
     match std::fs::read(&exe) {
         Ok(bytes) => match edition::identify(&bytes) {
             edition::Edition::DrmFree(name) => Check::Found(name),
             edition::Edition::NeedsPatching => Check::Unknown,
         },
-        Err(e) => Check::Problem(format!("Can't read Rally_3PC.exe: {e}")),
+        Err(e) => Check::Problem(format!(
+            "Can't read Rally_3PC.exe ({e}). Check that the file isn't open elsewhere and that you may read it."
+        )),
     }
 }
 
