@@ -5,12 +5,11 @@ mod ui;
 
 #[cfg(windows)]
 fn main() {
-    use rea_launcher_win32::dialog::Icon;
     let code = match app::run() {
         Ok(code) => code,
         Err(err) => {
             app::log_line(&format!("error: {err}"));
-            app::say(&err, Icon::Error);
+            app::fatal(&err);
             1
         }
     };
@@ -30,6 +29,7 @@ mod app {
     use std::fs;
     use std::path::{Path, PathBuf};
 
+    use cmr3_launcher::audience::{self, Audience};
     use cmr3_launcher::components::{self, Installed};
     use cmr3_launcher::config::{self, Settings};
     use cmr3_launcher::edition;
@@ -41,10 +41,10 @@ mod app {
     use rea_launcher::cfg::ArgError;
     use rea_launcher::log::Log;
     use rea_launcher::{cfg, fsx, paths};
-    use rea_launcher_win32::dialog::{self, Icon};
     use rea_launcher_win32::instance::{self as win32_instance, Window};
     use rea_launcher_win32::process::Launch;
-    use rea_launcher_win32::{console, display, gpu, wine};
+    use rea_launcher_win32::report;
+    use rea_launcher_win32::{display, gpu, wine};
 
     use crate::ui;
 
@@ -62,16 +62,22 @@ mod app {
         Log::new(home().join("launcher.log")).line(line);
     }
 
-    /// Shows `text` where the player started the launcher: the terminal
-    /// (or a redirected stdout, cmr3-play's log), else a message box.
-    pub fn say(text: &str, icon: Icon) {
-        let attached = console::attach_parent();
-        match console::output(attached, console::stdout_usable(), true) {
-            console::Output::Terminal if icon == Icon::Error => eprintln!("{text}"),
-            console::Output::Terminal => println!("{text}"),
-            console::Output::Dialog => dialog::message(TITLE, text, icon),
-            console::Output::Nowhere => {}
-        }
+    /// Who sees this run's messages (`audience`): under Wine (cmr3-play,
+    /// the AppImage, Proton) a person even with `--no-window`.
+    fn audience() -> Audience {
+        let args: Vec<String> = std::env::args().skip(1).collect();
+        audience::audience(&args, wine::is_wine())
+    }
+
+    /// An error the launcher stops on: a dialog whenever a person may be
+    /// watching, and printed (cmr3-play's log).
+    pub fn fatal(text: &str) {
+        report::fatal(TITLE, text, audience().mode());
+    }
+
+    /// Information or a warning, routed like [`fatal`].
+    fn note(text: &str, warning: bool) {
+        report::note(TITLE, text, audience().mode(), warning);
     }
 
     /// A `launcher.cfg` next to the exe wins (portable installs);
@@ -144,12 +150,12 @@ mod app {
         let (cli, switches) = match Settings::parse_args(args) {
             Ok(parsed) => parsed,
             Err(ArgError::Help(_)) => {
-                say(&config::usage(), Icon::Info);
+                note(&config::usage(), false);
                 return Ok(0);
             }
             Err(e) => {
                 log_line(&format!("error: {e}"));
-                say(&format!("{e}\n\n{}", config::usage()), Icon::Error);
+                fatal(&format!("{e}\n\n{}", config::usage()));
                 return Ok(BAD_ARGUMENTS);
             }
         };
@@ -175,8 +181,11 @@ mod app {
                     let second =
                         SecondStart::new(running.bring_to_front(Window::Title(window::TITLE)));
                     log_line(&format!("another launcher is running: {second:?}"));
+                    // A play-time message: the player started a second
+                    // copy and must see why nothing happened.
                     if let Some(message) = second.message() {
-                        say(message, Icon::Info);
+                        let interactive = audience().interactive;
+                        report::note(TITLE, message, report::Mode::Play { interactive }, true);
                     }
                     // cmr3-play --settings: nothing was started.
                     return Ok(if settings_only { WINDOW_CLOSED } else { 0 });
@@ -572,10 +581,7 @@ mod app {
         for line in &lines {
             log_line(&format!("check: {line}"));
         }
-        say(
-            &lines.join("\n"),
-            if ok { Icon::Info } else { Icon::Warning },
-        );
+        note(&lines.join("\n"), !ok);
         if ok { 0 } else { CHECK_FAILED }
     }
 }

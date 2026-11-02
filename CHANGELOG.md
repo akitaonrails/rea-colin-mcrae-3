@@ -138,6 +138,12 @@
 
 ### Fixed
 
+- Under `cmr3-play`, the AppImage and Proton, an error that stops the
+  launcher (game folder not found, an unknown game build, "already
+  running") shows a message box again. Since SDK v0.3.0 it only went to
+  the log, so the game simply never started. `--help` and `--check` still
+  print to the terminal; they open a box only when nobody can see one, and
+  never for a Windows script started with `--no-window`.
 - `cmr3-play` reads `postfx` and `dxvk` in any case, as the launcher
   does: `--postfx Color` or `postfx = Cinematic` turns the post-processing
   on, and `--dxvk False` gives the "needs DXVK" note. It only matched the

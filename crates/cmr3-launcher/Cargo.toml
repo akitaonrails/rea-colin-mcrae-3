@@ -23,3 +23,5 @@ rea-launcher-ui.workspace = true
 # The settings window is tested headless (egui_kittest), on the host and
 # under Wine.
 rea-launcher-ui = { workspace = true, features = ["testing"] }
+# report's routing table (`audience`) is tested on the host too.
+rea-launcher-win32.workspace = true
