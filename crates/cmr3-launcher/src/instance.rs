@@ -10,6 +10,16 @@
 /// The instance name (`Local\rea-launcher-rea-colin-mcrae-3`).
 pub const NAME: &str = "rea-colin-mcrae-3";
 
+/// The settings window's title, which a second start looks for to bring
+/// the window forward. Not the game's title: FindWindow would find the
+/// game's window instead.
+pub const WINDOW_TITLE: &str = "Colin McRae Rally 3 launcher";
+
+/// The game's own window title (Rally_3PC.exe 1.1, seen under Wine). A
+/// second start that found this window would raise the game and say
+/// nothing.
+pub const GAME_WINDOW_TITLE: &str = "Colin McRae Rally 3";
+
 /// Shown when a second start finds no launcher window to bring forward:
 /// the first launcher is waiting for the game.
 pub const GAME_RUNNING: &str = "Colin McRae Rally 3 is already running. \
@@ -46,6 +56,14 @@ impl SecondStart {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Measured 2026-11-02 in the real game: with the settings window
+    /// titled like the game, a second start found the game's window,
+    /// raised it and never said the game was running.
+    #[test]
+    fn the_launcher_window_is_never_mistaken_for_the_game() {
+        assert_ne!(WINDOW_TITLE, GAME_WINDOW_TITLE);
+    }
 
     #[test]
     fn a_second_start_raises_the_window_or_says_the_game_runs() {

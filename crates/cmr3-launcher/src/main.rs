@@ -38,7 +38,6 @@ mod app {
     use cmr3_launcher::plan::{self, Env};
     use cmr3_launcher::profile;
     use cmr3_launcher::runtime;
-    use cmr3_launcher::window;
     use rea_launcher::cfg::ArgError;
     use rea_launcher::log::Log;
     use rea_launcher::{cfg, fsx, paths};
@@ -50,7 +49,7 @@ mod app {
     use crate::ui;
 
     const EXE: &str = "Rally_3PC.exe";
-    const TITLE: &str = "Colin McRae Rally 3 launcher";
+    const TITLE: &str = instance::WINDOW_TITLE;
 
     fn home() -> PathBuf {
         std::env::var_os("LOCALAPPDATA")
@@ -179,8 +178,9 @@ mod app {
             match win32_instance::single(instance::NAME) {
                 Ok(guard) => Some(guard),
                 Err(running) => {
-                    let second =
-                        SecondStart::new(running.bring_to_front(Window::Title(window::TITLE)));
+                    let second = SecondStart::new(
+                        running.bring_to_front(Window::Title(instance::WINDOW_TITLE)),
+                    );
                     log_line(&format!("another launcher is running: {second:?}"));
                     // A play-time message: the player started a second
                     // copy and must see why nothing happened.

@@ -138,6 +138,12 @@
 
 ### Fixed
 
+- Starting the launcher a second time while the game runs now says the
+  game is running. The settings window had the game's own window title
+  ("Colin McRae Rally 3"), so the second start found the game's window,
+  raised it and said nothing (seen in the real game under Wine). The
+  window is now titled "Colin McRae Rally 3 launcher".
+
 - `--check` no longer calls an official 1.1 executable with disc
   protection "not ready" when the bundled patcher converts it. It tries
   the patcher on a scratch copy (the game folder is only read) and says

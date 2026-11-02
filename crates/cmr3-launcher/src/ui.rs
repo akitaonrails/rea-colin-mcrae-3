@@ -5,8 +5,9 @@
 
 use std::path::{Path, PathBuf};
 
+use cmr3_launcher::instance;
 use cmr3_launcher::look::{self, PALETTE};
-use cmr3_launcher::window::{self, State, TITLE};
+use cmr3_launcher::window::{self, State};
 use rea_launcher_ui::eframe;
 use rea_launcher_ui::egui::{self, Key, TextureHandle};
 use rea_launcher_ui::pad::{self, Nav, PadNav};
@@ -37,11 +38,11 @@ pub fn show(settings_path: &Path, text: &str, linux: bool) -> Result<Outcome, St
     let wine_scale = display::wine_dpi_scale();
     let screen = display::screen_size();
     let fit = WindowFit::new(look::SIZE, wine, screen, wine_scale).with_native_fit(true);
-    let options = fit.native_options(TITLE);
+    let options = fit.native_options(instance::WINDOW_TITLE);
     let path = settings_path.to_path_buf();
     let text = text.to_string();
     eframe::run_native(
-        TITLE,
+        instance::WINDOW_TITLE,
         options,
         Box::new(|cc| {
             theme::install_with(&cc.egui_ctx, &PALETTE, &look::METRICS);
