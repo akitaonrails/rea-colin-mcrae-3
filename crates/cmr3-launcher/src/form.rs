@@ -118,39 +118,16 @@ pub struct Form {
 /// from the file or a flag outside these gets a chip of its own
 /// ([`with_saved`]).
 pub const FOVS: [(Option<u32>, &str); 5] = [
-    (None, "As the game"),
+    (None, config::AS_THE_GAME),
     (Some(60), "60°"),
     (Some(75), "75°"),
     (Some(90), "90°"),
     (Some(110), "110°"),
 ];
-pub const FSAAS: [(Option<bool>, &str); 3] = [
-    (None, "As the game"),
-    (Some(true), "On"),
-    (Some(false), "Off"),
-];
 pub const DISPLAY_MODES: [(DisplayMode, &str); 3] = [
     (DisplayMode::Fullscreen, "Fullscreen"),
     (DisplayMode::Windowed, "Windowed"),
     (DisplayMode::Borderless, "Borderless"),
-];
-pub const VSYNCS: [(Option<bool>, &str); 3] = [
-    (None, "As the game"),
-    (Some(true), "On"),
-    (Some(false), "Off"),
-];
-pub const ANISOTROPICS: [(Option<u32>, &str); 6] = [
-    (None, "As the game"),
-    (Some(0), "Off"),
-    (Some(2), "2×"),
-    (Some(4), "4×"),
-    (Some(8), "8×"),
-    (Some(16), "16×"),
-];
-pub const SHADOWS: [(Option<ShadowStyle>, &str); 3] = [
-    (None, "As the game"),
-    (Some(ShadowStyle::Sharp), "Sharp"),
-    (Some(ShadowStyle::Soft), "Soft"),
 ];
 pub const POSTFX: [(Postfx, &str); 3] = [
     (Postfx::Off, "Off"),

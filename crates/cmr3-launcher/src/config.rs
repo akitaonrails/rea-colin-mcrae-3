@@ -268,6 +268,9 @@ pub const POSTFXS: &[(&str, &str)] = &[
     ("cinematic", "Cinematic"),
 ];
 
+/// The window's chip for an unset picture option: the game keeps its own value.
+pub const AS_THE_GAME: &str = "As the game";
+
 /// Every option: one row each for the file, the flags, `--help`, the
 /// template and the window.
 pub const OPTIONS: &[OptionSpec] = &[
@@ -317,21 +320,24 @@ pub const OPTIONS: &[OptionSpec] = &[
         "VSync",
         "Waits for the screen's refresh before showing each frame: no tearing. \
          Unset keeps the game's own choice.",
-    ),
+    )
+    .unset_label(AS_THE_GAME),
     OptionSpec::new(
         "anisotropic",
         Kind::Choice(ANISOTROPICS),
         "Texture sharpness",
         "Anisotropic filtering: keeps the road surface sharp into the distance. \
          Unset keeps the game's.",
-    ),
+    )
+    .unset_label(AS_THE_GAME),
     OptionSpec::new(
         "fsaa",
         Kind::Toggle,
         "Smooth edges",
         "Anti-aliasing: smooths the jagged edges of cars and scenery; costs speed at 4K. \
          Unset keeps the game's.",
-    ),
+    )
+    .unset_label(AS_THE_GAME),
     OptionSpec::new(
         "fov",
         Kind::Range { min: 30, max: 150 },
@@ -346,7 +352,8 @@ pub const OPTIONS: &[OptionSpec] = &[
         "Car shadows",
         "Sharp: the crisper 2005 shadows. Soft: the blurrier 2003 ones. \
          Unset keeps the game's.",
-    ),
+    )
+    .unset_label(AS_THE_GAME),
     OptionSpec::new(
         "hd_ui",
         Kind::Toggle,

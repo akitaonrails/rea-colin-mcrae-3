@@ -11,14 +11,13 @@
 
 use std::path::{Path, PathBuf};
 
-use rea_launcher::cfg::spec::OptionSpec;
 use rea_launcher_ui::egui::{self, Align2, Rect, Response, TextureHandle, pos2, vec2};
 use rea_launcher_ui::spec::{mark_rendered, spec_row, toggle_text};
 use rea_launcher_ui::theme::{body, decal, semibold};
 use rea_launcher_ui::widgets::{self, Chip, Crop, LookCard};
 use rea_launcher_ui::window::Layout;
 
-use crate::config::{self, DisplayMode, Gamepad, Postfx, Scaler, Settings};
+use crate::config::{self, DisplayMode, Gamepad, Postfx, Scaler, Settings, ShadowStyle};
 use crate::edition;
 use crate::form::{self, Form, Look, Picture};
 use crate::look::{self, ERROR, GOLD, INK, MUTED};
@@ -233,17 +232,9 @@ fn status(ui: &mut egui::Ui, state: &State) {
     ui.label(egui::RichText::new(text).font(body(14.0)).color(color));
 }
 
-/// Names a control for screen readers by its option row.
-fn describe(ui: &egui::Ui, response: &Response, row: &OptionSpec) {
-    let (label, description) = (row.label, row.description);
-    ui.ctx().accesskit_node_builder(response.id, |node| {
-        node.set_label(label.to_owned());
-        node.set_description(description.to_owned());
-    });
-}
-
-/// A row of chips for an option whose unset value ("As the game") is a
-/// choice of its own: label, chips, then the row's description.
+/// A row of chips the SDK's `spec_row` can't draw: a choice list built at
+/// run time (the screen's size, a saved value outside the steps) or chips
+/// disabled one by one. Label, chips, then the row's description.
 fn option_chips<T: PartialEq + Clone>(
     ui: &mut egui::Ui,
     key: &'static str,
@@ -257,7 +248,7 @@ fn option_chips<T: PartialEq + Clone>(
         ui.horizontal_top(|ui| {
             widgets::field(ui, row.label);
             let r = widgets::chips_with(ui, chips, value);
-            describe(ui, &r, row);
+            widgets::name_control(&r, Some(row.label), Some(row.description));
             response = Some(r);
         });
         note_under(ui, row.description);
@@ -378,6 +369,20 @@ fn owned<T: Copy>(choices: &[(T, &str)]) -> Vec<(T, String)> {
     choices.iter().map(|(v, l)| (*v, l.to_string())).collect()
 }
 
+/// The `launcher.cfg` text of an optional value: empty when unset.
+fn unset_or(text: Option<&str>) -> &str {
+    text.unwrap_or_default()
+}
+
+/// A tri-state toggle's value from its text (empty: unset).
+fn toggle_of(text: &str) -> Option<bool> {
+    match text {
+        "on" => Some(true),
+        "off" => Some(false),
+        _ => None,
+    }
+}
+
 /// A spec row edited through its `launcher.cfg` text.
 fn spec_choice(ui: &mut egui::Ui, key: &str, current: &str) -> Option<String> {
     let mut text = current.to_string();
@@ -401,22 +406,30 @@ fn picture_tab(ui: &mut egui::Ui, state: &mut State) {
             .find(|m| m.key() == mode)
             .unwrap_or(DisplayMode::Fullscreen);
     }
-    option_chips(ui, "vsync", &chips_of(&owned(&form::VSYNCS)), &mut p.vsync);
-    option_chips(
-        ui,
-        "anisotropic",
-        &chips_of(&owned(&form::ANISOTROPICS)),
-        &mut p.anisotropic,
-    );
-    option_chips(ui, "fsaa", &chips_of(&owned(&form::FSAAS)), &mut p.fsaa);
+    // Toggles and choices with an "As the game" chip (the row's unset
+    // label): the empty text leaves the key unset.
+    if let Some(text) = spec_choice(ui, "vsync", unset_or(p.vsync.map(toggle_text))) {
+        p.vsync = toggle_of(&text);
+    }
+    let level = p.anisotropic.map(|a| match a {
+        0 => "off".to_string(),
+        n => n.to_string(),
+    });
+    if let Some(text) = spec_choice(ui, "anisotropic", unset_or(level.as_deref())) {
+        p.anisotropic = match text.as_str() {
+            "" => None,
+            "off" => Some(0),
+            n => n.parse().ok(),
+        };
+    }
+    if let Some(text) = spec_choice(ui, "fsaa", unset_or(p.fsaa.map(toggle_text))) {
+        p.fsaa = toggle_of(&text);
+    }
     let fovs = form::with_saved(&owned(&form::FOVS), p.fov, |f| format!("{f}°"));
     option_chips(ui, "fov", &chips_of(&fovs), &mut p.fov);
-    option_chips(
-        ui,
-        "shadows",
-        &chips_of(&owned(&form::SHADOWS)),
-        &mut p.shadows,
-    );
+    if let Some(text) = spec_choice(ui, "shadows", unset_or(p.shadows.map(|s| s.key()))) {
+        p.shadows = ShadowStyle::ALL.into_iter().find(|s| s.key() == text);
+    }
     if let Some(on) = spec_choice(ui, "hd_ui", toggle_text(p.hd_ui)) {
         p.hd_ui = on == "on";
     }
@@ -647,6 +660,24 @@ mod tests {
         ui.run();
         assert_eq!(saved(&ui).fsaa, None);
         assert_eq!(ui.state().state.form.look, Look::Original);
+        // The choice rows' unset chips (SDK spec_row): anisotropic and
+        // shadows set, then unset again.
+        press(&mut ui, Role::RadioButton, "8×");
+        press(&mut ui, Role::RadioButton, "Sharp");
+        let s = saved(&ui);
+        assert_eq!(
+            (s.anisotropic, s.shadows),
+            (Some(8), Some(ShadowStyle::Sharp))
+        );
+        for i in [1, 4] {
+            let unset: Vec<_> = ui
+                .get_all_by_role_and_label(Role::RadioButton, "As the game")
+                .collect();
+            unset[i].click(); // vsync, anisotropic, anti-aliasing, fov, shadows
+            ui.run();
+        }
+        let s = saved(&ui);
+        assert_eq!((s.anisotropic, s.shadows), (None, None));
     }
 
     #[test]

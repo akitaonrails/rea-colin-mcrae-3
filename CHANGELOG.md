@@ -46,6 +46,9 @@
 - `cmr3-play --play --scaler fsr …`: the one-run flags are read by the
   SDK's play library (`REA_HELPER_KEYS`) instead of a local copy of
   `launcher.cfg`; `--scaler=fsr` now works too.
+- The VSync, Texture sharpness, Smooth edges and Car shadows rows are the
+  SDK's option rows with an "As the game" chip (it was a local copy).
+  Their descriptions now sit under the label, like Display mode's.
 - The portrait credit follows Wikimedia Commons ("Carolyn" on Flickr,
   CC BY 2.0); `THIRD_PARTY.md` lists every image in the window, README
   and package. README images are JPEG (the 13 MB 4K capture is now a
