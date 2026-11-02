@@ -1,7 +1,7 @@
 name: mirror
 
-# Publishes the exact, checksum-validated third-party downloads to this
-# repository's own `thirdparty` release, so builds keep working if an
+# Publishes the exact, checksum-validated third-party downloads (including
+# the vkBasalt source) to this repository's own `thirdparty` release, so builds keep working if an
 # upstream moves, breaks or disappears (packaging/third-party.txt falls
 # back to these urls). Run after adopting a new pin.
 

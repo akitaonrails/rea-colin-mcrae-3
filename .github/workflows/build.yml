@@ -22,7 +22,8 @@ jobs:
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y gcc-mingw-w64-i686 g++-multilib \
-            glslang-tools libx11-dev libx11-dev:i386 meson ninja-build pkg-config zip
+            glslang-tools spirv-headers libx11-dev libx11-dev:i386 \
+            meson ninja-build pkg-config zip
 
       - name: Install Rust (with the 32-bit Windows target)
         run: |
@@ -138,4 +139,6 @@ jobs:
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes ./*.zip ./*.AppImage
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" --notes-file CHANGELOG.md ./*.zip ./*.AppImage
