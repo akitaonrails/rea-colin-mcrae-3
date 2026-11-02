@@ -303,7 +303,11 @@ fn put_in_place(path: &Path, make: impl FnOnce(&Path) -> io::Result<()>) -> io::
     }
     let tmp = temp_beside(path);
     let _ = fs::remove_file(&tmp);
-    let result = make(&tmp).and_then(|()| match fs::rename(&tmp, path) {
+    // On Windows an antivirus or OneDrive briefly holds a fresh file:
+    // a refused rename is tried again a few times first.
+    let tries = if cfg!(windows) { 5 } else { 1 };
+    let rename = || retrying(tries, Duration::from_millis(100), || fs::rename(&tmp, path));
+    let result = make(&tmp).and_then(|()| match rename() {
         // Windows refuses to replace a read-only file: remove it (std
         // ignores the attribute, never changing it), then rename.
         Err(e) if e.kind() == io::ErrorKind::PermissionDenied && path.exists() => {
@@ -315,6 +319,22 @@ fn put_in_place(path: &Path, make: impl FnOnce(&Path) -> io::Result<()>) -> io::
     // Gone after a rename, except when `path` already was the same file
     // (renaming a link onto itself does nothing).
     let _ = fs::remove_file(&tmp);
+    result
+}
+
+/// Runs `op` up to `tries` times while it is refused (PermissionDenied),
+/// waiting `wait` between tries.
+fn retrying(tries: u32, wait: Duration, mut op: impl FnMut() -> io::Result<()>) -> io::Result<()> {
+    let mut result = op();
+    for _ in 1..tries {
+        match &result {
+            Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
+                std::thread::sleep(wait);
+                result = op();
+            }
+            _ => break,
+        }
+    }
     result
 }
 
@@ -707,6 +727,33 @@ mod tests {
             .collect();
         assert_eq!(names, ["SilentPatchCMR3.ini"]);
         fs::remove_dir_all(&rt).unwrap();
+    }
+
+    #[test]
+    fn refused_renames_are_retried_a_few_times() {
+        let denied = || Err(io::Error::from(io::ErrorKind::PermissionDenied));
+        let mut calls = 0;
+        let r = retrying(5, Duration::ZERO, || {
+            calls += 1;
+            if calls < 3 { denied() } else { Ok(()) }
+        });
+        assert!(r.is_ok());
+        assert_eq!(calls, 3, "held briefly, then free");
+        calls = 0;
+        assert!(
+            retrying(5, Duration::ZERO, || {
+                calls += 1;
+                denied()
+            })
+            .is_err()
+        );
+        assert_eq!(calls, 5);
+        calls = 0;
+        let _ = retrying(5, Duration::ZERO, || {
+            calls += 1;
+            Err(io::Error::from(io::ErrorKind::NotFound))
+        });
+        assert_eq!(calls, 1, "other errors are final");
     }
 
     #[test]
