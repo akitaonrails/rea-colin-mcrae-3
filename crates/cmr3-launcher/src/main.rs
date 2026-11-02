@@ -325,11 +325,9 @@ mod app {
                 Err(e) => log_line(&format!("warning: HD UI off: {e}")),
             }
         }
-        let resolution = settings.display_resolution().or_else(|| {
-            // Unset: SilentPatch's default is the desktop's size; on this
-            // screen that is what the settings window would have picked.
-            win32::screen_size().filter(|_| settings.resolution.is_none())
-        });
+        // Unset: SilentPatch's default is the desktop's size; on this
+        // screen that is what the settings window would have picked.
+        let resolution = settings.resolution.or_else(win32::screen_size);
         // The display mode the game can actually honour here (see
         // `DisplayMode::effective`): exclusive fullscreen under raw Wine
         // chases the desktop's monitor list, so it plays borderless

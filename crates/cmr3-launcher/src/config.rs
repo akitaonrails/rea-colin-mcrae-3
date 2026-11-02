@@ -233,10 +233,6 @@ impl Scaler {
     }
 }
 
-/// Anisotropic filtering levels offered, with their SilentPatch ini value
-/// (the menu index: 0 off, then 2×, 4×, 8×, 16×).
-pub const ANISOTROPIC: [(u32, &str); 5] = [(0, "Off"), (1, "2×"), (2, "4×"), (3, "8×"), (4, "16×")];
-
 pub const FILE_NAME: &str = "launcher.cfg";
 
 /// The file written on first run.
@@ -346,6 +342,7 @@ CMR3Launcher [options]
   --gamepad <preset>       rally, standard (Xidi controller) or off
   --gamepad-log on|off     Xidi's log of what the game and the pad exchange
   --dxvk on|off            DXVK under Wine (Linux only)
+  --scaler <filter>        nearest, pixel, fsr or linear: gamescope's (Linux)
 
 These override launcher.cfg for one run (only --game is remembered).
 Without options the settings window opens first.
@@ -501,7 +498,12 @@ impl Settings {
             runtime: over.runtime.or(self.runtime),
             saves: over.saves.or(self.saves),
             resolution: over.resolution.or(self.resolution),
-            original_resolution: over.original_resolution || self.original_resolution,
+            // Follows whichever resolution won.
+            original_resolution: if over.resolution.is_some() {
+                over.original_resolution
+            } else {
+                self.original_resolution
+            },
             display_mode: over.display_mode.or(self.display_mode),
             vsync: over.vsync.or(self.vsync),
             anisotropic: over.anisotropic.or(self.anisotropic),
@@ -515,12 +517,6 @@ impl Settings {
             scaler: over.scaler.or(self.scaler),
             postfx: over.postfx.or(self.postfx),
         }
-    }
-
-    /// The display resolution to write, if any; `DESKTOP` (in `form`)
-    /// resolves to the screen's size at launch.
-    pub fn display_resolution(&self) -> Option<(u32, u32)> {
-        self.resolution.filter(|&r| r != DESKTOP)
     }
 
     pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Settings, String> {
@@ -553,10 +549,6 @@ impl Settings {
         Ok(s)
     }
 }
-
-/// `resolution = desktop`: the launcher's keyword meaning "the screen's
-/// size"; replaced by real numbers before anything is written.
-pub const DESKTOP: (u32, u32) = (0, 0);
 
 /// Sets `key` in a settings file, keeping every other line (and comments)
 /// as it was: replaces the first active or empty `key =` line, else appends.
@@ -652,12 +644,22 @@ mod tests {
     #[test]
     fn original_is_the_640x480_of_2003() {
         let (s, _) = Settings::parse_file("resolution = original\n");
-        assert_eq!(s.display_resolution(), Some((640, 480)));
+        assert_eq!(s.resolution, Some((640, 480)));
         assert!(s.original_resolution);
         // And it overrides a wider file setting from the command line.
         let (file, _) = Settings::parse_file("resolution = 1920x1080\n");
         let m = file.merged(args(&["--resolution", "original"]).unwrap());
-        assert_eq!(m.display_resolution(), Some((640, 480)));
+        assert_eq!(m.resolution, Some((640, 480)));
+        assert!(m.original_resolution);
+        // A command-line size overrides a file's `original` too.
+        let m = s
+            .clone()
+            .merged(args(&["--resolution", "1920x1080"]).unwrap());
+        assert_eq!(m.resolution, Some((1920, 1080)));
+        assert!(!m.original_resolution);
+        // No resolution on the command line keeps the file's.
+        let m = s.merged(args(&["--vsync", "on"]).unwrap());
+        assert!(m.original_resolution);
     }
 
     #[test]

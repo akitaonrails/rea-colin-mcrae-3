@@ -40,6 +40,8 @@
   whole process group and the prefix's Wine processes. The resolution is
   validated before it reaches gamescope, and the postfx Vulkan layer is
   given to the game only, no longer to gamescope as well.
+- `--resolution 1920x1080` on the command line now wins over a file's
+  `resolution = original` completely, and `--help` lists `--scaler`.
 
 ## [0.1.2] - 2026-11-02
 

@@ -174,7 +174,8 @@ edit by hand. Starting `CMR3Launcher.exe` with any option (for example
 
 Flags: `--game`, `--saves`, `--runtime`, `--resolution`, `--display-mode`,
 `--vsync on|off`, `--anisotropic`, `--fsaa on|off`, `--fov`, `--shadows`,
-`--hd-ui on|off`, `--postfx`, `--gamepad`, `--gamepad-log`, `--dxvk on|off`.
+`--hd-ui on|off`, `--postfx`, `--gamepad`, `--gamepad-log`, `--dxvk on|off`,
+`--scaler`.
 Only `--game` is remembered; the
 others override `launcher.cfg` for one run. `CMR3Launcher.exe --help`
 lists them, and `CMR3Launcher.exe --check --game <folder>` checks a game

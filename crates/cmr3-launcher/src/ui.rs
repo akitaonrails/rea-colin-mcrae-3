@@ -2,11 +2,6 @@
 //! through Wine by `cmr3-play`). What it edits and saves is `form::Form`;
 //! this module only draws it.
 //!
-//! Look: the 555 Impreza livery from the game's cover era, rally blue with
-//! one gold accent for whatever is chosen, and a condensed italic title
-//! like a door decal. Three tabs keep it short: Play (the game folder and
-//! one choice of look), Picture and Controls.
-
 //! Look: the CMR3-era crimson branding — this launcher's own colour next
 //! to the 1998 game's rally blue, both with the one gold accent for
 //! whatever is chosen and a condensed italic title like a door decal, so
