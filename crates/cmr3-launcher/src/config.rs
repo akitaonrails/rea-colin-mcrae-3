@@ -3,10 +3,14 @@
 //! The file is plain `key = value` lines with `#` comments, written once from
 //! a commented template so users can edit it. The launcher later changes
 //! only the lines it owns (`game`), keeping everything else as the user left
-//! it. Unknown keys are ignored so older launchers can read newer files;
-//! values it cannot read are reported and ignored.
+//! it. Unknown keys are reported, ignored and kept, so older launchers can
+//! read newer files; values it cannot read are reported and ignored. The
+//! reading and line editing are the SDK's `rea_launcher::cfg`; the keys,
+//! their values and the template are this game's.
 
 use std::path::PathBuf;
+
+use rea_launcher::cfg::{self, ArgError, Rejected, Resolution, need};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Settings {
@@ -358,25 +362,13 @@ CMR3Launcher --check [--game <folder>]
 Other settings are in launcher.cfg (see the comments in it)."
 );
 
-fn parse_bool(v: &str) -> Option<bool> {
-    match v.to_ascii_lowercase().as_str() {
-        "true" | "yes" | "on" | "1" => Some(true),
-        "false" | "no" | "off" | "0" => Some(false),
-        _ => None,
-    }
-}
-
 /// `WxH` within what a modern screen can hold; `original` is 640×480, the
 /// size the game shipped with.
 fn parse_resolution(v: &str) -> Option<(u32, u32)> {
-    let lower = v.trim().to_ascii_lowercase();
-    if lower == "original" {
-        return Some((640, 480));
+    match cfg::parse_resolution(v, (640, 480), (7680, 4320), cfg::ORIGINAL)? {
+        Resolution::Size(w, h) => Some((w, h)),
+        Resolution::Original | Resolution::Fullscreen => Some((640, 480)),
     }
-    let (w, h) = lower.split_once('x')?;
-    let w: u32 = w.trim().parse().ok()?;
-    let h: u32 = h.trim().parse().ok()?;
-    ((640..=7680).contains(&w) && (480..=4320).contains(&h)).then_some((w, h))
 }
 
 /// An anisotropic level: `off`, or 2, 4, 8, 16.
@@ -402,37 +394,36 @@ pub fn anisotropic_ini(level: Option<u32>) -> Option<u32> {
 }
 
 fn parse_fov(v: &str) -> Option<u32> {
-    let n: u32 = v.trim().parse().ok()?;
-    (30..=150).contains(&n).then_some(n - n % 5)
+    cfg::parse_range(v, 30..=150).map(|n| n - n % 5)
 }
 
-/// Splits `key = value`, ignoring comments and blank values.
-fn entry(line: &str) -> Option<(&str, &str)> {
-    let line = line.trim();
-    if line.starts_with('#') {
-        return None;
-    }
-    let (key, value) = line.split_once('=')?;
-    let value = value.trim();
-    (!value.is_empty()).then_some((key.trim(), value))
-}
+/// Every `launcher.cfg` key (and so every `--flag`) the launcher reads.
+pub const KEYS: [&str; 16] = [
+    "game",
+    "runtime",
+    "saves",
+    "resolution",
+    "display_mode",
+    "vsync",
+    "anisotropic",
+    "fsaa",
+    "fov",
+    "shadows",
+    "hd_ui",
+    "gamepad_log",
+    "gamepad",
+    "dxvk",
+    "postfx",
+    "scaler",
+];
 
-/// Why a setting was not used.
-enum Rejected {
-    /// Not a key this launcher knows.
-    Unknown,
-    /// The values the key takes, for the message.
-    Needs(&'static str),
-}
+/// The launcher's own switches, which take no value.
+pub const SWITCHES: [&str; 4] = ["--settings", "--linux", "--no-window", "--check"];
 
 impl Settings {
     /// Sets one value by its `launcher.cfg` key. The command line's
     /// `--some-key` is `some_key`, so the file and the flags read alike.
     fn apply(&mut self, key: &str, value: &str) -> Result<(), Rejected> {
-        fn need<T>(v: Option<T>, what: &'static str) -> Result<T, Rejected> {
-            v.ok_or(Rejected::Needs(what))
-        }
-        const ON_OFF: &str = "on or off";
         match key {
             "game" => self.game = Some(value.into()),
             "runtime" => self.runtime = Some(value.into()),
@@ -446,21 +437,23 @@ impl Settings {
                 let m = DisplayMode::parse(value);
                 self.display_mode = Some(need(m, "fullscreen, windowed or borderless")?);
             }
-            "vsync" => self.vsync = Some(need(parse_bool(value), ON_OFF)?),
+            "vsync" => self.vsync = Some(need(cfg::parse_bool(value), cfg::ON_OFF)?),
             "anisotropic" => {
                 let a = parse_anisotropic(value);
                 self.anisotropic = Some(need(a, "off, 2, 4, 8 or 16")?);
             }
-            "fsaa" => self.fsaa = Some(need(parse_bool(value), ON_OFF)?),
+            "fsaa" => self.fsaa = Some(need(cfg::parse_bool(value), cfg::ON_OFF)?),
             "fov" => self.fov = Some(need(parse_fov(value), "a number from 30 to 150")?),
             "shadows" => self.shadows = Some(need(ShadowStyle::parse(value), "sharp or soft")?),
-            "hd_ui" => self.hd_ui = Some(need(parse_bool(value), ON_OFF)?),
-            "gamepad_log" => self.gamepad_log = Some(need(parse_bool(value), ON_OFF)?),
+            "hd_ui" => self.hd_ui = Some(need(cfg::parse_bool(value), cfg::ON_OFF)?),
+            "gamepad_log" => {
+                self.gamepad_log = Some(need(cfg::parse_bool(value), cfg::ON_OFF)?);
+            }
             "gamepad" => {
                 let g = Gamepad::parse(value);
                 self.gamepad = Some(need(g, "rally, standard or off")?);
             }
-            "dxvk" => self.dxvk = Some(need(parse_bool(value), ON_OFF)?),
+            "dxvk" => self.dxvk = Some(need(cfg::parse_bool(value), cfg::ON_OFF)?),
             "postfx" => {
                 let p = Postfx::parse(value);
                 self.postfx = Some(need(p, "off, color or cinematic")?);
@@ -477,18 +470,7 @@ impl Settings {
     /// Reads a settings file; the second value lists lines it could not use.
     pub fn parse_file(text: &str) -> (Settings, Vec<String>) {
         let mut s = Settings::default();
-        let mut warnings = Vec::new();
-        for (n, line) in text.lines().enumerate() {
-            let Some((key, value)) = entry(line) else {
-                continue;
-            };
-            if let Err(Rejected::Needs(what)) = s.apply(key, value) {
-                warnings.push(format!(
-                    "{FILE_NAME} line {}: {key} needs {what}, not {value:?}",
-                    n + 1
-                ));
-            }
-        }
+        let warnings = cfg::parse(text, FILE_NAME, |k, v| s.apply(k, v));
         (s, warnings)
     }
 
@@ -520,83 +502,81 @@ impl Settings {
         }
     }
 
-    pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Settings, String> {
+    /// The command line: `--key value` settings and the launcher's own
+    /// [`SWITCHES`] (returned in order), in one pass. Errors carry the
+    /// usage.
+    pub fn parse_args<I: IntoIterator<Item = String>>(
+        args: I,
+    ) -> Result<(Settings, Vec<String>), String> {
         let mut s = Settings::default();
-        let mut args = args.into_iter();
-        while let Some(flag) = args.next() {
-            if matches!(flag.as_str(), "--help" | "-h" | "/?") {
-                return Err(USAGE.into());
-            }
-            let unknown = || format!("unknown argument {flag}\n\n{USAGE}");
-            let key = flag
-                .strip_prefix("--")
-                .ok_or_else(unknown)?
-                .replace('-', "_");
-            let Some(value) = args.next() else {
-                // A known key with its value missing, or no such key.
-                return Err(match Settings::default().apply(&key, "") {
-                    Err(Rejected::Unknown) => unknown(),
-                    _ => format!("{flag} needs a value\n\n{USAGE}"),
-                });
-            };
-            match s.apply(&key, &value) {
-                Ok(()) => {}
-                Err(Rejected::Unknown) => return Err(unknown()),
-                Err(Rejected::Needs(what)) => {
-                    return Err(format!("{flag} needs {what}, not {value}\n\n{USAGE}"));
-                }
-            }
+        match cfg::parse_args(args, &KEYS, &SWITCHES, |k, v| s.apply(k, v)) {
+            Ok(switches) => Ok((s, switches)),
+            Err(ArgError::Help) => Err(USAGE.into()),
+            Err(e) => Err(format!("{e}\n\n{USAGE}")),
         }
-        Ok(s)
     }
 }
 
 /// Sets `key` in a settings file, keeping every other line (and comments)
-/// as it was: replaces the first active or empty `key =` line, else appends.
-pub fn set_key(text: &str, key: &str, value: &str) -> String {
-    let is_key = |line: &str| {
-        let line = line.trim();
-        !line.starts_with('#') && line.split_once('=').is_some_and(|(k, _)| k.trim() == key)
-    };
-    let mut out = String::with_capacity(text.len() + key.len() + value.len() + 4);
-    let mut done = false;
-    for line in text.lines() {
-        if !done && is_key(line) {
-            out.push_str(&format!("{key} = {value}"));
-            done = true;
-        } else {
-            out.push_str(line);
-        }
-        out.push('\n');
-    }
-    if !done {
-        out.push_str(&format!("{key} = {value}\n"));
-    }
-    out
-}
-
-/// Turns `key` off in a settings file: its active line becomes a comment
-/// (`#key = `), so the default applies; other lines are kept.
-pub fn clear_key(text: &str, key: &str) -> String {
-    let mut out = String::with_capacity(text.len() + 2);
-    for line in text.lines() {
-        let t = line.trim();
-        if !t.starts_with('#') && t.split_once('=').is_some_and(|(k, _)| k.trim() == key) {
-            out.push_str(&format!("#{key} ="));
-        } else {
-            out.push_str(line);
-        }
-        out.push('\n');
-    }
-    out
-}
+/// as it was.
+pub use rea_launcher::cfg::{clear_key, set_key};
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn args(a: &[&str]) -> Result<Settings, String> {
-        Settings::parse_args(a.iter().map(|s| s.to_string()))
+        Settings::parse_args(a.iter().map(|s| s.to_string())).map(|(s, _)| s)
+    }
+
+    #[test]
+    fn switches_come_back_in_order_and_values_stay_values() {
+        let (s, switches) = Settings::parse_args(
+            [
+                "--settings",
+                "--linux",
+                "--vsync",
+                "on",
+                "--no-window",
+                "--check",
+            ]
+            .map(String::from),
+        )
+        .unwrap();
+        assert_eq!(
+            switches,
+            ["--settings", "--linux", "--no-window", "--check"]
+        );
+        assert_eq!(s.vsync, Some(true));
+        let (s, switches) = Settings::parse_args(["--game", "--check"].map(String::from)).unwrap();
+        assert!(switches.is_empty());
+        assert_eq!(s.game, Some(PathBuf::from("--check")));
+        let e = args(&["--vsync", "maybe"]).unwrap_err();
+        assert!(
+            e.starts_with("--vsync needs on or off, not maybe\n\nCMR3Launcher"),
+            "{e}"
+        );
+        assert!(
+            args(&["--fov"])
+                .unwrap_err()
+                .starts_with("--fov needs a value")
+        );
+        assert!(
+            args(&["--bogus"])
+                .unwrap_err()
+                .starts_with("unknown argument --bogus")
+        );
+    }
+
+    #[test]
+    fn unknown_keys_are_reported_and_kept() {
+        let (_, warnings) = Settings::parse_file("future = 1\nvsync = on\n");
+        assert_eq!(warnings.len(), 1);
+        assert!(
+            warnings[0].contains("unknown setting \"future\""),
+            "{warnings:?}"
+        );
+        assert!(set_key("future = 1\n", "vsync", "on").contains("future = 1"));
     }
 
     #[test]

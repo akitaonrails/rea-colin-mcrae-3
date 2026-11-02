@@ -49,7 +49,7 @@ Codemasters download — the launcher links to it when a game needs it).
 | File | Licence | Source |
 | --- | --- | --- |
 | `crates/cmr3-launcher/assets/portrait.jpg` — Colin McRae, photo by Carolyn Williams (resized) | CC BY 2.0 (credited in the window) | https://commons.wikimedia.org/wiki/File:Colin_Mcrae_crop.jpg |
-| `crates/cmr3-launcher/assets/fonts/Barlow-*.ttf`, `BarlowCondensed-*.ttf` | SIL OFL 1.1 (`assets/fonts/OFL.txt`) | https://github.com/jpt/barlow |
+| Barlow and Barlow Condensed (`Barlow-*.ttf`, `BarlowCondensed-*.ttf`), bundled by the shared settings-window kit `rea-launcher-ui` (rea-launcher-sdk, `crates/rea-launcher-ui/assets/fonts`) | SIL OFL 1.1 (`OFL.txt` beside the fonts there) | https://github.com/jpt/barlow |
 
 ## Provenance and updates
 

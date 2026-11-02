@@ -10,6 +10,9 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 
+use cmr3_launcher::components::Installed;
+use rea_launcher::identify::{hex, sha256};
+
 fn game() -> PathBuf {
     std::env::var("CMR3_SMOKE_GAME")
         .expect("CMR3_SMOKE_GAME names the game folder")
@@ -27,10 +30,7 @@ fn bundle() -> PathBuf {
 fn identifies_the_real_executable() {
     let exe = std::fs::read(game().join("Rally_3PC.exe")).unwrap();
     println!("{:?}", cmr3_launcher::edition::identify(&exe));
-    println!(
-        "sha256 {}",
-        cmr3_launcher::edition::to_hex(&cmr3_launcher::edition::sha256(&exe))
-    );
+    println!("sha256 {}", hex(&sha256(&exe)));
 }
 
 #[test]
@@ -60,20 +60,25 @@ fn syncs_a_runtime_and_installs_everything() {
         })
         .collect();
 
-    let (brought, linked) = cmr3_launcher::runtime::sync(&game, &rt).unwrap();
+    let r = cmr3_launcher::runtime::sync(&game, &rt).unwrap();
+    let (brought, linked) = (r.brought, r.linked);
     println!("copy run: brought {brought} files ({linked} linked)");
     assert!(brought > 1000, "a full game");
     assert_eq!(linked, 0, "across volumes everything is copied");
     assert!(!game.join(cmr3_launcher::runtime::MANIFEST).is_file());
 
-    let (brought, linked) = cmr3_launcher::runtime::sync(&game, &rt_link).unwrap();
+    let r = cmr3_launcher::runtime::sync(&game, &rt_link).unwrap();
+    let (brought, linked) = (r.brought, r.linked);
     println!("link run: brought {brought} files ({linked} linked)");
     assert!(linked > 1000, "on one volume the data trees hard-link");
     assert!(brought > 1000);
 
     let rt = rt_link;
-    assert!(cmr3_launcher::components::install_silentpatch(&rt, &bundle).unwrap());
-    assert!(
+    assert_eq!(
+        cmr3_launcher::components::install_silentpatch(&game, &rt, &bundle).unwrap(),
+        Installed::Done
+    );
+    assert_eq!(
         cmr3_launcher::components::install_xidi(
             &game,
             &rt,
@@ -81,9 +86,13 @@ fn syncs_a_runtime_and_installs_everything() {
             cmr3_launcher::config::Gamepad::Rally,
             false
         )
-        .unwrap()
+        .unwrap(),
+        Installed::Done
     );
-    assert!(cmr3_launcher::components::install_dxvk(&game, &rt, &bundle, true).unwrap());
+    assert_eq!(
+        cmr3_launcher::components::install_dxvk(&game, &rt, &bundle, true).unwrap(),
+        Installed::Done
+    );
     let hd = cmr3_launcher::components::install_hd_ui(&rt, &bundle).unwrap();
     println!("hd ui: {hd} files");
     assert!(hd > 20);
@@ -127,8 +136,8 @@ fn syncs_a_runtime_and_installs_everything() {
     }
 
     // A second run brings nothing over and stays fast.
-    let (again, _) = cmr3_launcher::runtime::sync(&game, &rt).unwrap();
-    assert_eq!(again, 0);
+    let again = cmr3_launcher::runtime::sync(&game, &rt).unwrap();
+    assert_eq!(again.brought, 0);
     std::fs::remove_dir_all(&rt).unwrap();
     std::fs::remove_dir_all(
         std::env::temp_dir().join(format!("cmr3-smoke-{}", std::process::id())),
@@ -156,7 +165,7 @@ fn bundle_layout_is_complete() {
     }
     assert!(bundle.join("hd-ui").is_dir());
     assert_eq!(
-        cmr3_launcher::edition::to_hex(&file_md5(&bundle.join("xidi/dinput8.dll"))),
+        hex(&file_md5(&bundle.join("xidi/dinput8.dll"))),
         // The Xidi v4.3.1 Win32 build this setup was validated with.
         "ac44d28829d1aa81d1dec4246e2139c4"
     );

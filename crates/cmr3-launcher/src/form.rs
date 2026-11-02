@@ -7,6 +7,8 @@
 //! command line and older launchers read them) and the look is worked out
 //! from them when the window opens.
 
+use rea_launcher::display::{STEAM_DECK_SCREEN, is_steam_deck, landscape};
+
 use crate::config::{self, DisplayMode, Gamepad, Postfx, Scaler, Settings, ShadowStyle};
 
 /// The picture settings the look presets cover.
@@ -79,22 +81,13 @@ impl Picture {
     };
 }
 
-pub const STEAM_DECK_SCREEN: (u32, u32) = (1280, 800);
-
 /// The look to recommend on a screen: Steam Deck on a Deck, else Enhanced.
 pub fn recommended(screen: Option<(u32, u32)>) -> Look {
-    if screen.and_then(landscape) == Some(STEAM_DECK_SCREEN) {
+    if is_steam_deck(screen) {
         Look::SteamDeck
     } else {
         Look::Enhanced
     }
-}
-
-/// A screen size as a landscape display resolution the game can use, or
-/// `None` when it is too small to be worth it.
-fn landscape((a, b): (u32, u32)) -> Option<(u32, u32)> {
-    let (w, h) = (a.max(b) & !1, a.min(b) & !1);
-    (w > 640 && h > 480 && w <= 7680 && h <= 4320).then_some((w, h))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -180,81 +173,6 @@ pub const SCALERS: [(Scaler, &str, &str); 4] = [
         "Plain smoothing. The softest look.",
     ),
 ];
-
-/// What a gamepad does in the settings window, from the XInput buttons
-/// pressed since the last look (`wButtons` bits): Start plays, the d-pad
-/// moves between controls (as Tab and Shift+Tab do), A presses the one in
-/// focus (as Space does), LB and RB change tabs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PadAction {
-    Play,
-    Next,
-    Previous,
-    Press,
-    NextTab,
-    PreviousTab,
-}
-
-pub const PAD_UP: u16 = 0x0001;
-pub const PAD_DOWN: u16 = 0x0002;
-pub const PAD_LEFT: u16 = 0x0004;
-pub const PAD_RIGHT: u16 = 0x0008;
-pub const PAD_START: u16 = 0x0010;
-pub const PAD_LB: u16 = 0x0100;
-pub const PAD_RB: u16 = 0x0200;
-pub const PAD_A: u16 = 0x1000;
-
-/// The actions of the buttons in `now` that were not held in `before`.
-pub fn pad_actions(before: u16, now: u16) -> Vec<PadAction> {
-    let pressed = now & !before;
-    [
-        (PAD_START, PadAction::Play),
-        (PAD_DOWN, PadAction::Next),
-        (PAD_RIGHT, PadAction::Next),
-        (PAD_UP, PadAction::Previous),
-        (PAD_LEFT, PadAction::Previous),
-        (PAD_A, PadAction::Press),
-        (PAD_RB, PadAction::NextTab),
-        (PAD_LB, PadAction::PreviousTab),
-    ]
-    .into_iter()
-    .filter(|(bit, _)| pressed & bit != 0)
-    .map(|(_, action)| action)
-    .collect()
-}
-
-/// The settings window's design size in points.
-pub const WINDOW: (f32, f32) = (880.0, 704.0);
-
-/// How much larger to draw the window on a screen (`screen` in pixels,
-/// `native` the system's own scale, 1.0 under Wine unless its DPI is set):
-/// 1x up to 1440 pixels on the shorter side, then in step with it (1.5x at
-/// 4K); never below the system's scale and never larger than 90 % of the
-/// screen. In steps of 0.05.
-pub fn window_zoom(screen: Option<(u32, u32)>, native: f32) -> f32 {
-    let native = if native > 0.0 { native } else { 1.0 };
-    let Some((w, h)) = screen else {
-        return 1.0;
-    };
-    let (w, h) = (w as f32, h as f32);
-    let fit = 0.9 * (w / WINDOW.0).min(h / WINDOW.1);
-    let target = (w.min(h) / 1440.0).max(1.0).min(fit);
-    let zoom = (target / native).max(1.0);
-    (zoom * 20.0).round() / 20.0
-}
-
-/// The zoom the settings window is created with. Under Wine it is the
-/// final one (XWayland can lose a resize sent after the window exists),
-/// with Wine's own DPI scale (`native`, 1.5 at 144 DPI) divided out, as
-/// Wine multiplies the window by it. On Windows the system's DPI scaling
-/// sizes the window, so it is 1x.
-pub fn creation_zoom(wine: bool, screen: Option<(u32, u32)>, native: f32) -> f32 {
-    if wine {
-        window_zoom(screen, native)
-    } else {
-        1.0
-    }
-}
 
 /// Display resolutions offered: the screen's, the common sizes, and the
 /// original 640×480.
@@ -554,33 +472,6 @@ mod tests {
     }
 
     #[test]
-    fn the_window_grows_with_the_screen() {
-        assert_eq!(window_zoom(Some((1920, 1080)), 1.0), 1.0);
-        assert_eq!(window_zoom(Some((3840, 2160)), 1.0), 1.5);
-        assert_eq!(window_zoom(Some((3840, 2160)), 1.5), 1.0);
-        assert_eq!(window_zoom(Some((1280, 800)), 1.0), 1.0);
-        assert_eq!(window_zoom(None, 1.0), 1.0);
-    }
-
-    #[test]
-    fn under_wine_the_window_is_created_at_its_final_size() {
-        // Wine's default 96 DPI: as before, 1.5x at 4K.
-        assert_eq!(creation_zoom(true, Some((3840, 2160)), 1.0), 1.5);
-        assert_eq!(creation_zoom(true, Some((1920, 1080)), 1.0), 1.0);
-        // Wine at 144 or 192 DPI already scales the window: never zoomed
-        // on top of that (it was 2.25x and 3x, taller than a 4K screen).
-        assert_eq!(creation_zoom(true, Some((3840, 2160)), 1.5), 1.0);
-        assert_eq!(creation_zoom(true, Some((3840, 2160)), 2.0), 1.0);
-        for dpi in [96.0, 120.0, 144.0, 192.0] {
-            let native = dpi / 96.0;
-            let zoom = creation_zoom(true, Some((3840, 2160)), native);
-            assert!(WINDOW.1 * zoom * native <= 2160.0, "{dpi} DPI");
-        }
-        // Windows: the system's DPI scaling sizes the window.
-        assert_eq!(creation_zoom(false, Some((3840, 2160)), 1.5), 1.0);
-    }
-
-    #[test]
     fn resolutions_list_the_screen_once() {
         let r = resolutions(Some((2560, 1600)));
         assert_eq!(r[0], (Some((2560, 1600)), "Screen 2560×1600".to_string()));
@@ -597,17 +488,5 @@ mod tests {
                 .count(),
             1
         );
-    }
-
-    #[test]
-    fn gamepad_buttons_act_once_per_press() {
-        assert_eq!(pad_actions(0, PAD_START), [PadAction::Play]);
-        assert_eq!(pad_actions(PAD_START, PAD_START), []);
-        assert_eq!(
-            pad_actions(0, PAD_DOWN | PAD_A),
-            [PadAction::Next, PadAction::Press]
-        );
-        assert_eq!(pad_actions(0, PAD_RB), [PadAction::NextTab]);
-        assert_eq!(pad_actions(PAD_A, 0), []);
     }
 }

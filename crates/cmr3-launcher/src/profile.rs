@@ -18,7 +18,7 @@
 
 use std::{fs, io, path::Path};
 
-use crate::runtime;
+use rea_launcher::fsx;
 
 /// The size of every profile the game writes.
 pub const SIZE: usize = 0x42A28;
@@ -104,7 +104,7 @@ pub fn choose_first_controller_in(path: &Path) -> io::Result<bool> {
     if !choose_first_controller(&mut profile) {
         return Ok(false);
     }
-    runtime::install(path, &profile)?;
+    fsx::install(path, &profile)?;
     Ok(true)
 }
 

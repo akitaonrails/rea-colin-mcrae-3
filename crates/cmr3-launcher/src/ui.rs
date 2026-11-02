@@ -1,40 +1,26 @@
 //! The settings window: one window for Windows and for Linux (shown
 //! through Wine by `cmr3-play`). What it edits and saves is `form::Form`;
-//! this module only draws it.
+//! this module only draws it, with the SDK's widgets (`rea_launcher_ui`)
+//! in CMR3's colours (`look`).
 //!
-//! Look: the CMR3-era crimson branding — this launcher's own colour next
-//! to the 1998 game's rally blue, both with the one gold accent for
-//! whatever is chosen and a condensed italic title like a door decal, so
-//! the two read as one collection. Three tabs keep it short: Play (the
-//! game folder and one choice of look), Picture and Controls.
+//! Three tabs keep it short: Play (the game folder and one choice of look),
+//! Picture and Controls.
 
 use std::path::{Path, PathBuf};
 
 use cmr3_launcher::config::Settings;
 use cmr3_launcher::edition;
-use cmr3_launcher::form::{self, Form, Look, PadAction, Picture};
+use cmr3_launcher::form::{self, Form, Look, Picture};
+use cmr3_launcher::look::{self, ERROR, GOLD, INK, MUTED, PALETTE};
 use cmr3_launcher::xidi;
-use eframe::egui::{
-    self, Align2, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Key, Mesh,
-    Rect, Sense, Shape, Stroke, StrokeKind, TextureHandle, Vec2, pos2, vec2,
-};
+use eframe::egui::{self, Align2, Key, Rect, TextureHandle, pos2, vec2};
+use rea_launcher_ui::pad::{self, Nav, PadNav};
+use rea_launcher_ui::theme::{self, body, decal, semibold};
+use rea_launcher_ui::widgets::{self, Crop, LookCard};
+use rea_launcher_ui::window::{Layout, WindowFit};
+use rea_launcher_win32::{dialog, display, wine, xinput};
 
-use crate::win32;
-
-/// The family palette: CMR1 is the 555 Impreza's rally blue, this one the
-/// CMR3-era crimson; the gold accent, ink and muted roles are shared so
-/// the launchers read as one collection.
-const BASE: Color32 = Color32::from_rgb(0x54, 0x10, 0x1c);
-const PANEL: Color32 = Color32::from_rgb(0x69, 0x18, 0x2a);
-const LINE: Color32 = Color32::from_rgb(0x8a, 0x2a, 0x42);
-const GOLD: Color32 = Color32::from_rgb(0xf5, 0xc4, 0x00);
-const INK: Color32 = Color32::from_rgb(0xf7, 0xf0, 0xf2);
-const MUTED: Color32 = Color32::from_rgb(0xd6, 0xaa, 0xb6);
-const ON_GOLD: Color32 = Color32::from_rgb(0x2b, 0x0d, 0x18);
-const ERROR: Color32 = Color32::from_rgb(0xff, 0x8a, 0x80);
-
-const SIZE: Vec2 = vec2(form::WINDOW.0, form::WINDOW.1);
-const PHOTO_W: f32 = 300.0;
+const TITLE: &str = "Colin McRae Rally 3";
 
 /// How the window was left.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,45 +37,29 @@ pub enum Outcome {
 /// without it.
 pub fn show(settings_path: &Path, text: &str, linux: bool) -> Result<Outcome, String> {
     let mut outcome = Outcome::Closed;
-    // The window is created at its final size: resizing after creation
-    // (min/max/inner size commands) leaves an XWayland window under Wine
-    // with a surface that no longer matches what winit thinks it asked
-    // for — the picture lands in the top left and clicks map to the wrong
-    // places. Under Wine the design size is multiplied up front instead,
-    // with Wine's own DPI scale divided out (Wine multiplies the window by
-    // it; 1 at its default 96 DPI); on Windows the system's own DPI
-    // scaling does that, and winit sizes in points.
-    let wine = win32::is_wine();
-    let native = if wine { win32::wine_dpi_scale() } else { 1.0 };
-    let zoom = form::creation_zoom(wine, win32::screen_size(), native);
-    let size = SIZE * zoom;
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title("Colin McRae Rally 3")
-            .with_inner_size(size)
-            .with_min_inner_size(size)
-            .with_max_inner_size(size)
-            .with_resizable(false)
-            .with_maximize_button(false),
-        // Under Wine the desktop's window manager places it (on the
-        // monitor in use); Wine's idea of the main screen can be another
-        // monitor.
-        centered: !wine,
-        ..Default::default()
-    };
+    // Under Wine the window is created at its final size, with Wine's own
+    // DPI scale divided out (resizing after creation breaks the surface on
+    // XWayland); on Windows it is fitted to the DPI on the first frame.
+    // The scale is read first: it makes the process DPI aware under Wine.
+    let wine = wine::is_wine();
+    let wine_scale = display::wine_dpi_scale();
+    let screen = display::screen_size();
+    let fit = WindowFit::new(look::SIZE, wine, screen, wine_scale);
+    let options = fit.native_options(TITLE);
     let path = settings_path.to_path_buf();
     let text = text.to_string();
     eframe::run_native(
-        "Colin McRae Rally 3",
+        TITLE,
         options,
         Box::new(|cc| {
-            set_style(&cc.egui_ctx);
+            theme::install(&cc.egui_ctx, &PALETTE);
             Ok(Box::new(Window::new(
                 &cc.egui_ctx,
                 path,
                 text,
                 linux,
-                zoom,
+                screen,
+                fit,
                 &mut outcome,
             )))
         }),
@@ -98,78 +68,7 @@ pub fn show(settings_path: &Path, text: &str, linux: bool) -> Result<Outcome, St
     Ok(outcome)
 }
 
-fn set_style(ctx: &egui::Context) {
-    let mut fonts = FontDefinitions::default();
-    let font = |bytes: &'static [u8]| std::sync::Arc::new(FontData::from_static(bytes));
-    fonts.font_data.insert(
-        "barlow".into(),
-        font(include_bytes!("../assets/fonts/Barlow-Regular.ttf")),
-    );
-    fonts.font_data.insert(
-        "barlow-semibold".into(),
-        font(include_bytes!("../assets/fonts/Barlow-SemiBold.ttf")),
-    );
-    fonts.font_data.insert(
-        "condensed".into(),
-        font(include_bytes!(
-            "../assets/fonts/BarlowCondensed-SemiBold.ttf"
-        )),
-    );
-    fonts.font_data.insert(
-        "decal".into(),
-        font(include_bytes!(
-            "../assets/fonts/BarlowCondensed-BlackItalic.ttf"
-        )),
-    );
-    // Barlow everywhere (egui's own fonts are left out to keep the
-    // launcher small); the named families are the other weights.
-    for family in [FontFamily::Proportional, FontFamily::Monospace] {
-        fonts.families.insert(family, vec!["barlow".into()]);
-    }
-    for name in ["barlow-semibold", "condensed", "decal"] {
-        fonts.families.insert(
-            FontFamily::Name(name.into()),
-            vec![name.into(), "barlow".into()],
-        );
-    }
-    ctx.set_fonts(fonts);
-
-    // One look whatever the system theme is.
-    ctx.set_theme(egui::Theme::Dark);
-    ctx.all_styles_mut(|style| {
-        let v = &mut style.visuals;
-        *v = egui::Visuals::dark();
-        v.panel_fill = BASE;
-        v.extreme_bg_color = PANEL;
-        v.text_edit_bg_color = Some(PANEL);
-        v.override_text_color = Some(INK);
-        v.selection.bg_fill = GOLD.gamma_multiply(0.5);
-        v.selection.stroke = Stroke::new(1.0, GOLD);
-        v.text_cursor.stroke = Stroke::new(2.0, GOLD);
-        for w in [
-            &mut v.widgets.inactive,
-            &mut v.widgets.hovered,
-            &mut v.widgets.active,
-            &mut v.widgets.open,
-        ] {
-            w.bg_stroke = Stroke::new(1.0, LINE);
-            w.corner_radius = CornerRadius::same(6);
-        }
-        v.widgets.hovered.bg_stroke = Stroke::new(1.0, MUTED);
-        v.widgets.active.bg_stroke = Stroke::new(1.0, GOLD);
-        style.spacing.item_spacing = vec2(8.0, 8.0);
-    });
-}
-
-fn font(size: f32) -> FontId {
-    FontId::new(size, FontFamily::Proportional)
-}
-
-fn named(name: &str, size: f32) -> FontId {
-    FontId::new(size, FontFamily::Name(name.into()))
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Tab {
     Play,
     Picture,
@@ -235,15 +134,11 @@ struct Window<'a> {
     path: PathBuf,
     text: String,
     error: Option<String>,
-    /// The drawing scale chosen in `show` (1.0 on Windows, where the
-    /// system's DPI scaling sizes the window).
-    zoom: f32,
-    /// Whether the scale has been set (first frame).
-    sized: bool,
-    /// The gamepad buttons held at the last look, and what pressing them
-    /// asks of this frame.
-    pad_held: u16,
-    pad_actions: Vec<PadAction>,
+    fit: WindowFit,
+    /// Gamepad edges, and the launcher's own steps (Play, tabs) waiting
+    /// for this frame.
+    pad: PadNav,
+    pending: Vec<Nav>,
     outcome: &'a mut Outcome,
 }
 
@@ -253,10 +148,10 @@ impl<'a> Window<'a> {
         path: PathBuf,
         text: String,
         linux: bool,
-        zoom: f32,
+        screen: Option<(u32, u32)>,
+        fit: WindowFit,
         outcome: &'a mut Outcome,
     ) -> Window<'a> {
-        let screen = win32::screen_size();
         let settings = Settings::parse_file(&text).0;
         let form = if Form::is_first_run(&settings) {
             Form::first_run(&settings, screen)
@@ -271,34 +166,16 @@ impl<'a> Window<'a> {
             tab: Tab::Play,
             screen,
             resolutions: form::resolutions(screen),
-            pads: win32::xinput_pads().len(),
+            pads: xinput::connected(),
             linux,
-            portrait: load_portrait(ctx),
+            portrait: widgets::load_jpeg(ctx, "portrait", include_bytes!("../assets/portrait.jpg")),
             path,
             text,
             error: None,
-            zoom,
-            sized: false,
-            pad_held: 0,
-            pad_actions: Vec::new(),
+            fit,
+            pad: PadNav::default(),
+            pending: Vec::new(),
             outcome,
-        }
-    }
-
-    /// Sets the drawing scale on the first frame (the window itself was
-    /// created at its final size — no resizing after creation, which
-    /// breaks the surface on XWayland under Wine; see `show`).
-    fn fit_screen(&mut self, ctx: &egui::Context) {
-        self.sized = true;
-        if self.zoom != 1.0 {
-            ctx.set_zoom_factor(self.zoom);
-        }
-        if !win32::is_wine()
-            && let Some(monitor) = ctx.input(|i| i.viewport().monitor_size)
-        {
-            let size = SIZE * self.zoom;
-            let at = ((monitor - size) / 2.0).max(Vec2::ZERO);
-            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(at.to_pos2()));
         }
     }
 
@@ -312,10 +189,7 @@ impl<'a> Window<'a> {
             return;
         }
         let saved = self.form.save(&self.text);
-        if let Some(dir) = self.path.parent() {
-            let _ = std::fs::create_dir_all(dir);
-        }
-        match std::fs::write(&self.path, saved) {
+        match rea_launcher::fsx::write_atomic(&self.path, saved) {
             Ok(()) => {
                 *self.outcome = Outcome::Play;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -325,76 +199,38 @@ impl<'a> Window<'a> {
     }
 }
 
-fn load_portrait(ctx: &egui::Context) -> Option<TextureHandle> {
-    let mut decoder = jpeg_decoder::Decoder::new(&include_bytes!("../assets/portrait.jpg")[..]);
-    let rgb = decoder.decode().ok()?;
-    let info = decoder.info()?;
-    let size = [usize::from(info.width), usize::from(info.height)];
-    (rgb.len() == size[0] * size[1] * 3).then(|| {
-        ctx.load_texture(
-            "portrait",
-            egui::ColorImage::from_rgb(size, &rgb),
-            egui::TextureOptions::LINEAR,
-        )
-    })
-}
-
 impl eframe::App for Window<'_> {
-    /// The gamepad, as keys: the d-pad moves the focus (Tab, Shift+Tab), A
-    /// presses the control in focus (Space); Start and LB/RB are handled in
-    /// `ui`, which also asks for the next look.
-    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
-        let now = win32::xinput_buttons();
-        self.pad_actions = form::pad_actions(self.pad_held, now);
-        self.pad_held = now;
-        for action in &self.pad_actions {
-            let (key, modifiers) = match action {
-                PadAction::Next => (Key::Tab, egui::Modifiers::NONE),
-                PadAction::Previous => (Key::Tab, egui::Modifiers::SHIFT),
-                PadAction::Press => (Key::Space, egui::Modifiers::NONE),
-                _ => continue,
-            };
-            for pressed in [true, false] {
-                raw.events.push(egui::Event::Key {
-                    key,
-                    physical_key: None,
-                    pressed,
-                    repeat: false,
-                    modifiers,
-                });
-            }
-        }
+    /// The gamepad, as keys: the d-pad moves the focus, A presses the
+    /// control in focus; Start and LB/RB are handled in `ui`.
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
+        let navs = self.pad.update(xinput::buttons());
+        pad::inject(ctx, raw, &navs);
+        self.pending.extend(navs);
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
-        if !self.sized {
-            self.fit_screen(&ctx);
-        }
+        self.fit.first_frame(&ctx);
         let full = ui.max_rect();
-        ui.painter().rect_filled(full, 0.0, BASE);
-        self.draw_photo(ui, full);
-        draw_decal(ui, full);
+        ui.painter().rect_filled(full, 0.0, look::BASE);
+        let layout = Layout::new(full, look::PHOTO_W);
+        self.draw_photo(ui, layout.photo);
+        widgets::stripes(ui.painter(), full, &look::stripes());
 
-        let content = Rect::from_min_max(
-            pos2(full.left() + PHOTO_W + 12.0, full.top() + 24.0),
-            pos2(full.right() - 32.0, full.bottom() - 24.0),
-        );
-        let footer_h = 52.0;
-        let body = Rect::from_min_max(
-            content.min,
-            pos2(content.right(), content.bottom() - footer_h - 16.0),
-        );
-        ui.scope_builder(egui::UiBuilder::new().max_rect(body), |ui| {
-            ui.label(
-                egui::RichText::new("Colin McRae Rally 3")
-                    .font(named("decal", 46.0))
-                    .color(INK),
-            );
+        ui.scope_builder(egui::UiBuilder::new().max_rect(layout.body), |ui| {
+            ui.label(egui::RichText::new(TITLE).font(decal(46.0)).color(INK));
             ui.add_space(-6.0);
             self.status(ui);
             ui.add_space(6.0);
-            self.tabs(ui);
+            widgets::tabs_bar(
+                ui,
+                &[
+                    (Tab::Play, "Play"),
+                    (Tab::Picture, "Picture"),
+                    (Tab::Controls, "Controls"),
+                ],
+                &mut self.tab,
+            );
             ui.add_space(14.0);
             match self.tab {
                 Tab::Play => self.play_tab(ui),
@@ -402,22 +238,23 @@ impl eframe::App for Window<'_> {
                 Tab::Controls => self.controls_tab(ui),
             }
         });
-        let footer = Rect::from_min_max(
-            pos2(content.left(), content.bottom() - footer_h),
-            content.max,
-        );
-        self.footer(ui, footer, &ctx);
+        let hint =
+            "Your game folder is only read; everything the launcher adds goes to its own copy.";
+        if widgets::footer(ui, layout.footer, hint, self.ready()).clicked() {
+            self.play(&ctx);
+        }
 
         if ctx.input(|i| i.key_pressed(Key::Enter)) && !ctx.egui_wants_keyboard_input() {
             self.play(&ctx);
         }
         // A pad sends no events: look again soon.
         ctx.request_repaint_after(std::time::Duration::from_millis(50));
-        for action in std::mem::take(&mut self.pad_actions) {
-            match action {
-                PadAction::Play => self.play(&ctx),
-                PadAction::NextTab => self.tab = self.tab.step(1),
-                PadAction::PreviousTab => self.tab = self.tab.step(-1),
+        // Taken, so a second egui pass in one frame can't play twice.
+        for nav in std::mem::take(&mut self.pending) {
+            match nav {
+                Nav::Play => self.play(&ctx),
+                Nav::NextTab => self.tab = self.tab.step(1),
+                Nav::PreviousTab => self.tab = self.tab.step(-1),
                 _ => {}
             }
         }
@@ -429,56 +266,31 @@ impl eframe::App for Window<'_> {
 }
 
 impl Window<'_> {
-    fn draw_photo(&self, ui: &egui::Ui, full: Rect) {
-        let rect = Rect::from_min_size(full.min, vec2(PHOTO_W, full.height()));
+    fn draw_photo(&self, ui: &egui::Ui, rect: Rect) {
         let p = ui.painter();
-        if let Some(tex) = &self.portrait {
-            // Fill the height; keep the left of the picture (Colin's face).
-            let [w, h] = tex.size();
-            let shown_w = rect.height() * w as f32 / h as f32;
-            let u = (rect.width() / shown_w).min(1.0);
-            p.image(
-                tex.id(),
-                rect,
-                Rect::from_min_max(pos2(0.0, 0.0), pos2(u, 1.0)),
-                Color32::WHITE,
-            );
-        }
-        // Blue fades join the photo to the page.
-        gradient(
-            p,
-            Rect::from_min_max(
-                pos2(rect.left() + rect.width() * 0.55, rect.top()),
-                rect.max,
-            ),
-            true,
-        );
-        gradient(
-            p,
-            Rect::from_min_max(pos2(rect.left(), rect.bottom() - 130.0), rect.max),
-            false,
-        );
+        // Fill the height; keep the left of the picture (Colin's face).
+        widgets::hero_image(p, rect, self.portrait.as_ref(), Crop::Start, look::BASE);
         let x = rect.left() + 20.0;
         let y = rect.bottom() - 20.0;
         p.text(
             pos2(x, y),
             Align2::LEFT_BOTTOM,
             "Photo: Carolyn Williams, CC BY 2.0",
-            font(11.0),
+            body(11.0),
             MUTED,
         );
         p.text(
             pos2(x, y - 16.0),
             Align2::LEFT_BOTTOM,
             "1968–2007, World Rally Champion 1995",
-            font(13.0),
+            body(13.0),
             MUTED,
         );
         p.text(
             pos2(x, y - 34.0),
             Align2::LEFT_BOTTOM,
             "Colin McRae",
-            named("barlow-semibold", 19.0),
+            semibold(19.0),
             INK,
         );
     }
@@ -497,61 +309,19 @@ impl Window<'_> {
                 MUTED,
             ),
         };
-        ui.label(egui::RichText::new(text).font(font(14.0)).color(color));
-    }
-
-    fn tabs(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 26.0;
-            for (tab, name) in [
-                (Tab::Play, "Play"),
-                (Tab::Picture, "Picture"),
-                (Tab::Controls, "Controls"),
-            ] {
-                let on = self.tab == tab;
-                let galley = ui.painter().layout_no_wrap(
-                    name.to_string(),
-                    named("condensed", 22.0),
-                    if on { INK } else { MUTED },
-                );
-                let (rect, resp) =
-                    ui.allocate_exact_size(galley.size() + vec2(0.0, 8.0), Sense::click());
-                let color = if on || resp.hovered() { INK } else { MUTED };
-                ui.painter().galley(rect.min, galley, color);
-                if on {
-                    let bar = Rect::from_min_size(
-                        pos2(rect.left(), rect.bottom() - 3.0),
-                        vec2(rect.width(), 3.0),
-                    );
-                    ui.painter().rect_filled(bar, 0.0, GOLD);
-                }
-                if resp
-                    .on_hover_cursor(egui::CursorIcon::PointingHand)
-                    .clicked()
-                {
-                    self.tab = tab;
-                }
-            }
-        });
-        let y = ui.cursor().top() - 4.0;
-        let r = ui.max_rect();
-        ui.painter()
-            .hline(r.left()..=r.right(), y, Stroke::new(1.0, LINE));
+        ui.label(egui::RichText::new(text).font(body(14.0)).color(color));
     }
 
     fn play_tab(&mut self, ui: &mut egui::Ui) {
-        heading(ui, "Game folder");
+        widgets::heading(ui, "Game folder");
         let game_hint = if self.linux {
             "The folder with your Rally_3PC.exe, e.g. Z:\\home\\you\\Games\\Colin McRae Rally 3"
         } else {
             "The folder with your installed Rally_3PC.exe"
         };
-        if folder_field(
-            ui,
-            &mut self.form.game,
-            game_hint,
-            "Choose the folder with your Rally_3PC.exe",
-        ) {
+        if widgets::folder_field(ui, &mut self.form.game, game_hint, || {
+            dialog::pick_folder("Choose the folder with your Rally_3PC.exe")
+        }) {
             self.error = None;
         }
         let (note, color) = match &self.check {
@@ -566,10 +336,10 @@ impl Window<'_> {
             ),
             Check::Problem(p) => (p.clone(), ERROR),
         };
-        ui.label(egui::RichText::new(note).font(font(13.0)).color(color));
+        ui.label(egui::RichText::new(note).font(body(13.0)).color(color));
         ui.add_space(10.0);
 
-        heading(ui, "Look");
+        widgets::heading(ui, "Look");
         ui.add_space(6.0);
         let enhanced_note = match Picture::enhanced(self.screen).resolution {
             Some((w, h)) => format!("{w}×{h}, widescreen, HD UI."),
@@ -599,14 +369,15 @@ impl Window<'_> {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = gap;
             for (look, title, note) in cards {
-                if look_card(
-                    ui,
-                    vec2(w, 104.0),
-                    self.form.look == look,
+                let card = LookCard {
                     title,
-                    &note,
-                    look == best,
-                ) {
+                    note: &note,
+                    detail: None,
+                    selected: self.form.look == look,
+                    badge: (look == best).then_some("Recommended"),
+                    title_size: 0.0,
+                };
+                if widgets::look_card(ui, vec2(w, 104.0), &card).clicked() {
                     self.form.set_look(look, self.screen);
                     if look == Look::Custom {
                         self.tab = Tab::Picture;
@@ -616,20 +387,17 @@ impl Window<'_> {
         });
         ui.add_space(14.0);
 
-        heading(ui, "Profile");
-        folder_field(
+        widgets::heading(ui, "Profile");
+        widgets::folder_field(
             ui,
             &mut self.form.saves,
             "Saved Games\\Colin McRae Rally 3 (the default)",
-            "Choose where your profile is kept",
+            || dialog::pick_folder("Choose where your profile is kept"),
         );
-        ui.label(
-            egui::RichText::new(
-                "Leave empty for the default. The game's CMR3 profile file is copied in before \
-                 the game starts and back when it ends.",
-            )
-            .font(font(13.0))
-            .color(MUTED),
+        widgets::note(
+            ui,
+            "Leave empty for the default. The game's CMR3 profile file is copied in before \
+             the game starts and back when it ends.",
         );
     }
 
@@ -640,12 +408,12 @@ impl Window<'_> {
             let resolutions = &self.resolutions;
             let row = |ui: &mut egui::Ui, name: &str, add: &mut dyn FnMut(&mut egui::Ui)| {
                 ui.horizontal_top(|ui| {
-                    field(ui, name);
+                    widgets::field(ui, name);
                     ui.vertical(|ui| add(ui));
                 });
             };
             row(ui, "Resolution", &mut |ui| {
-                chips(ui, resolutions, &mut p.resolution);
+                widgets::chips(ui, resolutions, &mut p.resolution, None);
                 if p.resolution == Some((640, 480)) {
                     p.original = true;
                 } else if p.resolution.is_some() {
@@ -653,31 +421,33 @@ impl Window<'_> {
                 }
             });
             row(ui, "Display mode", &mut |ui| {
-                chips(ui, &form::DISPLAY_MODES, &mut p.display_mode);
+                widgets::chips(ui, &form::DISPLAY_MODES, &mut p.display_mode, None);
             });
             row(ui, "Vsync", &mut |ui| {
-                chips(ui, &form::VSYNCS, &mut p.vsync);
+                widgets::chips(ui, &form::VSYNCS, &mut p.vsync, None);
             });
             row(ui, "Anisotropic", &mut |ui| {
-                chips(ui, &form::ANISOTROPICS, &mut p.anisotropic);
+                widgets::chips(ui, &form::ANISOTROPICS, &mut p.anisotropic, None);
             });
             row(ui, "Field of view", &mut |ui| {
-                chips(ui, &form::FOVS, &mut p.fov);
+                widgets::chips(ui, &form::FOVS, &mut p.fov, None);
             });
             row(ui, "Shadows", &mut |ui| {
-                chips(ui, &form::SHADOWS, &mut p.shadows);
+                widgets::chips(ui, &form::SHADOWS, &mut p.shadows, None);
             });
             row(ui, "", &mut |ui| {
-                toggle(
+                widgets::toggle(
                     ui,
                     &mut p.hd_ui,
                     "HD UI: fonts and race graphics redrawn for 4K (Bekoha)",
+                    None,
                 );
                 let mut fsaa = p.fsaa.unwrap_or(false);
-                toggle(
+                widgets::toggle(
                     ui,
                     &mut fsaa,
                     "Anti-aliasing (its rendering bugs are fixed)",
+                    None,
                 );
                 p.fsaa = Some(fsaa);
             });
@@ -685,29 +455,26 @@ impl Window<'_> {
                 let scaler = &mut self.form.scaler;
                 row(ui, "Scaler", &mut |ui| {
                     let options: Vec<_> = form::SCALERS.iter().map(|s| (s.0, s.1)).collect();
-                    chips(ui, &options, scaler);
+                    widgets::chips(ui, &options, scaler, None);
                     let note = form::SCALERS
                         .iter()
                         .find(|s| s.0 == *scaler)
                         .map_or("", |s| s.2);
-                    ui.label(egui::RichText::new(note).font(font(13.0)).color(MUTED));
+                    widgets::note(ui, note);
                 });
                 let dxvk = self.form.dxvk;
                 row(ui, "Post-processing", &mut |ui| {
-                    chips(ui, &form::POSTFX, &mut self.form.picture.postfx);
+                    widgets::chips(ui, &form::POSTFX, &mut self.form.picture.postfx, None);
                     if !dxvk {
-                        ui.label(
-                            egui::RichText::new("Needs DXVK (it works on the game's Vulkan)")
-                                .font(font(13.0))
-                                .color(MUTED),
-                        );
+                        widgets::note(ui, "Needs DXVK (it works on the game's Vulkan)");
                     }
                 });
                 row(ui, "", &mut |ui| {
-                    toggle(
+                    widgets::toggle(
                         ui,
                         &mut self.form.dxvk,
                         "DXVK: draw through Vulkan instead of Wine's OpenGL translator",
+                        None,
                     );
                 });
             }
@@ -720,319 +487,23 @@ impl Window<'_> {
     fn controls_tab(&mut self, ui: &mut egui::Ui) {
         let gamepad = &mut self.form.gamepad;
         ui.horizontal_top(|ui| {
-            field(ui, "Gamepad");
-            chips(ui, &form::GAMEPADS, gamepad);
+            widgets::field(ui, "Gamepad");
+            widgets::chips(ui, &form::GAMEPADS, gamepad, None);
         });
-        let note = xidi::note(self.form.gamepad);
-        ui.label(egui::RichText::new(note).font(font(13.0)).color(MUTED));
+        widgets::note(ui, xidi::note(self.form.gamepad));
         ui.add_space(12.0);
         let pads = match self.pads {
             0 => "No Xbox-style (XInput) pad is connected now. Under Steam the Deck's controls count as one; on 8BitDo pads use X-input mode.".to_string(),
             1 => "One Xbox-style pad connected.".to_string(),
             n => format!("{n} Xbox-style pads connected."),
         };
-        ui.label(egui::RichText::new(pads).font(font(13.0)).color(MUTED));
+        widgets::note(ui, &pads);
         ui.add_space(8.0);
-        ui.label(
-            egui::RichText::new(
-                "A new profile starts with the pad as its controller. An older one set to the \
-                 keyboard keeps that: pick the Xidi controller once in the game's Options > \
-                 Controls. In a race F5 hides the HUD.",
-            )
-            .font(font(13.0))
-            .color(MUTED),
+        widgets::note(
+            ui,
+            "A new profile starts with the pad as its controller. An older one set to the \
+             keyboard keeps that: pick the Xidi controller once in the game's Options > \
+             Controls. In a race F5 hides the HUD.",
         );
     }
-
-    fn footer(&mut self, ui: &mut egui::Ui, rect: Rect, ctx: &egui::Context) {
-        let button = Rect::from_min_size(
-            pos2(rect.right() - 170.0, rect.top()),
-            vec2(170.0, rect.height()),
-        );
-        let hint =
-            "Your game folder is only read; everything the launcher adds goes to its own copy.";
-        let galley = ui.painter().layout(
-            hint.to_string(),
-            font(13.0),
-            MUTED,
-            button.left() - rect.left() - 20.0,
-        );
-        let y = rect.center().y - galley.size().y / 2.0;
-        ui.painter().galley(pos2(rect.left(), y), galley, MUTED);
-
-        let resp = ui.interact(button, ui.scope_id().with("play"), Sense::click());
-        let ready = self.ready();
-        let fill = match (ready, resp.hovered()) {
-            (false, _) => LINE,
-            (true, true) => Color32::from_rgb(0xff, 0xd3, 0x2a),
-            (true, false) => GOLD,
-        };
-        // A slanted plate, like the stripes.
-        let s = 10.0;
-        let plate = vec![
-            pos2(button.left() + s, button.top()),
-            button.right_top(),
-            pos2(button.right() - s, button.bottom()),
-            button.left_bottom(),
-        ];
-        ui.painter()
-            .add(Shape::convex_polygon(plate, fill, Stroke::NONE));
-        ui.painter().text(
-            button.center(),
-            Align2::CENTER_CENTER,
-            "Play",
-            named("decal", 30.0),
-            if ready { ON_GOLD } else { MUTED },
-        );
-        if resp
-            .on_hover_cursor(egui::CursorIcon::PointingHand)
-            .clicked()
-        {
-            self.play(ctx);
-        }
-    }
-}
-
-/// Fades `rect` from clear to blue: to the right when `horizontal`, else
-/// downwards.
-fn gradient(p: &egui::Painter, rect: Rect, horizontal: bool) {
-    let mut mesh = Mesh::default();
-    let clear = Color32::from_rgba_unmultiplied(BASE.r(), BASE.g(), BASE.b(), 0);
-    let (a, b, c, d) = if horizontal {
-        (clear, BASE, BASE, clear)
-    } else {
-        (clear, clear, BASE, BASE)
-    };
-    mesh.colored_vertex(rect.left_top(), a);
-    mesh.colored_vertex(rect.right_top(), b);
-    mesh.colored_vertex(rect.right_bottom(), c);
-    mesh.colored_vertex(rect.left_bottom(), d);
-    mesh.add_triangle(0, 1, 2);
-    mesh.add_triangle(0, 2, 3);
-    p.add(Shape::mesh(mesh));
-}
-
-/// Two slanted gold livery stripes in the top right corner.
-fn draw_decal(ui: &egui::Ui, full: Rect) {
-    let p = ui.painter().with_clip_rect(full);
-    for (i, (w, alpha)) in [(30.0, 1.0), (16.0, 0.65)].into_iter().enumerate() {
-        let x = full.right() - 120.0 + i as f32 * 40.0;
-        let slant = 60.0;
-        let pts = vec![
-            pos2(x, full.top()),
-            pos2(x + w, full.top()),
-            pos2(x + w - slant, full.top() + 112.0),
-            pos2(x - slant, full.top() + 112.0),
-        ];
-        p.add(Shape::convex_polygon(
-            pts,
-            GOLD.gamma_multiply(alpha),
-            Stroke::NONE,
-        ));
-    }
-}
-
-fn heading(ui: &mut egui::Ui, text: &str) {
-    ui.label(
-        egui::RichText::new(text)
-            .font(named("barlow-semibold", 14.0))
-            .color(MUTED),
-    );
-}
-
-/// A row's label, as tall as a chip. Rows of labels and chips are
-/// top-aligned (`horizontal_top`), so both start on the same line.
-fn field(ui: &mut egui::Ui, text: &str) {
-    let (rect, _) = ui.allocate_exact_size(vec2(118.0, 30.0), Sense::hover());
-    ui.painter().text(
-        rect.left_center(),
-        Align2::LEFT_CENTER,
-        text,
-        font(15.0),
-        INK,
-    );
-}
-
-/// A text field with a Browse button; true when it changed.
-fn folder_field(ui: &mut egui::Ui, value: &mut String, hint: &str, title: &str) -> bool {
-    let mut changed = false;
-    ui.horizontal(|ui| {
-        let w = ui.available_width() - 100.0;
-        let edit = egui::TextEdit::singleline(value)
-            .hint_text(egui::RichText::new(hint).color(MUTED))
-            .font(font(15.0))
-            .margin(vec2(10.0, 8.0))
-            .desired_width(w);
-        changed |= ui.add(edit).changed();
-        if outline_button(ui, "Browse…").clicked()
-            && let Some(dir) = win32::pick_folder(title)
-        {
-            *value = dir.display().to_string();
-            changed = true;
-        }
-    });
-    changed
-}
-
-fn outline_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
-    let (rect, resp) = ui.allocate_exact_size(vec2(92.0, 34.0), Sense::click());
-    let hover = resp.hovered();
-    ui.painter().rect(
-        rect,
-        CornerRadius::same(6),
-        if hover { LINE } else { Color32::TRANSPARENT },
-        Stroke::new(1.5, GOLD),
-        StrokeKind::Inside,
-    );
-    ui.painter().text(
-        rect.center(),
-        Align2::CENTER_CENTER,
-        text,
-        named("barlow-semibold", 15.0),
-        GOLD,
-    );
-    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
-}
-
-/// A row of choices; the chosen one is gold.
-fn chips<T: PartialEq + Copy, S: AsRef<str>>(
-    ui: &mut egui::Ui,
-    options: &[(T, S)],
-    current: &mut T,
-) {
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 6.0;
-        for (value, label) in options {
-            let on = *current == *value;
-            let galley = ui.painter().layout_no_wrap(
-                label.as_ref().to_string(),
-                if on {
-                    named("barlow-semibold", 14.0)
-                } else {
-                    font(14.0)
-                },
-                if on { ON_GOLD } else { INK },
-            );
-            let size = vec2(galley.size().x + 24.0, 30.0);
-            let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
-            let fill = if on {
-                GOLD
-            } else if resp.hovered() {
-                LINE
-            } else {
-                Color32::TRANSPARENT
-            };
-            ui.painter().rect(
-                rect,
-                CornerRadius::same(6),
-                fill,
-                Stroke::new(1.0, if on { GOLD } else { LINE }),
-                StrokeKind::Inside,
-            );
-            let at = rect.center() - galley.size() / 2.0;
-            ui.painter().galley(at, galley, INK);
-            if resp
-                .on_hover_cursor(egui::CursorIcon::PointingHand)
-                .clicked()
-            {
-                *current = *value;
-            }
-        }
-    });
-}
-
-/// A switch: knob left and outlined is off, knob right on gold is on.
-fn toggle(ui: &mut egui::Ui, on: &mut bool, text: &str) {
-    let wrap = (ui.available_width() - 58.0).max(100.0);
-    let galley = ui.painter().layout(text.to_string(), font(15.0), INK, wrap);
-    let size = vec2(46.0 + 12.0 + galley.size().x, 30.0_f32.max(galley.size().y));
-    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
-    if resp.clicked() {
-        *on = !*on;
-    }
-    let t = ui.ctx().animate_bool(resp.id, *on);
-    let track = Rect::from_min_size(
-        pos2(rect.left(), rect.top() + (size.y - 26.0) / 2.0),
-        vec2(46.0, 26.0),
-    );
-    let p = ui.painter();
-    p.rect(
-        track,
-        CornerRadius::same(13),
-        if *on { GOLD } else { Color32::TRANSPARENT },
-        Stroke::new(1.5, if *on { GOLD } else { MUTED }),
-        StrokeKind::Inside,
-    );
-    let x = egui::lerp(track.left() + 13.0..=track.right() - 13.0, t);
-    p.circle_filled(
-        pos2(x, track.center().y),
-        9.0,
-        if *on { ON_GOLD } else { MUTED },
-    );
-    p.galley(
-        pos2(
-            track.right() + 12.0,
-            rect.center().y - galley.size().y / 2.0,
-        ),
-        galley,
-        INK,
-    );
-    resp.on_hover_cursor(egui::CursorIcon::PointingHand);
-}
-
-/// One of the looks; true when clicked.
-fn look_card(
-    ui: &mut egui::Ui,
-    size: Vec2,
-    on: bool,
-    title: &str,
-    note: &str,
-    recommended: bool,
-) -> bool {
-    let w = size.x;
-    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
-    let p = ui.painter();
-    let fill = if on {
-        PANEL
-    } else if resp.hovered() {
-        PANEL.gamma_multiply(0.6)
-    } else {
-        Color32::TRANSPARENT
-    };
-    p.rect(
-        rect,
-        CornerRadius::same(8),
-        fill,
-        Stroke::new(if on { 2.0 } else { 1.0 }, if on { GOLD } else { LINE }),
-        StrokeKind::Inside,
-    );
-    let pad = 14.0;
-    p.text(
-        rect.left_top() + vec2(pad, pad - 2.0),
-        Align2::LEFT_TOP,
-        title,
-        named("condensed", 22.0),
-        if on { GOLD } else { INK },
-    );
-    if recommended {
-        // A small gold tab on the card's top edge.
-        let galley = p.layout_no_wrap(
-            "Recommended".into(),
-            named("barlow-semibold", 12.0),
-            ON_GOLD,
-        );
-        let tab = Rect::from_min_size(
-            pos2(
-                rect.right() - pad - galley.size().x - 12.0,
-                rect.top() - 9.0,
-            ),
-            galley.size() + vec2(12.0, 2.0),
-        );
-        p.rect_filled(tab, CornerRadius::same(4), GOLD);
-        p.galley(tab.min + vec2(6.0, 1.0), galley, ON_GOLD);
-    }
-    let galley = p.layout(note.to_string(), font(13.5), MUTED, w - 2.0 * pad);
-    p.galley(rect.left_top() + vec2(pad, pad + 32.0), galley, MUTED);
-    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
-        .clicked()
 }

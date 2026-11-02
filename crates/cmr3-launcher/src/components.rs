@@ -13,14 +13,21 @@
 //! thirdparty/hd-ui/…                           the HD UI overlay (Bekoha)
 //! ```
 //!
-//! Components are installed by whole-file swaps (`runtime::install*`), so a
+//! Components are installed by whole-file swaps (`rea_launcher::fsx`), so a
 //! hard-linked original is never written through, and reinstalls are
-//! idempotent. Missing components disable their feature with a log line,
+//! idempotent. What the launcher installed is recorded by checksum in the
+//! SDK's ownership ledger (`rea_launcher::ledger`, `.cmr3-launcher-components`
+//! in the runtime): only a file still holding those bytes is the launcher's
+//! to replace or take out, and taking it out brings back the game folder's
+//! own file. Missing components disable their feature with a log line,
 //! never a failure.
 
 use std::fs;
 use std::io;
 use std::path::Path;
+
+use rea_launcher::fsx;
+use rea_launcher::ledger::{self, Ledger, Outcome};
 
 use crate::config::{Gamepad, Settings};
 use crate::edition;
@@ -59,92 +66,73 @@ pub fn present(bundle: &Path) -> Vec<(&'static str, bool)> {
     ]
 }
 
-/// The runtime's ledger of the files the launcher installed, by name,
-/// with the SHA-256 of what it wrote: only a file that still matches is
-/// the launcher's to take out.
+/// The runtime's ledger of the files the launcher installed (the SDK's
+/// format: `sha256\tname` lines).
 const OWNERSHIP: &str = ".cmr3-launcher-components";
-type Ownership = std::collections::BTreeMap<String, String>;
 
-fn digest(bytes: &[u8]) -> String {
-    edition::to_hex(&edition::sha256(bytes))
+fn ledger(game: &Path, runtime: &Path) -> Ledger {
+    Ledger::load(game, runtime, OWNERSHIP)
 }
 
-fn read_ownership(runtime: &Path) -> Ownership {
-    fs::read_to_string(runtime.join(OWNERSHIP))
-        .unwrap_or_default()
-        .lines()
-        .filter_map(|line| {
-            let (digest, name) = line.split_once('\t')?;
-            Some((name.to_owned(), digest.to_owned()))
-        })
-        .collect()
+/// How a component install went.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Installed {
+    /// In place (or, for an "off" choice, taken out).
+    Done,
+    /// Not in the bundle: the feature is off.
+    NotBundled,
+    /// The runtime already holds this file, and it is neither the
+    /// launcher's nor the game folder's own (something the player put
+    /// there): left alone, the component left out.
+    NotOurs(&'static str),
 }
 
-fn write_ownership(runtime: &Path, ownership: &Ownership) -> io::Result<()> {
-    let text: String = ownership
-        .iter()
-        .map(|(name, digest)| format!("{digest}\t{name}\n"))
-        .collect();
-    runtime::install(&runtime.join(OWNERSHIP), text.as_bytes())
-}
-
-/// Installs `bytes` as the runtime's `name` and records it as ours.
-fn put_owned(
-    runtime: &Path,
-    name: &str,
+/// Installs `bytes` as the runtime's `name` unless someone else's file
+/// is there. `known` lists the bundle bytes a launcher from before the
+/// ledger may have written.
+fn put(
+    ledger: &mut Ledger,
+    name: &'static str,
     bytes: &[u8],
-    ownership: &mut Ownership,
-) -> io::Result<()> {
-    runtime::install(&runtime.join(name), bytes)?;
-    ownership.insert(name.to_owned(), digest(bytes));
-    write_ownership(runtime, ownership)
-}
-
-/// Takes the runtime's `name` out when the launcher put it there (per the
-/// ledger, or byte-equal to one of `ours`, for runtimes from before the
-/// ledger): the game's own file comes back, or none. Anything else (the
-/// game's own file, a player's mod) stays.
-///
-/// `ours` holds only what this launcher would install now (the current
-/// bundle's DLL, the current Xidi.ini presets): a pre-ledger file from an
-/// older bundle or older presets is not recognised and stays in place.
-fn take_out(
-    game: &Path,
-    runtime: &Path,
-    name: &str,
-    ours: &[Vec<u8>],
-    ownership: &mut Ownership,
-) -> io::Result<()> {
-    if let Ok(bytes) = fs::read(runtime.join(name))
-        && (ownership.get(name) == Some(&digest(&bytes)) || ours.contains(&bytes))
-    {
-        runtime::restore(game, runtime, name)?;
-    }
-    if ownership.remove(name).is_some() {
-        write_ownership(runtime, ownership)?;
-    }
-    Ok(())
+    known: &[&[u8]],
+) -> io::Result<Option<Installed>> {
+    Ok(match ledger.install(name, bytes, known)? {
+        Outcome::NotOurs => Some(Installed::NotOurs(name)),
+        _ => None,
+    })
 }
 
 /// Installs SilentPatch and its ASI loader (as `dsound.dll`, leaving the
-/// `dinput8.dll` name free for Xidi). Returns false when not bundled.
-pub fn install_silentpatch(runtime: &Path, bundle: &Path) -> io::Result<bool> {
+/// `dinput8.dll` name free for Xidi).
+pub fn install_silentpatch(game: &Path, runtime: &Path, bundle: &Path) -> io::Result<Installed> {
     let asi = bundle.join("silentpatch/SilentPatchCMR3.asi");
     let loader = bundle.join("silentpatch/dinput8.dll");
     if !asi.is_file() || !loader.is_file() {
-        return Ok(false);
+        return Ok(Installed::NotBundled);
     }
-    let mut ownership = read_ownership(runtime);
-    put_owned(
-        runtime,
-        "SilentPatchCMR3.asi",
-        &fs::read(&asi)?,
-        &mut ownership,
-    )?;
+    let mut ledger = ledger(game, runtime);
+    let asi = fs::read(&asi)?;
+    if let Some(refused) = put(&mut ledger, "SilentPatchCMR3.asi", &asi, &[&asi])? {
+        return Ok(refused);
+    }
     // The loader hooks the first of dsound/dinput8/winmm it is named as;
     // dsound is free here and the game imports it.
-    put_owned(runtime, "dsound.dll", &fs::read(&loader)?, &mut ownership)?;
-    Ok(true)
+    let loader = fs::read(&loader)?;
+    if let Some(refused) = put(&mut ledger, "dsound.dll", &loader, &[&loader])? {
+        return Ok(refused);
+    }
+    Ok(Installed::Done)
+}
+
+/// Every `Xidi.ini` this launcher writes (each preset, log on and off):
+/// how a pre-ledger file of ours is recognised.
+fn xidi_inis() -> Vec<Vec<u8>> {
+    Gamepad::ALL
+        .into_iter()
+        .flat_map(|p| [xidi::ini(p, false), xidi::ini(p, true)])
+        .flatten()
+        .map(String::into_bytes)
+        .collect()
 }
 
 /// Installs Xidi as `dinput8.dll` with the preset's `Xidi.ini` (its
@@ -157,29 +145,32 @@ pub fn install_xidi(
     bundle: &Path,
     preset: Gamepad,
     log: bool,
-) -> io::Result<bool> {
+) -> io::Result<Installed> {
     let dll = bundle.join("xidi/dinput8.dll");
-    let mut ownership = read_ownership(runtime);
+    let mut ledger = ledger(game, runtime);
+    let inis = xidi_inis();
+    let inis: Vec<&[u8]> = inis.iter().map(Vec::as_slice).collect();
+    let ours: Vec<Vec<u8>> = fs::read(&dll).into_iter().collect();
+    let ours: Vec<&[u8]> = ours.iter().map(Vec::as_slice).collect();
     match xidi::ini(preset, log) {
         Some(ini) => {
             if !dll.is_file() {
-                return Ok(false);
+                return Ok(Installed::NotBundled);
             }
-            put_owned(runtime, "dinput8.dll", &fs::read(&dll)?, &mut ownership)?;
-            put_owned(runtime, "Xidi.ini", ini.as_bytes(), &mut ownership)?;
-            Ok(true)
+            // The settings first: Xidi without them would map nothing.
+            if let Some(refused) = put(&mut ledger, "Xidi.ini", ini.as_bytes(), &inis)? {
+                return Ok(refused);
+            }
+            let bytes = fs::read(&dll)?;
+            if let Some(refused) = put(&mut ledger, "dinput8.dll", &bytes, &ours)? {
+                return Ok(refused);
+            }
+            Ok(Installed::Done)
         }
         None => {
-            let ours: Vec<Vec<u8>> = fs::read(&dll).into_iter().collect();
-            take_out(game, runtime, "dinput8.dll", &ours, &mut ownership)?;
-            let inis: Vec<Vec<u8>> = Gamepad::ALL
-                .into_iter()
-                .flat_map(|p| [xidi::ini(p, false), xidi::ini(p, true)])
-                .flatten()
-                .map(String::into_bytes)
-                .collect();
-            take_out(game, runtime, "Xidi.ini", &inis, &mut ownership)?;
-            Ok(true)
+            ledger.take_out("dinput8.dll", &ours)?;
+            ledger.take_out("Xidi.ini", &inis)?;
+            Ok(Installed::Done)
         }
     }
 }
@@ -187,19 +178,19 @@ pub fn install_xidi(
 /// DXVK's d3d9.dll next to the game under Wine (Vulkan) — or taken out
 /// again (a d3d9.dll of the game's own comes back). On Windows this is
 /// never installed: the system's own Direct3D is the right one there.
-pub fn install_dxvk(game: &Path, runtime: &Path, bundle: &Path, on: bool) -> io::Result<bool> {
+pub fn install_dxvk(game: &Path, runtime: &Path, bundle: &Path, on: bool) -> io::Result<Installed> {
     let from = bundle.join("dxvk/d3d9.dll");
-    let mut ownership = read_ownership(runtime);
+    let mut ledger = ledger(game, runtime);
+    let ours: Vec<Vec<u8>> = fs::read(&from).into_iter().collect();
+    let ours: Vec<&[u8]> = ours.iter().map(Vec::as_slice).collect();
     if !on {
-        let ours: Vec<Vec<u8>> = fs::read(&from).into_iter().collect();
-        take_out(game, runtime, "d3d9.dll", &ours, &mut ownership)?;
-        return Ok(true);
+        ledger.take_out("d3d9.dll", &ours)?;
+        return Ok(Installed::Done);
     }
-    if !from.is_file() {
-        return Ok(false);
-    }
-    put_owned(runtime, "d3d9.dll", &fs::read(&from)?, &mut ownership)?;
-    Ok(true)
+    let Some(bytes) = ours.first() else {
+        return Ok(Installed::NotBundled);
+    };
+    Ok(put(&mut ledger, "d3d9.dll", bytes, &ours)?.unwrap_or(Installed::Done))
 }
 
 /// `WINEDLLOVERRIDES` for the game under Wine: `natives` (the DLL names
@@ -207,36 +198,12 @@ pub fn install_dxvk(game: &Path, runtime: &Path, bundle: &Path, on: bool) -> io:
 /// for Xidi, d3d9 for DXVK) load from the game folder first. The player's
 /// own rules (`existing`) are kept, except for those names, so ours apply.
 pub fn wine_overrides(existing: Option<&str>, natives: &[&str]) -> String {
-    let mut rules = Vec::new();
-    if !natives.is_empty() {
-        rules.push(format!("{}=n,b", natives.join(",")));
-    }
-    for rule in existing.into_iter().flat_map(|r| r.split(';')) {
-        if rule.trim().is_empty() {
-            continue;
-        }
-        let Some((names, action)) = rule.split_once('=') else {
-            rules.push(rule.to_owned());
-            continue;
-        };
-        let kept: Vec<_> = names
-            .split(',')
-            .map(str::trim)
-            .filter(|n| {
-                // `dsound.dll` names the same DLL as `dsound`.
-                let stem = n
-                    .len()
-                    .checked_sub(4)
-                    .filter(|&i| n.get(i..).is_some_and(|e| e.eq_ignore_ascii_case(".dll")))
-                    .map_or(*n, |i| &n[..i]);
-                !stem.is_empty() && !natives.iter().any(|o| stem.eq_ignore_ascii_case(o))
-            })
-            .collect();
-        if !kept.is_empty() {
-            rules.push(format!("{}={action}", kept.join(",")));
-        }
-    }
-    rules.join(";")
+    let ours = if natives.is_empty() {
+        String::new()
+    } else {
+        format!("{}=n,b", natives.join(","))
+    };
+    rea_launcher::wine::merge_dll_overrides(&ours, existing)
 }
 
 /// The runtime's record of the files the HD UI overlay put in, so
@@ -255,9 +222,9 @@ pub fn install_hd_ui(runtime: &Path, bundle: &Path) -> io::Result<usize> {
     let mut owned = hd_ui_files(runtime);
     owned.extend(rels.iter().cloned());
     let text: String = owned.iter().map(|r| format!("{r}\n")).collect();
-    runtime::install(&runtime.join(HD_UI_FILES), text.as_bytes())?;
+    fsx::write_atomic(&runtime.join(HD_UI_FILES), text)?;
     for rel in &rels {
-        runtime::install_copy(&runtime::native(&from, rel), &runtime::native(runtime, rel))?;
+        fsx::install_copy(&runtime::native(&from, rel), &runtime::native(runtime, rel))?;
     }
     Ok(rels.len())
 }
@@ -266,18 +233,9 @@ fn hd_ui_files(runtime: &Path) -> std::collections::BTreeSet<String> {
     fs::read_to_string(runtime.join(HD_UI_FILES))
         .unwrap_or_default()
         .lines()
-        .filter(|r| is_plain_relative(r))
+        .filter(|r| ledger::is_plain_relative(r))
         .map(str::to_owned)
         .collect()
-}
-
-/// True for a plain relative `/`-separated path that stays below the
-/// folder it is joined to: no root, drive or `..`, on any host.
-fn is_plain_relative(rel: &str) -> bool {
-    !rel.is_empty()
-        && rel
-            .split(['/', '\\'])
-            .all(|part| !part.is_empty() && part != "." && part != ".." && !part.contains(':'))
 }
 
 /// Takes the HD UI overlay back out: every file it put in becomes the
@@ -288,7 +246,7 @@ pub fn remove_hd_ui(game: &Path, runtime: &Path) -> io::Result<usize> {
     for rel in &owned {
         runtime::restore(game, runtime, rel)?;
     }
-    runtime::remove(&runtime.join(HD_UI_FILES))?;
+    fsx::remove(&runtime.join(HD_UI_FILES))?;
     Ok(owned.len())
 }
 
@@ -335,9 +293,13 @@ pub fn apply_settings(
     resolution: Option<(u32, u32)>,
 ) -> io::Result<Vec<String>> {
     let ini = runtime.join("SilentPatchCMR3.ini");
-    let text = fs::read_to_string(&ini).unwrap_or_default();
-    let (text, log) = crate::sp::apply_picture(&text, settings, resolution);
-    runtime::install(&ini, text.as_bytes())?;
+    let bytes = match fs::read(&ini) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Vec::new(),
+        Err(e) => return Err(e),
+    };
+    let (bytes, log) = crate::sp::apply_picture(&bytes, settings, resolution);
+    fsx::install(&ini, bytes)?;
     Ok(log)
 }
 
@@ -373,29 +335,78 @@ mod tests {
         let bundle = bundle_with("bundle");
         let game = temp("game-install");
         let rt = temp("rt-install");
-        // A pre-existing (hard-linked-style) file is replaced, not written
-        // through: removing the bundle copy later cannot matter.
-        fs::write(rt.join("SilentPatchCMR3.asi"), b"old").unwrap();
-        assert!(install_silentpatch(&rt, &bundle).unwrap());
+        // A copy of the bundle's file from a launcher before the ledger is
+        // ours: replaced as a whole file, never written through.
+        fs::write(rt.join("SilentPatchCMR3.asi"), b"asi").unwrap();
+        let done = Installed::Done;
+        assert_eq!(install_silentpatch(&game, &rt, &bundle).unwrap(), done);
         assert_eq!(fs::read(rt.join("SilentPatchCMR3.asi")).unwrap(), b"asi");
         assert_eq!(fs::read(rt.join("dsound.dll")).unwrap(), b"loader");
         assert!(!rt.join("dinput8.dll").is_file());
+        assert!(
+            fs::read_to_string(rt.join(OWNERSHIP))
+                .unwrap()
+                .contains("\tdsound.dll\n"),
+            "recorded in the ledger"
+        );
 
-        assert!(install_xidi(&game, &rt, &bundle, Gamepad::Rally, false).unwrap());
+        assert_eq!(
+            install_xidi(&game, &rt, &bundle, Gamepad::Rally, false).unwrap(),
+            done
+        );
         assert_eq!(fs::read(rt.join("dinput8.dll")).unwrap(), b"xidi");
         let ini = fs::read_to_string(rt.join("Xidi.ini")).unwrap();
         assert!(ini.contains("CMR3Gamepad"));
+        // Another preset rewrites our own Xidi.ini.
+        assert_eq!(
+            install_xidi(&game, &rt, &bundle, Gamepad::Standard, true).unwrap(),
+            done
+        );
+        assert!(
+            fs::read_to_string(rt.join("Xidi.ini"))
+                .unwrap()
+                .contains("StandardGamepad")
+        );
 
-        assert!(install_dxvk(&game, &rt, &bundle, true).unwrap());
+        assert_eq!(install_dxvk(&game, &rt, &bundle, true).unwrap(), done);
         assert_eq!(fs::read(rt.join("d3d9.dll")).unwrap(), b"dxvk9");
 
         // Off takes Xidi back out.
-        assert!(install_xidi(&game, &rt, &bundle, Gamepad::Off, false).unwrap());
+        assert_eq!(
+            install_xidi(&game, &rt, &bundle, Gamepad::Off, false).unwrap(),
+            done
+        );
         assert!(!rt.join("dinput8.dll").is_file());
         assert!(!rt.join("Xidi.ini").is_file());
-        assert!(install_dxvk(&game, &rt, &bundle, false).unwrap());
+        assert_eq!(install_dxvk(&game, &rt, &bundle, false).unwrap(), done);
         assert!(!rt.join("d3d9.dll").is_file());
 
+        for d in [bundle, game, rt] {
+            fs::remove_dir_all(d).unwrap();
+        }
+    }
+
+    #[test]
+    fn a_players_own_file_in_the_runtime_is_left_alone() {
+        let bundle = bundle_with("players-bundle");
+        let game = temp("players-game");
+        let rt = temp("players-rt");
+        // Dropped into the runtime by hand: not the game's, not ours.
+        fs::write(rt.join("d3d9.dll"), b"reshade").unwrap();
+        assert_eq!(
+            install_dxvk(&game, &rt, &bundle, true).unwrap(),
+            Installed::NotOurs("d3d9.dll")
+        );
+        assert_eq!(fs::read(rt.join("d3d9.dll")).unwrap(), b"reshade");
+        // The game folder's own copy, untouched in the runtime, is replaced.
+        fs::write(game.join("dsound.dll"), b"game's dsound").unwrap();
+        runtime::sync(&game, &rt).unwrap();
+        assert_eq!(
+            install_silentpatch(&game, &rt, &bundle).unwrap(),
+            Installed::Done
+        );
+        assert_eq!(fs::read(rt.join("dsound.dll")).unwrap(), b"loader");
+        assert_eq!(fs::read(game.join("dsound.dll")).unwrap(), b"game's dsound");
         for d in [bundle, game, rt] {
             fs::remove_dir_all(d).unwrap();
         }
@@ -409,17 +420,27 @@ mod tests {
         // The game ships its own dinput8.dll (a mod of the player's).
         fs::write(game.join("dinput8.dll"), b"game's own").unwrap();
         runtime::sync(&game, &rt).unwrap();
-        assert!(install_xidi(&game, &rt, &bundle, Gamepad::Rally, false).unwrap());
-        assert!(install_dxvk(&game, &rt, &bundle, true).unwrap());
-        assert!(install_xidi(&game, &rt, &bundle, Gamepad::Off, false).unwrap());
+        let done = Installed::Done;
+        assert_eq!(
+            install_xidi(&game, &rt, &bundle, Gamepad::Rally, false).unwrap(),
+            done
+        );
+        assert_eq!(install_dxvk(&game, &rt, &bundle, true).unwrap(), done);
+        assert_eq!(
+            install_xidi(&game, &rt, &bundle, Gamepad::Off, false).unwrap(),
+            done
+        );
         assert_eq!(fs::read(rt.join("dinput8.dll")).unwrap(), b"game's own");
         assert!(!rt.join("Xidi.ini").exists());
         // A d3d9.dll the player dropped in after ours is not ours to remove.
         fs::write(rt.join("d3d9.dll"), b"player's d3d9").unwrap();
-        assert!(install_dxvk(&game, &rt, &bundle, false).unwrap());
+        assert_eq!(install_dxvk(&game, &rt, &bundle, false).unwrap(), done);
         assert_eq!(fs::read(rt.join("d3d9.dll")).unwrap(), b"player's d3d9");
         // Off again leaves the game's own file alone.
-        assert!(install_xidi(&game, &rt, &bundle, Gamepad::Off, false).unwrap());
+        assert_eq!(
+            install_xidi(&game, &rt, &bundle, Gamepad::Off, false).unwrap(),
+            done
+        );
         assert_eq!(fs::read(rt.join("dinput8.dll")).unwrap(), b"game's own");
         assert_eq!(fs::read(game.join("dinput8.dll")).unwrap(), b"game's own");
         for d in [bundle, game, rt] {
@@ -448,21 +469,23 @@ mod tests {
     }
 
     #[test]
-    fn only_plain_relative_overlay_paths_are_restored() {
-        assert!(is_plain_relative("Data/Boot/colin3.dds"));
-        assert!(is_plain_relative("fonts/hel_18pt.dds"));
-        for bad in [
-            "",
-            "/etc/passwd",
-            "../x",
-            "Data/../../x",
-            "C:/Windows/x.dll",
-            "C:x",
-            "\\\\server\\share\\x",
-            "\\Windows\\x",
-            "Data//x",
-        ] {
-            assert!(!is_plain_relative(bad), "{bad}");
+    fn a_ledger_written_before_the_sdk_is_read() {
+        let bundle = bundle_with("old-ledger-bundle");
+        let game = temp("old-ledger-game");
+        let rt = temp("old-ledger-rt");
+        // The pre-SDK launcher's own ledger line for a Xidi DLL it wrote,
+        // and a hostile line that must never be followed.
+        let digest = rea_launcher::identify::hex(&rea_launcher::identify::sha256(b"xidi-old"));
+        fs::write(rt.join("dinput8.dll"), b"xidi-old").unwrap();
+        fs::write(
+            rt.join(OWNERSHIP),
+            format!("{digest}\tdinput8.dll\n{digest}\t../outside.dll\n"),
+        )
+        .unwrap();
+        install_xidi(&game, &rt, &bundle, Gamepad::Off, false).unwrap();
+        assert!(!rt.join("dinput8.dll").exists(), "recognised by its record");
+        for d in [bundle, game, rt] {
+            fs::remove_dir_all(d).unwrap();
         }
     }
 
@@ -497,9 +520,13 @@ mod tests {
         let bundle = temp("empty-bundle");
         let game = temp("game-missing");
         let rt = temp("rt-missing");
-        assert!(!install_silentpatch(&rt, &bundle).unwrap());
-        assert!(!install_xidi(&game, &rt, &bundle, Gamepad::Rally, false).unwrap());
-        assert!(!install_dxvk(&game, &rt, &bundle, true).unwrap());
+        let missing = Installed::NotBundled;
+        assert_eq!(install_silentpatch(&game, &rt, &bundle).unwrap(), missing);
+        assert_eq!(
+            install_xidi(&game, &rt, &bundle, Gamepad::Rally, false).unwrap(),
+            missing
+        );
+        assert_eq!(install_dxvk(&game, &rt, &bundle, true).unwrap(), missing);
         assert_eq!(install_hd_ui(&rt, &bundle).unwrap(), 0);
         for d in [bundle, game, rt] {
             fs::remove_dir_all(d).unwrap();
@@ -543,8 +570,15 @@ mod tests {
         assert_eq!(fs::read(game.join("Data/Boot/colin3.dds")).unwrap(), b"low");
         // Off again: nothing recorded, nothing to do.
         assert_eq!(remove_hd_ui(&game, &rt).unwrap(), 0);
+        // A record naming a path outside the runtime is never followed.
+        fs::write(
+            rt.join(HD_UI_FILES),
+            "../outside.dds\n/etc/x\nData/Boot/colin3.dds\n",
+        )
+        .unwrap();
+        assert_eq!(remove_hd_ui(&game, &rt).unwrap(), 1);
         // And a sync afterwards brings nothing (the manifest still holds).
-        assert_eq!(runtime::sync(&game, &rt).unwrap().0, 0);
+        assert_eq!(runtime::sync(&game, &rt).unwrap().brought, 0);
         for d in [bundle, game, rt] {
             fs::remove_dir_all(d).unwrap();
         }

@@ -9,7 +9,6 @@
 
 use md5::Digest as _;
 use md5::Md5;
-use sha2::Sha256;
 
 /// What the executable is, and how to make it run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,14 +40,6 @@ static DRM_FREE: [([u8; 16], &str); 3] = [
 
 pub fn md5(bytes: &[u8]) -> [u8; 16] {
     Md5::digest(bytes).into()
-}
-
-pub fn sha256(bytes: &[u8]) -> [u8; 32] {
-    Sha256::digest(bytes).into()
-}
-
-pub fn to_hex(digest: &[u8]) -> String {
-    digest.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 const fn nibble(c: u8) -> u8 {
@@ -88,6 +79,7 @@ pub fn is_drm_free(exe: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rea_launcher::identify::hex as to_hex;
 
     #[test]
     fn hex_round_trips() {

@@ -2,16 +2,15 @@
 
 #[cfg(windows)]
 mod ui;
-#[cfg(windows)]
-mod win32;
 
 #[cfg(windows)]
 fn main() {
+    use rea_launcher_win32::dialog::{self, Icon};
     let code = match app::run() {
         Ok(code) => code,
         Err(err) => {
             app::log_line(&format!("error: {err}"));
-            win32::message("Colin McRae Rally 3 launcher", &err, true);
+            dialog::message("Colin McRae Rally 3 launcher", &err, Icon::Error);
             1
         }
     };
@@ -29,16 +28,20 @@ fn main() {
 #[cfg(windows)]
 mod app {
     use std::fs;
-    use std::io::Write as _;
     use std::path::{Path, PathBuf};
 
-    use cmr3_launcher::components;
+    use cmr3_launcher::components::{self, Installed};
     use cmr3_launcher::config::{self, Gamepad, Settings};
     use cmr3_launcher::edition;
     use cmr3_launcher::profile;
     use cmr3_launcher::runtime;
+    use rea_launcher::log::Log;
+    use rea_launcher::{cfg, fsx, identify, paths};
+    use rea_launcher_win32::dialog::{self, Icon};
+    use rea_launcher_win32::process::Launch;
+    use rea_launcher_win32::{display, gpu, wine};
 
-    use crate::{ui, win32};
+    use crate::ui;
 
     const EXE: &str = "Rally_3PC.exe";
     const TITLE: &str = "Colin McRae Rally 3 launcher";
@@ -51,15 +54,7 @@ mod app {
     }
 
     pub fn log_line(line: &str) {
-        let dir = home();
-        let _ = fs::create_dir_all(&dir);
-        if let Ok(mut f) = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(dir.join("launcher.log"))
-        {
-            let _ = writeln!(f, "{line}");
-        }
+        Log::new(home().join("launcher.log")).line(line);
     }
 
     /// A `launcher.cfg` next to the exe wins (portable installs);
@@ -114,33 +109,40 @@ mod app {
     const WINDOW_CLOSED: u32 = 3;
     const WINDOW_UNAVAILABLE: u32 = 4;
 
-    fn take_flag(args: &mut Vec<String>, flag: &str) -> bool {
-        let found = args.iter().any(|a| a == flag);
-        args.retain(|a| a != flag);
-        found
+    /// The settings file's text: `None` on a first run (no file yet).
+    /// A file that cannot be read is never written over.
+    fn read_settings(path: &Path) -> Result<Option<String>, String> {
+        cfg::read_file(path).map_err(|e| format!("cannot read {}: {e}", path.display()))
     }
 
     pub fn run() -> Result<u32, String> {
         log_line(concat!("CMR3Launcher ", env!("CARGO_PKG_VERSION")));
         let settings_path = settings_path();
-        let mut cli: Vec<String> = std::env::args().skip(1).collect();
+        let args: Vec<String> = std::env::args().skip(1).collect();
+        let given = args.len();
+        let (cli, switches) = Settings::parse_args(args)?;
+        let switch = |name: &str| switches.iter().any(|s| s == name);
         // The settings window: shown when started without options (a
         // double click), or alone with --settings (Linux: cmr3-play shows
         // it, then starts the game in gamescope). Any other option skips
         // it.
-        let settings_only = take_flag(&mut cli, "--settings");
-        let linux = take_flag(&mut cli, "--linux");
-        let no_window = take_flag(&mut cli, "--no-window");
-        if settings_only || (cli.is_empty() && !no_window) {
+        let settings_only = switch("--settings");
+        let linux = switch("--linux");
+        let no_window = switch("--no-window");
+        let check_only = switch("--check");
+        let other_options = given > switches.len() || check_only;
+        if settings_only || (!other_options && !no_window) {
             // A window under Wine draws through OpenGL: GLX, not Wine 11's
             // default EGL (software on NVIDIA boxes without egl-x11).
-            if win32::is_wine()
-                && let Ok(true) = win32::prefer_glx()
+            if wine::is_wine()
+                && let Ok(true) = gpu::prefer_glx()
             {
                 log_line("Wine: OpenGL through GLX (UseEGL=N)");
             }
-            let text =
-                fs::read_to_string(&settings_path).unwrap_or_else(|_| config::TEMPLATE.into());
+            let text = read_settings(&settings_path)
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| config::TEMPLATE.into());
             match ui::show(&settings_path, &text, linux) {
                 Ok(ui::Outcome::Play) => {
                     log_line("settings window: play");
@@ -162,15 +164,21 @@ mod app {
                 }
             }
         }
-        let existing = fs::read_to_string(&settings_path).ok();
+        // Unreadable (not missing): played with the defaults, never
+        // written over.
+        let (existing, writable) = match read_settings(&settings_path) {
+            Ok(text) => (text, true),
+            Err(e) => {
+                log_line(&format!("warning: {e}; left as it is"));
+                (None, false)
+            }
+        };
         let file_text = existing.as_deref().unwrap_or(config::TEMPLATE);
         let (saved, warnings) = Settings::parse_file(file_text);
         for w in &warnings {
             log_line(&format!("warning: {w}"));
         }
-        let check_only = cli.iter().any(|a| a == "--check");
-        cli.retain(|a| a != "--check");
-        let settings = saved.clone().merged(Settings::parse_args(cli)?);
+        let settings = saved.clone().merged(cli);
 
         let game = find_game(&settings)?;
         let exe_path = game.join(EXE);
@@ -186,7 +194,7 @@ mod app {
             "game: {} ({}) [sha256 {}]",
             game.display(),
             exe_name,
-            edition::to_hex(&edition::sha256(&exe_bytes))
+            identify::hex(&identify::sha256(&exe_bytes))
         ));
         let bundle = components::bundle_dir();
         if check_only {
@@ -194,7 +202,7 @@ mod app {
                 .iter()
                 .map(|(name, there)| format!("{name}: {}", if *there { "yes" } else { "missing" }))
                 .collect();
-            win32::message(
+            dialog::message(
                 TITLE,
                 &format!(
                     "Game folder: {}\nVersion: {}\n\nBundled parts:\n{}",
@@ -202,7 +210,7 @@ mod app {
                     exe_name,
                     parts.join("\n")
                 ),
-                false,
+                Icon::Info,
             );
             return Ok(0);
         }
@@ -211,15 +219,18 @@ mod app {
             .runtime
             .clone()
             .unwrap_or_else(|| home().join("Rally3"));
-        runtime::check_separate(&game, &rt)?;
-        let (brought, linked) = runtime::sync(&game, &rt)
+        paths::check_separate(&game, &rt)?;
+        let report = runtime::sync(&game, &rt)
             .map_err(|e| format!("cannot prepare {}: {e}", rt.display()))?;
         log_line(&format!(
             "runtime: {} ({} files, {} linked)",
             rt.display(),
-            brought,
-            linked
+            report.brought,
+            report.linked
         ));
+        for w in &report.warnings {
+            log_line(&format!("warning: {w}"));
+        }
 
         // The player's profile lives outside the runtime copy; the game
         // reads and writes its own `CMR3`, kept in step before and after.
@@ -230,9 +241,15 @@ mod app {
         // the saves folder, or else the runtime's when the last session
         // ended (a crash) before the launcher could save it.
         let profile_state = rt.join(runtime::PROFILE_STATE);
-        match runtime::profile_before(&rt_profile, &save_profile, &profile_state) {
-            Ok(Some(what)) => log_line(&format!("profile: {what}")),
-            Ok(None) => {}
+        let mirror = runtime::profile_mirror(&rt_profile, &save_profile, &profile_state);
+        match mirror.before() {
+            Ok(moved) if !moved.to_runtime.is_empty() => {
+                log_line("profile: restored from the saves folder")
+            }
+            Ok(moved) if !moved.to_saves.is_empty() => log_line(
+                "profile: saved to the saves folder (the last session ended before it was)",
+            ),
+            Ok(_) => {}
             Err(e) => return Err(format!("cannot prepare the profile: {e}")),
         }
 
@@ -247,36 +264,41 @@ mod app {
         // What we're running on, decided once: DXVK only helps under Wine,
         // and the display mode the game can honour depends on whether
         // gamescope already gives it a single screen.
-        let wine = win32::is_wine();
+        let wine = wine::is_wine();
         let gamescope = std::env::var_os("GAMESCOPE_WAYLAND_DISPLAY").is_some();
 
         // The bundled parts, and the DLL names Wine must then load from
         // the game folder.
         let mut natives = Vec::new();
-        match components::install_silentpatch(&rt, &bundle) {
-            Ok(true) => {
+        match components::install_silentpatch(&game, &rt, &bundle) {
+            Ok(Installed::Done) => {
                 natives.push("dsound");
                 log_line("SilentPatch installed")
             }
-            Ok(false) => log_line(
+            Ok(Installed::NotBundled) => log_line(
                 "warning: SilentPatch not bundled; the widescreen and compatibility fixes are off",
             ),
+            Ok(Installed::NotOurs(name)) => log_line(&not_ours("SilentPatch", name, &rt)),
             Err(e) => log_line(&format!("warning: SilentPatch: {e}")),
         }
         let gamepad = settings.gamepad.unwrap_or_default();
         let gamepad_log = settings.gamepad_log == Some(true);
         let xidi = match components::install_xidi(&game, &rt, &bundle, gamepad, gamepad_log) {
-            Ok(true) => {
+            Ok(Installed::Done) => {
                 log_line(&format!("Xidi installed ({gamepad:?})"));
                 if gamepad != Gamepad::Off {
                     natives.push("dinput8");
                 }
                 true
             }
-            Ok(false) => {
+            Ok(Installed::NotBundled) => {
                 log_line(
                     "warning: Xidi not bundled; the gamepad runs through the game's own DirectInput",
                 );
+                false
+            }
+            Ok(Installed::NotOurs(name)) => {
+                log_line(&not_ours("Xidi", name, &rt));
                 false
             }
             Err(e) => {
@@ -295,12 +317,13 @@ mod app {
         }
         let dxvk_on = settings.dxvk != Some(false) && wine;
         match components::install_dxvk(&game, &rt, &bundle, dxvk_on) {
-            Ok(true) if dxvk_on => {
+            Ok(Installed::Done) if dxvk_on => {
                 natives.push("d3d9");
                 log_line("DXVK installed (d3d9 through Vulkan)")
             }
-            Ok(true) => log_line("DXVK not active"),
-            Ok(false) => log_line(
+            Ok(Installed::Done) => log_line("DXVK not active"),
+            Ok(Installed::NotOurs(name)) => log_line(&not_ours("DXVK", name, &rt)),
+            Ok(Installed::NotBundled) => log_line(
                 "warning: DXVK not bundled; Wine's own OpenGL translator will draw (slow at 4K)",
             ),
             Err(e) => log_line(&format!("warning: DXVK: {e}")),
@@ -320,7 +343,7 @@ mod app {
         }
         // Unset: SilentPatch's default is the desktop's size; on this
         // screen that is what the settings window would have picked.
-        let resolution = settings.resolution.or_else(win32::screen_size);
+        let resolution = settings.resolution.or_else(display::screen_size);
         // The display mode the game can actually honour here (see
         // `DisplayMode::effective`): exclusive fullscreen under raw Wine
         // chases the desktop's monitor list, so it plays borderless
@@ -346,9 +369,9 @@ mod app {
         }
 
         // Remember the game folder; the rest of the file stays as written.
-        if existing.is_none() || saved.game.as_ref() != Some(&game) {
+        if writable && (existing.is_none() || saved.game.as_ref() != Some(&game)) {
             let text = config::set_key(file_text, "game", &game.display().to_string());
-            if let Err(e) = fs::write(&settings_path, text) {
+            if let Err(e) = fsx::write_atomic(&settings_path, text) {
                 log_line(&format!(
                     "warning: cannot write {}: {e}",
                     settings_path.display()
@@ -357,7 +380,7 @@ mod app {
         }
 
         if !wine {
-            match win32::prefer_fast_gpu(&rt.join(EXE)) {
+            match gpu::prefer_fast_gpu(&rt.join(EXE)) {
                 Ok(true) => log_line("Windows: high-performance GPU for the game"),
                 Ok(false) => {}
                 Err(e) => log_line(&format!("warning: {e}")),
@@ -372,12 +395,16 @@ mod app {
             log_line(&format!("WINEDLLOVERRIDES={o}"));
         }
         log_line("starting the game");
-        let code = win32::run(&rt.join(EXE), &rt, overrides.as_deref())?;
+        let mut launch = Launch::new(rt.join(EXE)).cwd(&rt);
+        if let Some(o) = overrides {
+            launch = launch.env("WINEDLLOVERRIDES", o);
+        }
+        let code = launch.run()?;
         log_line(&format!("game exited with {code}"));
         if rt_profile.is_file() {
-            match runtime::profile_after(&rt_profile, &save_profile, &profile_state) {
-                Ok(true) => log_line("profile: saved"),
-                Ok(false) => {}
+            match mirror.after() {
+                Ok(copied) if !copied.is_empty() => log_line("profile: saved"),
+                Ok(_) => {}
                 Err(e) => log_line(&format!(
                     "warning: profile not saved to {}: {e}",
                     save_profile.display()
@@ -385,6 +412,16 @@ mod app {
             }
         }
         Ok(code)
+    }
+
+    /// The log line for a component left out because the runtime already
+    /// holds a file of that name that is not the launcher's.
+    fn not_ours(component: &str, name: &str, rt: &Path) -> String {
+        format!(
+            "warning: {component} left out: {} is not the launcher's (a file you put \
+             there?); remove it to let the launcher install its own",
+            rt.join(name).display()
+        )
     }
 
     /// Applies the bundled DRM-free patch (CookiePLMonster's xdelta
@@ -401,14 +438,15 @@ mod app {
         }
         let exe = rt.join(EXE);
         let backup = rt.join("Rally_3PC.exe.drm");
-        runtime::install_copy(&exe, &backup)
+        fsx::install_copy(&exe, &backup)
             .map_err(|e| format!("cannot back up the executable: {e}"))?;
         for variant in ["efigs", "polish"] {
             let args =
                 components::xdelta_args(&xdelta, &backup, variant, &exe.with_extension("new"));
-            match win32::run_hidden(&xdelta, &args, rt) {
+            let run = Launch::new(&xdelta).args(&args).cwd(rt).hidden(true).run();
+            match run.map(|code| code == 0) {
                 Ok(true) => {
-                    runtime::install_copy(&exe.with_extension("new"), &exe)
+                    fsx::install_copy(&exe.with_extension("new"), &exe)
                         .map_err(|e| format!("cannot replace the executable: {e}"))?;
                     let _ = fs::remove_file(&backup);
                     let _ = fs::remove_file(exe.with_extension("new"));

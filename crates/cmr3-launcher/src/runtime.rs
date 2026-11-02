@@ -1,587 +1,130 @@
-//! The runtime folder: a private, writable copy of the user's game folder.
+//! The runtime folder: a private, writable copy of the user's game folder,
+//! kept by the SDK's `rea_launcher::runtime` with CMR3's knowledge of its
+//! files ([`Cmr3`]).
 //!
 //! The user's folder is never written. The game is about 3 GB, most of it
 //! static data the game only reads (`Data\`, `fonts\`, `shaders\`, the math
 //! DLLs), so those files are hard-linked into the runtime folder when the
 //! two folders sit on one volume — near-instant setup — and copied
 //! otherwise. Everything the game or the launcher writes into the runtime
-//! folder goes through `install`/`replace`, which swap the file in whole,
-//! never writing through a link back to the original.
+//! folder is swapped in whole (`rea_launcher::fsx`), never written through
+//! a link back to the original.
 //!
 //! A manifest records what each file looked like in the source, so later
 //! launches bring in only what changed there. The game's profile (`CMR3`)
 //! is copied once and then belongs to the game; the launcher keeps it in
-//! step with the player's saves folder instead.
+//! step with the player's saves folder instead ([`profile_mirror`]).
 
-use std::collections::BTreeMap;
-use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::path::Path;
+
+use rea_launcher::fsx;
+use rea_launcher::runtime::{Policy, Stamp, SyncReport};
+use rea_launcher::saves::{FirstRun, Mirror};
+
+pub use rea_launcher::paths::native;
+pub use rea_launcher::runtime::list;
 
 pub const MANIFEST: &str = ".cmr3-manifest";
 
 /// The game's own record of the player's progress, in the game's root.
 pub const PROFILE: &str = "CMR3";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Stamp {
-    pub size: u64,
-    pub mtime: u64,
-}
-
-/// Relative path (with `/` separators) to its stamp.
-pub type Listing = BTreeMap<String, Stamp>;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Plan {
-    pub copy: Vec<String>,
-    /// The new manifest, written after the copies succeed.
-    pub manifest: Listing,
-}
-
-/// True for trees the game only reads, which may be hard-linked instead of
-/// copied (and fall back to a copy when linking is not possible).
-fn is_static(rel: &str) -> bool {
-    let top = rel.split('/').next().unwrap_or_default();
-    if matches!(top, "Data" | "fonts" | "shaders") {
-        return true;
-    }
-    // No folder part: static root files.
-    !rel.contains('/') && {
-        let lower = rel.to_ascii_lowercase();
-        lower.ends_with(".dll")
-            || lower.ends_with(".ico")
-            || lower.ends_with(".exe")
-            || lower.ends_with(".bin")
-    }
-}
-
-/// True for files the game writes while playing: never linked, never
-/// overwritten by a sync once they exist in the runtime folder.
-fn is_game_written(rel: &str) -> bool {
-    rel.eq_ignore_ascii_case(PROFILE)
-}
-
-/// Decides which files to bring over.
-///
-/// - missing in the runtime folder: link or copy;
-/// - changed in the source since the last sync (per the manifest): bring
-///   it in again, except files the game writes, which the game owns once
-///   they exist.
-pub fn plan(source: &Listing, runtime_has: &dyn Fn(&str) -> bool, manifest: &Listing) -> Plan {
-    let mut copy = Vec::new();
-    let mut next = Listing::new();
-    for (rel, stamp) in source {
-        let present = runtime_has(rel);
-        let changed = manifest.get(rel) != Some(stamp);
-        if !present || (changed && !is_game_written(rel)) {
-            copy.push(rel.clone());
-            next.insert(rel.clone(), *stamp);
-        } else {
-            next.insert(rel.clone(), *manifest.get(rel).unwrap_or(stamp));
-        }
-    }
-    Plan {
-        copy,
-        manifest: next,
-    }
-}
-
-pub fn parse_manifest(text: &str) -> Listing {
-    text.lines()
-        .filter_map(|line| {
-            let mut parts = line.splitn(3, '\t');
-            let size = parts.next()?.parse().ok()?;
-            let mtime = parts.next()?.parse().ok()?;
-            let rel = parts.next()?.to_owned();
-            Some((rel, Stamp { size, mtime }))
-        })
-        .collect()
-}
-
-pub fn format_manifest(listing: &Listing) -> String {
-    listing
-        .iter()
-        .map(|(rel, s)| format!("{}\t{}\t{}\n", s.size, s.mtime, rel))
-        .collect()
-}
-
-fn mtime_secs(meta: &fs::Metadata) -> u64 {
-    meta.modified()
-        .ok()
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map_or(0, |d| d.as_secs())
-}
-
-/// Lists every file below `root`.
-pub fn list(root: &Path) -> io::Result<Listing> {
-    fn walk(root: &Path, dir: &Path, out: &mut Listing) -> io::Result<()> {
-        for entry in fs::read_dir(dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            // Followed: a symlinked file (or folder) counts as what it
-            // points to; a dangling one is skipped.
-            let Ok(meta) = fs::metadata(&path) else {
-                continue;
-            };
-            if meta.is_dir() {
-                walk(root, &path, out)?;
-            } else if meta.is_file() {
-                let rel = path
-                    .strip_prefix(root)
-                    .expect("walk stays below root")
-                    .components()
-                    .map(|c| c.as_os_str().to_string_lossy())
-                    .collect::<Vec<_>>()
-                    .join("/");
-                out.insert(
-                    rel,
-                    Stamp {
-                        size: meta.len(),
-                        mtime: mtime_secs(&meta),
-                    },
-                );
-            }
-        }
-        Ok(())
-    }
-    let mut out = Listing::new();
-    walk(root, root, &mut out)?;
-    Ok(out)
-}
-
-pub fn native(root: &Path, rel: &str) -> PathBuf {
-    rel.split('/')
-        .fold(root.to_path_buf(), |p, part| p.join(part))
-}
-
-fn normalize(path: &Path) -> PathBuf {
-    let mut normalized = PathBuf::new();
-    for component in path.components() {
-        match component {
-            std::path::Component::CurDir => {}
-            std::path::Component::ParentDir => {
-                if !normalized.pop() && !normalized.has_root() {
-                    normalized.push("..");
-                }
-            }
-            _ => normalized.push(component.as_os_str()),
-        }
-    }
-    normalized
-}
-
-type Canonicalize = dyn Fn(&Path) -> io::Result<PathBuf>;
-
-fn absolute(path: &Path, cwd: &Path) -> PathBuf {
-    if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        cwd.join(path)
-    }
-}
-
-/// Resolves a path even when its last components do not exist yet:
-/// the nearest existing ancestor is canonicalized (symlinks, Windows
-/// aliases), the rest is normalized (`.`, `..`) lexically. Where the
-/// volume cannot canonicalize at all (Windows RAM disks, subst drives,
-/// some FUSE mounts: "Incorrect function"), the whole path is normalized
-/// lexically instead.
-pub fn resolve(path: &Path, cwd: &Path) -> Result<PathBuf, String> {
-    resolve_with(path, cwd, &|p| fs::canonicalize(p))
-}
-
-fn resolve_with(path: &Path, cwd: &Path, canonicalize: &Canonicalize) -> Result<PathBuf, String> {
-    let absolute = absolute(path, cwd);
-    let mut ancestor = absolute.as_path();
-    let mut suffix = Vec::new();
-    loop {
-        match canonicalize(ancestor) {
-            Ok(mut resolved) => {
-                for component in suffix.iter().rev() {
-                    resolved.push(component);
-                }
-                return Ok(normalize(&resolved));
-            }
-            Err(e) if e.kind() == io::ErrorKind::NotFound => {
-                let Some(component) = ancestor.components().next_back() else {
-                    return Err(format!("cannot resolve {}", path.display()));
-                };
-                match component {
-                    std::path::Component::Normal(name) => suffix.push(name.to_os_string()),
-                    std::path::Component::ParentDir => suffix.push("..".into()),
-                    std::path::Component::CurDir => {}
-                    _ => return Err(format!("cannot resolve {}: {e}", path.display())),
-                }
-                ancestor = ancestor
-                    .parent()
-                    .ok_or_else(|| format!("cannot resolve {}: {e}", path.display()))?;
-            }
-            Err(_) => return Ok(normalize(&absolute)),
-        }
-    }
-}
-
-fn check_separate_from(
-    game: &Path,
-    runtime: &Path,
-    cwd: &Path,
-    canonicalize: &Canonicalize,
-) -> Result<(), String> {
-    let overlap = |a: &Path, b: &Path| a.starts_with(b) || b.starts_with(a);
-    let g = resolve_with(game, cwd, canonicalize)?;
-    let r = resolve_with(runtime, cwd, canonicalize)?;
-    // Also lexically: when only one of the two could be canonicalized,
-    // their spellings differ (`\\?\` prefixes, resolved aliases).
-    let lexical = |p: &Path| normalize(&absolute(p, cwd));
-    if overlap(&r, &g) || overlap(&lexical(runtime), &lexical(game)) {
-        return Err(format!(
-            "the runtime folder {} must be outside the game folder {}",
-            runtime.display(),
-            game.display()
-        ));
-    }
-    Ok(())
-}
-
-/// Refuses runtime folders that overlap the game folder, including ones
-/// that do not exist yet or reach it through `..` or a symlink.
-pub fn check_separate(game: &Path, runtime: &Path) -> Result<(), String> {
-    let cwd = std::env::current_dir().map_err(|e| format!("current directory: {e}"))?;
-    check_separate_from(game, runtime, &cwd, &|p| fs::canonicalize(p))
-}
-
-/// Clears read-only on a file the launcher just created. Never called on
-/// an existing runtime file: that may be a hard link to the user's
-/// original, whose attributes it shares.
-fn make_writable(path: &Path) -> io::Result<()> {
-    let mut perm = fs::metadata(path)?.permissions();
-    // Unix: the owner's write bit only (set_readonly(false) would make
-    // the file writable by everyone).
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        perm.set_mode(perm.mode() | 0o200);
-    }
-    #[cfg(not(unix))]
-    #[allow(clippy::permissions_set_readonly_false)]
-    perm.set_readonly(false);
-    fs::set_permissions(path, perm)
-}
-
-/// Brings one file from the game into the runtime folder: a hard link for
-/// static data when both sit on one volume (falling back to a copy), a
-/// plain copy otherwise. Returns how the file arrived.
-fn bring_over(from: &Path, to: &Path, rel: &str) -> io::Result<&'static str> {
-    // A read-only original (a CD or ISO copy) is copied: a link would
-    // share its attribute, and replacing a read-only file later needs a
-    // fallback that is unreliable under Wine.
-    // The real file is linked: hard_link does not follow a symlink on
-    // Linux, and a link to the symlink itself could point nowhere.
-    if is_static(rel)
-        && fs::metadata(from).is_ok_and(|m| !m.permissions().readonly())
-        && let Ok(real) = fs::canonicalize(from)
-    {
-        let linked = put_in_place(to, |tmp| fs::hard_link(&real, tmp));
-        if linked.is_ok() {
-            return Ok("linked");
-        }
-    }
-    install_copy(from, to)?;
-    Ok("copied")
-}
-
-/// Where a replacement for `path` is prepared, beside it (same volume, so
-/// the final rename is one step).
-fn temp_beside(path: &Path) -> PathBuf {
-    let mut name = std::ffi::OsString::from(".");
-    name.push(path.file_name().unwrap_or_default());
-    name.push(".cmr3-new");
-    path.with_file_name(name)
-}
-
-/// Builds `path`'s new content with `make` at a temp name, then renames it
-/// over `path`: the old file stays whole until the new one is complete.
-/// Nothing is ever written through `path`, which may be a hard link to
-/// the user's original.
-fn put_in_place(path: &Path, make: impl FnOnce(&Path) -> io::Result<()>) -> io::Result<()> {
-    if let Some(dir) = path.parent() {
-        fs::create_dir_all(dir)?;
-    }
-    let tmp = temp_beside(path);
-    let _ = fs::remove_file(&tmp);
-    // On Windows an antivirus or OneDrive briefly holds a fresh file:
-    // a refused rename is tried again a few times first.
-    let tries = if cfg!(windows) { 5 } else { 1 };
-    let rename = || retrying(tries, Duration::from_millis(100), || fs::rename(&tmp, path));
-    let result = make(&tmp).and_then(|()| match rename() {
-        // Windows refuses to replace a read-only file: remove it (std
-        // ignores the attribute, never changing it), then rename.
-        Err(e) if e.kind() == io::ErrorKind::PermissionDenied && path.exists() => {
-            fs::remove_file(path)?;
-            fs::rename(&tmp, path)
-        }
-        other => other,
-    });
-    // Gone after a rename, except when `path` already was the same file
-    // (renaming a link onto itself does nothing).
-    let _ = fs::remove_file(&tmp);
-    result
-}
-
-/// Runs `op` up to `tries` times while it is refused (PermissionDenied),
-/// waiting `wait` between tries.
-fn retrying(tries: u32, wait: Duration, mut op: impl FnMut() -> io::Result<()>) -> io::Result<()> {
-    let mut result = op();
-    for _ in 1..tries {
-        match &result {
-            Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
-                std::thread::sleep(wait);
-                result = op();
-            }
-            _ => break,
-        }
-    }
-    result
-}
-
-/// Writes `bytes` to `path` as a fresh file, never through a hard link to
-/// the original.
-pub fn install(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    put_in_place(path, |tmp| fs::write(tmp, bytes))
-}
-
-/// Copies `from` over `path` as a fresh, writable file (never through a
-/// link).
-pub fn install_copy(from: &Path, path: &Path) -> io::Result<()> {
-    put_in_place(path, |tmp| {
-        fs::copy(from, tmp)?;
-        make_writable(tmp)
-    })
-}
-
-/// Puts the game's own `rel` back in the runtime folder (linked or
-/// copied, as a sync would), or removes it when the game has none.
-pub fn restore(game: &Path, runtime: &Path, rel: &str) -> io::Result<()> {
-    let from = native(game, rel);
-    let to = native(runtime, rel);
-    if from.is_file() {
-        bring_over(&from, &to, rel).map(|_| ())
-    } else {
-        remove(&to)
-    }
-}
-
-/// Removes a file the launcher put in the runtime folder, writable or not.
-pub fn remove(path: &Path) -> io::Result<()> {
-    if path.exists() {
-        fs::remove_file(path)?;
-    }
-    Ok(())
-}
-
-/// Brings `runtime` up to date with `game`. Returns how many files were
-/// brought over and how many of those were hard-linked.
-pub fn sync(game: &Path, runtime: &Path) -> io::Result<(usize, usize)> {
-    let source = list(game)?;
-    fs::create_dir_all(runtime)?;
-    let manifest_path = runtime.join(MANIFEST);
-    let manifest = fs::read_to_string(&manifest_path)
-        .map(|t| parse_manifest(&t))
-        .unwrap_or_default();
-    let plan = plan(&source, &|rel| native(runtime, rel).is_file(), &manifest);
-    let mut linked = 0;
-    for rel in &plan.copy {
-        let from = native(game, rel);
-        let to = native(runtime, rel);
-        if bring_over(&from, &to, rel)? == "linked" {
-            // A link is the original itself: its time is already the
-            // source's, and setting it would touch the user's file.
-            linked += 1;
-            continue;
-        }
-        // The manifest compares source stamps; a copy keeps the source's
-        // modification time so saves mirroring can tell them apart later.
-        if let Some(stamp) = source.get(rel)
-            && let Ok(file) = fs::OpenOptions::new().write(true).open(&to)
-        {
-            let _ = file.set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(stamp.mtime));
-        }
-    }
-    fs::write(&manifest_path, format_manifest(&plan.manifest))?;
-    Ok((plan.copy.len(), linked))
-}
-
-/// Copies `from` over `to` when `to` is missing or older: an earlier
-/// modification time, or the same second with another size. Returns true
-/// when a copy was made. Used to keep the player's profile (`saves`
-/// setting) and the runtime's `CMR3` file in step, in either direction —
-/// never putting an older profile over a newer one.
-pub fn mirror_file(from: &Path, to: &Path) -> io::Result<bool> {
-    let Ok(meta) = fs::metadata(from) else {
-        return Ok(false);
-    };
-    let stamp = Stamp {
-        size: meta.len(),
-        mtime: mtime_secs(&meta),
-    };
-    if let Ok(dst) = fs::metadata(to) {
-        let dst_mtime = mtime_secs(&dst);
-        if dst_mtime > stamp.mtime || (dst_mtime == stamp.mtime && dst.len() == stamp.size) {
-            return Ok(false);
-        }
-    }
-    install_copy(from, to)?;
-    let file = fs::OpenOptions::new().write(true).open(to)?;
-    file.set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(stamp.mtime))?;
-    Ok(true)
-}
-
-/// The profile's stamp as of the last time it was mirrored, kept in the
-/// runtime folder: it tells which copy changed since.
+/// The profile's state as of the last mirror, kept in the runtime folder:
+/// it tells which copy changed since.
 pub const PROFILE_STATE: &str = ".cmr3-profile-state";
 
-fn stamp_of(path: &Path) -> Option<Stamp> {
-    let meta = fs::metadata(path).ok().filter(|m| m.is_file())?;
-    Some(Stamp {
-        size: meta.len(),
-        mtime: mtime_secs(&meta),
-    })
-}
+/// The temp-file suffix launchers before the SDK used (`.name.cmr3-new`).
+pub const LEGACY_TEMP: &str = ".cmr3-new";
 
-fn read_state(path: &Path) -> Option<Stamp> {
-    let text = fs::read_to_string(path).ok()?;
-    let (size, mtime) = text.trim().split_once('\t')?;
-    Some(Stamp {
-        size: size.parse().ok()?,
-        mtime: mtime.parse().ok()?,
-    })
-}
+/// What CMR3 knows about its files.
+pub struct Cmr3;
 
-fn write_state(path: &Path, stamp: Option<Stamp>) -> io::Result<()> {
-    match stamp {
-        Some(s) => install(path, format!("{}\t{}\n", s.size, s.mtime).as_bytes()),
-        None => remove(path),
+impl Policy for Cmr3 {
+    /// Trees the game only reads, and the static root files: hard-linked
+    /// when possible.
+    fn link(&self, rel: &str) -> bool {
+        let top = rel.split('/').next().unwrap_or_default();
+        if matches!(top, "Data" | "fonts" | "shaders") {
+            return true;
+        }
+        // No folder part: static root files.
+        !rel.contains('/') && {
+            let lower = rel.to_ascii_lowercase();
+            [".dll", ".ico", ".exe", ".bin"]
+                .iter()
+                .any(|ext| lower.ends_with(ext))
+        }
+    }
+
+    /// The profile: copied once, then the game's.
+    fn game_written(&self, rel: &str, _source: Stamp) -> bool {
+        rel.eq_ignore_ascii_case(PROFILE)
     }
 }
 
-/// Copies `from` over `to` with `from`'s modification time.
-fn copy_stamped(from: &Path, to: &Path) -> io::Result<()> {
-    let mtime = stamp_of(from).map_or(0, |s| s.mtime);
-    install_copy(from, to)?;
-    let file = fs::OpenOptions::new().write(true).open(to)?;
-    file.set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(mtime))
-}
-
-/// Before the game starts: brings the runtime's profile (`runtime`) and
-/// the player's copy (`saves`) into step, using the stamp recorded at
-/// the last mirror (`state`). A saves copy that changed since wins (the
-/// player restored or copied one in, even an older one); otherwise a
-/// runtime copy that changed wins (the last session ended before the
-/// launcher saved it). Without a record, the newer copy wins. Returns a
-/// log line when something was copied.
-pub fn profile_before(
-    runtime: &Path,
-    saves: &Path,
-    state: &Path,
-) -> io::Result<Option<&'static str>> {
-    let Some(last) = read_state(state) else {
-        let mut did = None;
-        if runtime.is_file() && mirror_file(runtime, saves)? {
-            did = Some("saved to the saves folder (newer)");
-        }
-        if mirror_file(saves, runtime)? {
-            did = Some("restored from the saves folder (newer)");
-        }
-        write_state(state, stamp_of(runtime))?;
-        return Ok(did);
-    };
-    let did = if saves.is_file() && stamp_of(saves) != Some(last) {
-        copy_stamped(saves, runtime)?;
-        Some("restored from the saves folder (changed there)")
-    } else if runtime.is_file() && stamp_of(runtime) != Some(last) {
-        copy_stamped(runtime, saves)?;
-        Some("saved to the saves folder (the last session ended before it was)")
-    } else {
-        None
-    };
-    write_state(state, stamp_of(runtime))?;
-    Ok(did)
-}
-
-/// After the game exits: the runtime's profile goes to the saves folder
-/// when it differs, and the record follows. True when it was copied.
-pub fn profile_after(runtime: &Path, saves: &Path, state: &Path) -> io::Result<bool> {
-    let changed = runtime.is_file() && stamp_of(runtime) != stamp_of(saves);
-    if changed {
-        copy_stamped(runtime, saves)?;
+/// Brings `runtime` up to date with `game`. Temp files an older launcher
+/// left behind (`.cmr3-new`) are unlinked first, best effort.
+pub fn sync(game: &Path, runtime: &Path) -> io::Result<SyncReport> {
+    if runtime.is_dir() {
+        let _ = fsx::remove_stale_temps(runtime, &[LEGACY_TEMP]);
     }
-    write_state(state, stamp_of(runtime))?;
-    Ok(changed)
+    rea_launcher::runtime::sync(game, runtime, &Cmr3, MANIFEST)
+}
+
+/// Puts the game's own `rel` back in the runtime folder (linked or copied,
+/// as a sync would), or removes it when the game has none.
+pub fn restore(game: &Path, runtime: &Path, rel: &str) -> io::Result<()> {
+    rea_launcher::runtime::restore(game, runtime, rel, &Cmr3)
+}
+
+/// The profile mirror between the runtime's `CMR3` (`runtime_profile`) and
+/// the player's copy (`saved_profile`), recorded in `state`
+/// ([`PROFILE_STATE`] in the runtime folder). A copy changed since the last
+/// mirror wins (a backup the player restored, even an older one; or the
+/// runtime's when a session ended before it was saved); without a record
+/// the newer copy wins.
+pub fn profile_mirror<'a>(
+    runtime_profile: &'a Path,
+    saved_profile: &'a Path,
+    state: &'a Path,
+) -> Mirror<'a> {
+    Mirror::file(runtime_profile, saved_profile, state, FirstRun::NewerWins)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn stamp(size: u64, mtime: u64) -> Stamp {
-        Stamp { size, mtime }
-    }
-
-    fn listing(items: &[(&str, Stamp)]) -> Listing {
-        items.iter().map(|(r, s)| (r.to_string(), *s)).collect()
-    }
-
-    #[test]
-    fn first_sync_bring_everything_over() {
-        let src = listing(&[
-            ("Rally_3PC.exe", stamp(1, 1)),
-            ("Data/Tracks/a.dat", stamp(2, 2)),
-            ("CMR3", stamp(3, 3)),
-        ]);
-        let p = plan(&src, &|_| false, &Listing::new());
-        assert_eq!(p.copy, ["CMR3", "Data/Tracks/a.dat", "Rally_3PC.exe"]);
-        assert_eq!(p.manifest, src);
-    }
-
-    #[test]
-    fn unchanged_source_bring_nothing() {
-        let src = listing(&[("Rally_3PC.exe", stamp(1, 1))]);
-        let p = plan(&src, &|_| true, &src);
-        assert!(p.copy.is_empty());
-    }
-
-    #[test]
-    fn changed_data_is_brought_again_but_the_profile_is_kept() {
-        let old = listing(&[("Data/a.dat", stamp(1, 1)), ("CMR3", stamp(1, 1))]);
-        let new = listing(&[("Data/a.dat", stamp(1, 9)), ("CMR3", stamp(5, 9))]);
-        let p = plan(&new, &|_| true, &old);
-        assert_eq!(p.copy, ["Data/a.dat"]);
-        assert_eq!(p.manifest["CMR3"], stamp(1, 1));
-    }
-
-    #[test]
-    fn static_and_written_files_are_classified() {
-        assert!(is_static("Data/Tracks/x"));
-        assert!(is_static("fonts/hel_18pt.dds"));
-        assert!(is_static("shaders/water.pso"));
-        assert!(is_static("MathCPU.dll"));
-        assert!(is_static("Rally_3PC.exe"));
-        assert!(is_static("PATCHINFO.BIN"));
-        assert!(!is_static("CMR3"));
-        assert!(!is_static("SilentPatchCMR3.ini"));
-        assert!(!is_static("unins000.exe.log"));
-        assert!(is_game_written("CMR3"));
-        assert!(is_game_written("cmr3"));
-        assert!(!is_game_written("CMR3.bak"));
-    }
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{Duration, SystemTime};
 
     fn temp(name: &str) -> PathBuf {
         let p =
             std::env::temp_dir().join(format!("cmr3-launcher-test-{}-{name}", std::process::id()));
         let _ = fs::remove_dir_all(&p);
         p
+    }
+
+    #[test]
+    fn static_and_written_files_are_classified() {
+        let s = Stamp { size: 1, mtime: 1 };
+        for rel in [
+            "Data/Tracks/x",
+            "fonts/hel_18pt.dds",
+            "shaders/water.pso",
+            "MathCPU.dll",
+            "Rally_3PC.exe",
+            "PATCHINFO.BIN",
+        ] {
+            assert!(Cmr3.link(rel), "{rel}");
+        }
+        for rel in ["CMR3", "SilentPatchCMR3.ini", "unins000.exe.log"] {
+            assert!(!Cmr3.link(rel), "{rel}");
+        }
+        assert!(Cmr3.game_written("CMR3", s));
+        assert!(Cmr3.game_written("cmr3", s));
+        assert!(!Cmr3.game_written("CMR3.bak", s));
     }
 
     #[test]
@@ -593,20 +136,17 @@ mod tests {
         fs::write(game.join("Data/Tracks/a.dat"), b"data").unwrap();
         fs::write(game.join("CMR3"), b"profile").unwrap();
 
-        let (brought, linked) = sync(&game, &rt).unwrap();
-        assert_eq!(brought, 3);
-        assert_eq!(linked, 2, "the exe and the track file, not the profile");
+        let r = sync(&game, &rt).unwrap();
+        assert_eq!((r.brought, r.linked), (3, 2), "the exe and the track file");
         assert_eq!(fs::read(rt.join("CMR3")).unwrap(), b"profile");
-        assert_eq!(sync(&game, &rt).unwrap(), (0, 0));
+        assert!(rt.join(MANIFEST).is_file());
+        assert!(!game.join(MANIFEST).exists());
+        let again = sync(&game, &rt).unwrap();
+        assert_eq!((again.brought, again.linked), (0, 0));
 
         // Installing over a linked file must not change the original.
-        install(&rt.join("Data/Tracks/a.dat"), b"replaced").unwrap();
-        assert_eq!(fs::read(rt.join("Data/Tracks/a.dat")).unwrap(), b"replaced");
-        assert_eq!(
-            fs::read(game.join("Data/Tracks/a.dat")).unwrap(),
-            b"data",
-            "the user's folder is never written"
-        );
+        fsx::install(&rt.join("Data/Tracks/a.dat"), b"replaced").unwrap();
+        assert_eq!(fs::read(game.join("Data/Tracks/a.dat")).unwrap(), b"data");
 
         // The game writes its profile; a changed source file comes in, the
         // profile does not.
@@ -619,93 +159,44 @@ mod tests {
         f.set_modified(SystemTime::now() + Duration::from_secs(10))
             .unwrap();
         drop(f);
-        assert_eq!(sync(&game, &rt).unwrap().0, 1);
+        assert_eq!(sync(&game, &rt).unwrap().brought, 1);
         assert_eq!(fs::read(rt.join("CMR3")).unwrap(), b"played");
 
+        // Restoring the game's own file after the launcher replaced it.
+        fsx::install(&rt.join("Rally_3PC.exe"), b"patched").unwrap();
+        restore(&game, &rt, "Rally_3PC.exe").unwrap();
+        assert_eq!(fs::read(rt.join("Rally_3PC.exe")).unwrap(), b"exe");
         for d in [game, rt] {
             fs::remove_dir_all(d).unwrap();
         }
     }
 
-    #[cfg(unix)]
     #[test]
-    fn linked_originals_keep_their_time_and_attributes() {
-        use std::os::unix::fs::PermissionsExt;
-        let game = temp("linked-meta-game");
-        let rt = temp("linked-meta-rt");
+    fn temp_files_of_older_launchers_are_cleared() {
+        let game = temp("legacy-temp-game");
+        let rt = temp("legacy-temp-rt");
         fs::create_dir_all(game.join("Data")).unwrap();
-        let original = game.join("Data/a.dat");
-        fs::write(&original, b"data").unwrap();
-        // A time with a fraction of a second: a whole-second set_modified
-        // through the link would show.
-        let when = UNIX_EPOCH + Duration::from_millis(1_700_000_000_500);
-        let f = fs::OpenOptions::new().write(true).open(&original).unwrap();
-        f.set_modified(when).unwrap();
-        drop(f);
-        let mode = |p: &Path| fs::metadata(p).unwrap().permissions().mode() & 0o777;
-
-        assert_eq!(sync(&game, &rt).unwrap(), (1, 1));
-        assert_eq!(fs::metadata(&original).unwrap().modified().unwrap(), when);
-        // A runtime from before read-only originals were copied: the link
-        // shares the original's read-only mode.
-        fs::set_permissions(&original, fs::Permissions::from_mode(0o444)).unwrap();
-        install(&rt.join("Data/a.dat"), b"replaced").unwrap();
-        assert_eq!(mode(&original), 0o444, "install over the link");
-        fs::remove_file(rt.join("Data/a.dat")).unwrap();
-        fs::hard_link(&original, rt.join("Data/a.dat")).unwrap();
-        remove(&rt.join("Data/a.dat")).unwrap();
-        assert_eq!(mode(&original), 0o444, "remove of the link");
-        assert_eq!(fs::read(&original).unwrap(), b"data");
-        assert_eq!(fs::metadata(&original).unwrap().modified().unwrap(), when);
-
-        fs::set_permissions(&original, fs::Permissions::from_mode(0o644)).unwrap();
-        for d in [game, rt] {
-            fs::remove_dir_all(d).unwrap();
-        }
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn read_only_originals_are_copied_not_linked() {
-        use std::os::unix::fs::PermissionsExt;
-        let game = temp("ro-game");
-        let rt = temp("ro-rt");
-        fs::create_dir_all(game.join("Data")).unwrap();
+        fs::create_dir_all(rt.join("Data")).unwrap();
         fs::write(game.join("Data/a.dat"), b"data").unwrap();
-        fs::write(game.join("Data/b.dat"), b"more").unwrap();
-        fs::set_permissions(game.join("Data/a.dat"), fs::Permissions::from_mode(0o444)).unwrap();
-        assert_eq!(sync(&game, &rt).unwrap(), (2, 1), "only b.dat is linked");
+        // An interrupted pre-SDK install left its temp beside the target.
+        fs::write(rt.join(".SilentPatchCMR3.ini.cmr3-new"), b"half").unwrap();
+        fs::write(rt.join("Data/.a.dat.cmr3-new"), b"half").unwrap();
+        sync(&game, &rt).unwrap();
+        assert!(!rt.join(".SilentPatchCMR3.ini.cmr3-new").exists());
+        assert!(!rt.join("Data/.a.dat.cmr3-new").exists());
         assert_eq!(fs::read(rt.join("Data/a.dat")).unwrap(), b"data");
-        let copied = fs::metadata(rt.join("Data/a.dat")).unwrap().permissions();
-        assert_eq!(copied.mode() & 0o777, 0o644, "writable by its owner only");
-        fs::set_permissions(game.join("Data/a.dat"), fs::Permissions::from_mode(0o644)).unwrap();
         for d in [game, rt] {
             fs::remove_dir_all(d).unwrap();
         }
     }
 
-    #[cfg(unix)]
     #[test]
-    fn symlinked_originals_link_the_real_file() {
-        use std::os::unix::fs::MetadataExt;
-        let game = temp("symlink-game");
-        let rt = temp("symlink-rt");
-        fs::create_dir_all(game.join("Data")).unwrap();
-        fs::write(game.join("real.dat"), b"data").unwrap();
-        // A relative target: a link to the symlink itself would dangle.
-        std::os::unix::fs::symlink("../real.dat", game.join("Data/a.dat")).unwrap();
-        std::os::unix::fs::symlink("missing", game.join("Data/gone.dat")).unwrap();
-        sync(&game, &rt).unwrap();
-        let got = rt.join("Data/a.dat");
-        assert!(!fs::symlink_metadata(&got).unwrap().file_type().is_symlink());
-        assert_eq!(fs::read(&got).unwrap(), b"data");
-        assert_eq!(
-            fs::metadata(&got).unwrap().ino(),
-            fs::metadata(game.join("real.dat")).unwrap().ino()
-        );
-        for d in [game, rt] {
-            fs::remove_dir_all(d).unwrap();
-        }
+    fn the_runtime_must_be_outside_the_game() {
+        let game = temp("overlap");
+        fs::create_dir_all(&game).unwrap();
+        assert!(rea_launcher::paths::check_separate(&game, &game.join("rt")).is_err());
+        assert!(rea_launcher::paths::check_separate(&game, &temp("elsewhere")).is_ok());
+        fs::remove_dir_all(&game).unwrap();
     }
 
     /// A profile file with `bytes` and a modification time `secs` ago.
@@ -722,21 +213,22 @@ mod tests {
         let saves = temp(&format!("{name}-saves"));
         fs::create_dir_all(&rt).unwrap();
         let state = rt.join(PROFILE_STATE);
-        (rt.join("CMR3"), saves.join("CMR3"), state, saves)
+        (rt.join(PROFILE), saves.join(PROFILE), state, saves)
     }
 
     #[test]
     fn a_normal_session_saves_the_profile_at_exit() {
         let (rt, saves, state, saves_dir) = profile_dirs("profile-exit");
+        let mirror = profile_mirror(&rt, &saves, &state);
         put_profile(&saves, b"start", 100);
-        assert!(profile_before(&rt, &saves, &state).unwrap().is_some());
+        assert!(!mirror.before().unwrap().is_empty());
         assert_eq!(fs::read(&rt).unwrap(), b"start");
-        assert_eq!(profile_before(&rt, &saves, &state).unwrap(), None);
+        assert!(mirror.before().unwrap().is_empty());
         put_profile(&rt, b"played", 0);
-        assert!(profile_after(&rt, &saves, &state).unwrap());
+        assert_eq!(mirror.after().unwrap(), [PROFILE]);
         assert_eq!(fs::read(&saves).unwrap(), b"played");
-        assert!(!profile_after(&rt, &saves, &state).unwrap());
-        assert_eq!(profile_before(&rt, &saves, &state).unwrap(), None);
+        assert!(mirror.after().unwrap().is_empty());
+        assert!(mirror.before().unwrap().is_empty());
         for d in [rt.parent().unwrap(), &saves_dir] {
             fs::remove_dir_all(d).unwrap();
         }
@@ -745,15 +237,16 @@ mod tests {
     #[test]
     fn a_restored_older_backup_wins() {
         let (rt, saves, state, saves_dir) = profile_dirs("profile-backup");
+        let mirror = profile_mirror(&rt, &saves, &state);
         put_profile(&saves, b"start", 1000);
-        profile_before(&rt, &saves, &state).unwrap();
+        mirror.before().unwrap();
         put_profile(&rt, b"latest", 10);
-        profile_after(&rt, &saves, &state).unwrap();
+        mirror.after().unwrap();
         // The player copies an older backup into the saves folder.
         put_profile(&saves, b"backup", 5000);
-        assert!(profile_before(&rt, &saves, &state).unwrap().is_some());
+        assert_eq!(mirror.before().unwrap().to_runtime, [PROFILE]);
         assert_eq!(fs::read(&rt).unwrap(), b"backup");
-        assert!(!profile_after(&rt, &saves, &state).unwrap());
+        assert!(mirror.after().unwrap().is_empty());
         assert_eq!(fs::read(&saves).unwrap(), b"backup");
         for d in [rt.parent().unwrap(), &saves_dir] {
             fs::remove_dir_all(d).unwrap();
@@ -763,11 +256,12 @@ mod tests {
     #[test]
     fn a_session_killed_before_saving_is_recovered() {
         let (rt, saves, state, saves_dir) = profile_dirs("profile-crash");
+        let mirror = profile_mirror(&rt, &saves, &state);
         put_profile(&saves, b"start", 1000);
-        profile_before(&rt, &saves, &state).unwrap();
-        // The game saved, then the launcher was killed: no profile_after.
+        mirror.before().unwrap();
+        // The game saved, then the launcher was killed: no after().
         put_profile(&rt, b"progress", 10);
-        assert!(profile_before(&rt, &saves, &state).unwrap().is_some());
+        assert_eq!(mirror.before().unwrap().to_saves, [PROFILE]);
         assert_eq!(fs::read(&saves).unwrap(), b"progress");
         assert_eq!(fs::read(&rt).unwrap(), b"progress");
         for d in [rt.parent().unwrap(), &saves_dir] {
@@ -780,7 +274,7 @@ mod tests {
         let (rt, saves, state, saves_dir) = profile_dirs("profile-first");
         put_profile(&saves, b"old", 1000);
         put_profile(&rt, b"new", 10);
-        profile_before(&rt, &saves, &state).unwrap();
+        profile_mirror(&rt, &saves, &state).before().unwrap();
         assert_eq!(fs::read(&saves).unwrap(), b"new");
         assert!(state.is_file(), "recorded from now on");
         for d in [rt.parent().unwrap(), &saves_dir] {
@@ -789,166 +283,29 @@ mod tests {
     }
 
     #[test]
-    fn mirror_file_copies_only_what_changed() {
-        let a = temp("mirror-a");
-        let b = temp("mirror-b");
-        fs::create_dir_all(&a).unwrap();
-        fs::write(a.join("CMR3"), b"one").unwrap();
-        assert!(mirror_file(&a.join("CMR3"), &b.join("CMR3")).unwrap());
-        assert!(!mirror_file(&a.join("CMR3"), &b.join("CMR3")).unwrap());
-        assert!(!mirror_file(&a.join("missing"), &b.join("CMR3")).unwrap());
-        fs::write(a.join("CMR3"), b"two!").unwrap();
-        assert!(mirror_file(&a.join("CMR3"), &b.join("CMR3")).unwrap());
-        assert_eq!(fs::read(b.join("CMR3")).unwrap(), b"two!");
-        // A newer copy (the game saved, then the launcher never got to
-        // copy it back) is never overwritten by the older one.
-        let newer = fs::OpenOptions::new()
-            .write(true)
-            .open(b.join("CMR3"))
-            .unwrap();
-        newer
-            .set_modified(SystemTime::now() + Duration::from_secs(60))
-            .unwrap();
-        fs::write(a.join("CMR3"), b"old").unwrap();
-        assert!(!mirror_file(&a.join("CMR3"), &b.join("CMR3")).unwrap());
-        assert_eq!(fs::read(b.join("CMR3")).unwrap(), b"two!");
-        for d in [a, b] {
-            fs::remove_dir_all(d).unwrap();
-        }
-    }
-
-    #[test]
-    fn overlapping_folders_are_refused() {
-        let game = temp("overlap");
-        fs::create_dir_all(&game).unwrap();
-        assert!(check_separate(&game, &game.join("rt")).is_err());
-        assert!(check_separate(&game, &temp("elsewhere")).is_ok());
-        fs::remove_dir_all(&game).unwrap();
-    }
-
-    #[test]
-    fn missing_relative_and_dotdot_runtimes_are_resolved() {
-        let canon = |p: &Path| fs::canonicalize(p);
-        let game = temp("relative-overlap");
-        fs::create_dir_all(&game).unwrap();
-        let outside = resolve(Path::new("../outside-runtime"), &game).unwrap();
-        assert_eq!(outside, game.parent().unwrap().join("outside-runtime"));
-        assert!(check_separate_from(&game, Path::new("child"), &game, &canon).is_err());
-        assert!(check_separate_from(&game, Path::new("missing/../child"), &game, &canon).is_err());
-        assert!(check_separate_from(&game, Path::new("../outside"), &game, &canon).is_ok());
-        assert!(!game.join("child").exists(), "nothing is created");
-        fs::remove_dir_all(&game).unwrap();
-    }
-
-    #[test]
-    fn volumes_that_cannot_canonicalize_are_compared_lexically() {
-        let unsupported =
-            |_: &Path| -> io::Result<PathBuf> { Err(io::Error::other("Incorrect function")) };
-        let cwd = Path::new("/r/games");
-        assert_eq!(
-            resolve_with(Path::new("cmr3/./x/../rt"), cwd, &unsupported).unwrap(),
-            PathBuf::from("/r/games/cmr3/rt")
-        );
-        let game = Path::new("/r/games/cmr3");
-        assert!(check_separate_from(game, Path::new("cmr3/rt"), cwd, &unsupported).is_err());
-        assert!(check_separate_from(game, Path::new("../rt"), cwd, &unsupported).is_ok());
-        // Only the game canonicalizes (to another spelling): still refused.
-        let game_only = move |p: &Path| -> io::Result<PathBuf> {
-            if p == game {
-                Ok(PathBuf::from("/canonical/cmr3"))
-            } else {
-                Err(io::Error::other("Incorrect function"))
-            }
-        };
-        assert!(check_separate_from(game, Path::new("/r/games/cmr3/rt"), cwd, &game_only).is_err());
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn a_symlinked_parent_is_resolved_before_the_check() {
-        let game = temp("alias-game");
-        let alias = temp("alias-link");
-        fs::create_dir_all(&game).unwrap();
-        std::os::unix::fs::symlink(&game, &alias).unwrap();
-        assert!(check_separate(&game, &alias.join("new-runtime")).is_err());
-        fs::remove_file(&alias).unwrap();
-        fs::remove_dir_all(&game).unwrap();
-    }
-
-    #[test]
-    fn installs_swap_whole_files_and_leave_no_temp() {
-        let rt = temp("atomic");
-        fs::create_dir_all(&rt).unwrap();
-        let ini = rt.join("SilentPatchCMR3.ini");
-        install(&ini, b"one").unwrap();
-        // A temp left by an interrupted run is replaced, not in the way.
-        fs::write(temp_beside(&ini), b"stale").unwrap();
-        install(&ini, b"two").unwrap();
-        assert_eq!(fs::read(&ini).unwrap(), b"two");
-        // A failed copy leaves the old file whole.
-        assert!(install_copy(&rt.join("missing"), &ini).is_err());
-        assert_eq!(fs::read(&ini).unwrap(), b"two");
-        let names: Vec<_> = fs::read_dir(&rt)
+    fn the_state_file_of_older_launchers_is_read() {
+        let (rt, saves, state, saves_dir) = profile_dirs("profile-legacy");
+        put_profile(&saves, b"same", 1000);
+        put_profile(&rt, b"same", 1000);
+        // Pre-SDK record: the runtime profile's `size\tmtime` (seconds).
+        let mtime = fs::metadata(&rt)
             .unwrap()
-            .map(|e| e.unwrap().file_name())
-            .collect();
-        assert_eq!(names, ["SilentPatchCMR3.ini"]);
-        fs::remove_dir_all(&rt).unwrap();
-    }
-
-    #[test]
-    fn refused_renames_are_retried_a_few_times() {
-        let denied = || Err(io::Error::from(io::ErrorKind::PermissionDenied));
-        let mut calls = 0;
-        let r = retrying(5, Duration::ZERO, || {
-            calls += 1;
-            if calls < 3 { denied() } else { Ok(()) }
-        });
-        assert!(r.is_ok());
-        assert_eq!(calls, 3, "held briefly, then free");
-        calls = 0;
-        assert!(
-            retrying(5, Duration::ZERO, || {
-                calls += 1;
-                denied()
-            })
-            .is_err()
-        );
-        assert_eq!(calls, 5);
-        calls = 0;
-        let _ = retrying(5, Duration::ZERO, || {
-            calls += 1;
-            Err(io::Error::from(io::ErrorKind::NotFound))
-        });
-        assert_eq!(calls, 1, "other errors are final");
-    }
-
-    #[test]
-    fn relinking_the_same_original_leaves_no_temp() {
-        let game = temp("relink-game");
-        let rt = temp("relink-rt");
-        fs::create_dir_all(&game).unwrap();
-        fs::write(game.join("Rally_3PC.exe"), b"exe").unwrap();
-        sync(&game, &rt).unwrap();
-        // The runtime already holds a link to this very file.
-        assert_eq!(
-            bring_over(
-                &game.join("Rally_3PC.exe"),
-                &rt.join("Rally_3PC.exe"),
-                "Rally_3PC.exe"
-            )
-            .unwrap(),
-            "linked"
-        );
-        assert!(!temp_beside(&rt.join("Rally_3PC.exe")).exists());
-        for d in [game, rt] {
+            .modified()
+            .unwrap()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        fs::write(&state, format!("4\t{mtime}\n")).unwrap();
+        let mirror = profile_mirror(&rt, &saves, &state);
+        assert!(mirror.before().unwrap().is_empty(), "both as recorded");
+        let upgraded = fs::read_to_string(&state).unwrap();
+        assert!(upgraded.ends_with(&format!("\t{}\n", PROFILE.to_lowercase())));
+        // Then a backup restored with an older time still wins.
+        put_profile(&saves, b"back", 5000);
+        assert_eq!(mirror.before().unwrap().to_runtime, [PROFILE]);
+        assert_eq!(fs::read(&rt).unwrap(), b"back");
+        for d in [rt.parent().unwrap(), &saves_dir] {
             fs::remove_dir_all(d).unwrap();
         }
-    }
-
-    #[test]
-    fn manifest_round_trips() {
-        let l = listing(&[("Data/a b.dat", stamp(10, 20))]);
-        assert_eq!(parse_manifest(&format_manifest(&l)), l);
     }
 }

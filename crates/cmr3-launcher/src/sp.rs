@@ -4,97 +4,12 @@
 //! The launcher owns the keys below and leaves every other line as the
 //! game wrote it, so the player's own choices (gamma, detail levels,
 //! controls) survive. Keys the launcher no longer sets are removed, so the
-//! game's defaults apply again.
+//! game's defaults apply again. The editing itself is the SDK's
+//! `rea_launcher::ini` (byte-faithful, `KEY=value` as SilentPatch writes).
+
+use rea_launcher::ini::Ini;
 
 use crate::config::Settings;
-
-/// Sets `key = value` under `[section]`, keeping every other line as it
-/// was. The section is created (at the end) when missing.
-pub fn set(text: &str, section: &str, key: &str, value: &str) -> String {
-    match section_range(text, section) {
-        Some((start, end)) => insert_in_section(text, key, value, start, end),
-        None => {
-            // A last line without its newline would run into the header.
-            let sep = if text.is_empty() || text.ends_with('\n') {
-                ""
-            } else {
-                "\n"
-            };
-            format!("{text}{sep}[{section}]\n{key}={value}\n")
-        }
-    }
-}
-
-/// Removes `key` from `[section]`; other lines are kept.
-pub fn remove(text: &str, section: &str, key: &str) -> String {
-    let Some((start, end)) = section_range(text, section) else {
-        return text.to_string();
-    };
-    let mut out = text[..start].to_string();
-    for line in text[start..end].lines() {
-        let t = line.trim();
-        let is_key = t
-            .split_once('=')
-            .is_some_and(|(k, _)| k.trim().eq_ignore_ascii_case(key));
-        if !is_key {
-            out.push_str(line);
-            out.push('\n');
-        }
-    }
-    out.push_str(&text[end..]);
-    out
-}
-
-/// Where `[section]`'s body starts and the whole file ends: the byte
-/// offsets of the first line after the header and of the next header (or
-/// the end of the file). Sections match without regard to case or spaces.
-fn section_range(text: &str, section: &str) -> Option<(usize, usize)> {
-    let same = |header: &str| {
-        let inner = header.trim_start_matches('[').trim_end_matches(']');
-        inner.trim().eq_ignore_ascii_case(section)
-    };
-    // Lines that keep their line endings, so offsets add up.
-    let lines: Vec<&str> = text.split_inclusive('\n').collect();
-    let mut start = None;
-    let mut offset = 0usize;
-    for (n, line) in lines.iter().enumerate() {
-        let t = line.trim();
-        if t.starts_with('[') && t.ends_with(']') {
-            if start.is_some() {
-                return start.map(|s| (s, offset));
-            }
-            if same(t) {
-                start = Some(offset + line.len());
-            }
-        }
-        let _ = n;
-        offset += line.len();
-    }
-    start.map(|s| (s, text.len()))
-}
-
-fn insert_in_section(text: &str, key: &str, value: &str, start: usize, end: usize) -> String {
-    let mut out = text[..start].to_string();
-    let mut done = false;
-    for line in text[start..end].lines() {
-        let t = line.trim();
-        let is_key = t
-            .split_once('=')
-            .is_some_and(|(k, _)| k.trim().eq_ignore_ascii_case(key));
-        if is_key && !done {
-            out.push_str(&format!("{key}={value}\n"));
-            done = true;
-        } else {
-            out.push_str(line);
-            out.push('\n');
-        }
-    }
-    if !done {
-        out.push_str(&format!("{key}={value}\n"));
-    }
-    out.push_str(&text[end..]);
-    out
-}
 
 /// The keys under `[Registry]` the launcher owns.
 pub mod registry {
@@ -108,79 +23,65 @@ pub mod registry {
 
 pub const REGISTRY: &str = "Registry";
 pub const GRAPHICS: &str = "Graphics";
+pub const ADVANCED: &str = "Advanced";
 
-/// Writes the launcher's picture settings into the ini text. Returns the
-/// new text and a log line for each key.
+/// Writes the launcher's picture settings into the ini file's bytes.
+/// Returns the new bytes and a log line for each key set.
 pub fn apply_picture(
-    text: &str,
+    bytes: &[u8],
     settings: &Settings,
     resolution: Option<(u32, u32)>,
-) -> (String, Vec<String>) {
-    let mut t = text.to_string();
+) -> (Vec<u8>, Vec<String>) {
+    let mut ini = Ini::from_bytes(bytes).tight();
     let mut log = Vec::new();
-    let put = |t: &mut String, key: &str, value: Option<String>, log: &mut Vec<String>| match value
-    {
+    let mut put = |section: &str, key: &str, value: Option<String>| match value {
         Some(v) => {
-            *t = set(t, REGISTRY, key, &v);
+            ini.set(section, key, &v);
             log.push(format!("{key}={v}"));
         }
         None => {
-            *t = remove(t, REGISTRY, key);
+            ini.remove(section, key);
         }
     };
-    match resolution {
-        Some((w, h)) => {
-            put(&mut t, registry::WIDTH, Some(w.to_string()), &mut log);
-            put(&mut t, registry::HEIGHT, Some(h.to_string()), &mut log);
-        }
-        None => {
-            put(&mut t, registry::WIDTH, None, &mut log);
-            put(&mut t, registry::HEIGHT, None, &mut log);
-        }
-    }
     put(
-        &mut t,
+        REGISTRY,
+        registry::WIDTH,
+        resolution.map(|(w, _)| w.to_string()),
+    );
+    put(
+        REGISTRY,
+        registry::HEIGHT,
+        resolution.map(|(_, h)| h.to_string()),
+    );
+    put(
+        REGISTRY,
         registry::DISPLAY_MODE,
         settings.display_mode.map(|m| m.ini().to_string()),
-        &mut log,
     );
     put(
-        &mut t,
+        REGISTRY,
         registry::VSYNC,
         settings.vsync.map(|b| u8::from(b).to_string()),
-        &mut log,
     );
     put(
-        &mut t,
+        REGISTRY,
         registry::ANISOTROPIC,
         crate::config::anisotropic_ini(settings.anisotropic).map(|v| v.to_string()),
-        &mut log,
     );
     put(
-        &mut t,
+        REGISTRY,
         registry::FSAA,
         settings.fsaa.map(|b| u8::from(b).to_string()),
-        &mut log,
     );
-    match settings.shadows {
-        Some(style) => {
-            t = set(&t, "Advanced", "SHARPER_SHADOWS", &style.ini().to_string());
-            log.push(format!("SHARPER_SHADOWS={}", style.ini()));
-        }
-        None => {
-            t = remove(&t, "Advanced", "SHARPER_SHADOWS");
-        }
-    }
-    if let Some(fov) = settings.fov {
-        t = set(&t, GRAPHICS, "EXTERIOR_FOV", &fov.to_string());
-        t = set(&t, GRAPHICS, "INTERIOR_FOV", &fov.to_string());
-        log.push(format!("EXTERIOR_FOV={fov}"));
-        log.push(format!("INTERIOR_FOV={fov}"));
-    } else {
-        t = remove(&t, GRAPHICS, "EXTERIOR_FOV");
-        t = remove(&t, GRAPHICS, "INTERIOR_FOV");
-    }
-    (t, log)
+    put(
+        ADVANCED,
+        "SHARPER_SHADOWS",
+        settings.shadows.map(|style| style.ini().to_string()),
+    );
+    let fov = settings.fov.map(|f| f.to_string());
+    put(GRAPHICS, "EXTERIOR_FOV", fov.clone());
+    put(GRAPHICS, "INTERIOR_FOV", fov);
+    (ini.to_bytes(), log)
 }
 
 #[cfg(test)]
@@ -196,45 +97,9 @@ HEIGHT=480\n\
 [Graphics]\n\
 DIGITAL_TACHO=0\n";
 
-    #[test]
-    fn set_replaces_only_its_key() {
-        let t = set(GAME_WRITTEN, REGISTRY, "WIDTH", "3840");
-        assert!(t.contains("WIDTH=3840\n"));
-        assert!(!t.contains("WIDTH=640"));
-        assert!(t.contains("GAMMA=1"));
-        assert!(t.contains("LANGUAGE=E"));
-        assert!(t.contains("DIGITAL_TACHO=0"));
-    }
-
-    #[test]
-    fn set_creates_missing_sections_and_keys() {
-        let t = set("", REGISTRY, "VSYNC", "1");
-        assert_eq!(t, "[Registry]\nVSYNC=1\n");
-        let t = set(&t, GRAPHICS, "EXTERIOR_FOV", "75");
-        assert!(t.contains("[Graphics]\nEXTERIOR_FOV=75\n"));
-    }
-
-    #[test]
-    fn a_new_section_starts_on_its_own_line() {
-        let t = set("[Registry]\nGAMMA=1", GRAPHICS, "EXTERIOR_FOV", "75");
-        assert_eq!(t, "[Registry]\nGAMMA=1\n[Graphics]\nEXTERIOR_FOV=75\n");
-        let t = set("[Registry]\r\nGAMMA=1\r\n", GRAPHICS, "EXTERIOR_FOV", "75");
-        assert!(t.ends_with("GAMMA=1\r\n[Graphics]\nEXTERIOR_FOV=75\n"));
-    }
-
-    #[test]
-    fn set_matches_sections_without_regard_to_case() {
-        let t = set("[registry]\nVSync=x\n", REGISTRY, "VSYNC", "1");
-        assert!(t.contains("VSYNC=1\n"));
-    }
-
-    #[test]
-    fn remove_takes_the_key_out() {
-        let t = remove(GAME_WRITTEN, REGISTRY, "WIDTH");
-        assert!(!t.contains("WIDTH"));
-        assert!(t.contains("HEIGHT=480"));
-        let t = remove(&t, REGISTRY, "nothing");
-        assert_eq!(t, t);
+    fn apply(text: &str, settings: &Settings, res: Option<(u32, u32)>) -> (String, Vec<String>) {
+        let (bytes, log) = apply_picture(text.as_bytes(), settings, res);
+        (String::from_utf8(bytes).unwrap(), log)
     }
 
     #[test]
@@ -248,15 +113,36 @@ DIGITAL_TACHO=0\n";
             fov: Some(75),
             ..Settings::default()
         };
-        let (t, log) = apply_picture(GAME_WRITTEN, &settings, Some((3840, 2160)));
-        assert!(t.contains("WIDTH=3840\nHEIGHT=2160\n"));
+        let (t, log) = apply(GAME_WRITTEN, &settings, Some((3840, 2160)));
+        assert!(t.contains("WIDTH=3840\nHEIGHT=2160\n"), "{t}");
+        assert!(!t.contains("WIDTH=640"));
         assert!(t.contains("DISPLAY_MODE=0\n"));
         assert!(t.contains("VSYNC=1\n"));
         assert!(t.contains("ANISOTROPIC=4\n"));
         assert!(t.contains("FSAA=0\n"));
         assert!(t.contains("EXTERIOR_FOV=75\n"));
+        assert!(t.contains("INTERIOR_FOV=75\n"));
         assert!(t.contains("GAMMA=1"), "the game's keys stay");
+        assert!(t.contains("LANGUAGE=E"));
+        assert!(t.contains("DIGITAL_TACHO=0"));
         assert!(log.contains(&"WIDTH=3840".to_string()));
+    }
+
+    #[test]
+    fn an_empty_file_gets_its_sections() {
+        let settings = Settings {
+            vsync: Some(true),
+            fov: Some(90),
+            ..Settings::default()
+        };
+        let (t, _) = apply("", &settings, None);
+        assert!(t.starts_with("[Registry]\nVSYNC=1\n"), "{t}");
+        assert!(t.contains("[Graphics]\nEXTERIOR_FOV=90\nINTERIOR_FOV=90\n"));
+        // Sections and keys match without regard to case; a last line
+        // without its newline never glues a new section on.
+        let (t, _) = apply("[registry]\nVSync=x", &settings, None);
+        assert!(t.starts_with("[registry]\nVSYNC=1\n"), "{t}");
+        assert!(t.contains("\n[Graphics]\n"));
     }
 
     #[test]
@@ -265,28 +151,40 @@ DIGITAL_TACHO=0\n";
             shadows: Some(ShadowStyle::Sharp),
             ..Settings::default()
         };
-        let (t, log) = apply_picture(GAME_WRITTEN, &sharp, None);
-        assert!(t.contains("[Advanced]\nSHARPER_SHADOWS=1\n"));
+        let (t, log) = apply(GAME_WRITTEN, &sharp, None);
+        assert!(t.contains("[Advanced]\nSHARPER_SHADOWS=1"));
         assert!(log.iter().any(|l| l == "SHARPER_SHADOWS=1"));
         let soft = Settings {
             shadows: Some(ShadowStyle::Soft),
             ..Settings::default()
         };
-        let (t, log) = apply_picture(&t, &soft, None);
+        let (t, log) = apply(&t, &soft, None);
         assert!(t.contains("SHARPER_SHADOWS=0"));
         assert!(log.iter().any(|l| l == "SHARPER_SHADOWS=0"));
         // Unset: the game's choice again.
-        let (t, _) = apply_picture(&t, &Settings::default(), None);
+        let (t, _) = apply(&t, &Settings::default(), None);
         assert!(!t.contains("SHARPER_SHADOWS"));
     }
 
     #[test]
     fn apply_picture_without_settings_restores_the_defaults() {
         let with = "[Registry]\nWIDTH=3840\nHEIGHT=2160\nVSYNC=1\nANISOTROPIC=4\n[Graphics]\nEXTERIOR_FOV=90\nINTERIOR_FOV=90\n";
-        let (t, _) = apply_picture(with, &Settings::default(), None);
+        let (t, _) = apply(with, &Settings::default(), None);
         assert!(!t.contains("WIDTH"));
         assert!(!t.contains("VSYNC"));
         assert!(!t.contains("ANISOTROPIC"));
         assert!(!t.contains("FOV"));
+    }
+
+    #[test]
+    fn a_file_in_another_encoding_keeps_its_bytes() {
+        // A Windows-1252 value the game wrote, CRLF lines.
+        let bytes = b"[Registry]\r\nPLAYER=Jos\xE9\r\nWIDTH=640\r\n";
+        let settings = Settings::default();
+        let (out, _) = apply_picture(bytes, &settings, Some((1920, 1080)));
+        assert_eq!(
+            out,
+            b"[Registry]\r\nPLAYER=Jos\xE9\r\nWIDTH=1920\r\nHEIGHT=1080\r\n"
+        );
     }
 }
