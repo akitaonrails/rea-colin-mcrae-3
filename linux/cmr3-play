@@ -76,13 +76,26 @@ session_valid() {
   [ "$stats" = "$LOCK_PID $LOCK_START" ]
 }
 
-running() { session_valid; }
+# A lock from an older cmr3-play holds only a pid: a live one is taken as
+# running, so an upgrade does not start a second session beside it.
+legacy_pid() {
+  [ -r "$LOCK" ] || return 1
+  IFS=' ' read -r old rest < "$LOCK" || return 1
+  [ -z "$rest" ] || return 1
+  case "$old" in ''|*[!0-9]*) return 1 ;; esac
+  kill -0 "$old" 2>/dev/null && echo "$old"
+}
+
+running() { session_valid || legacy_pid >/dev/null; }
 
 # Ends our session (its whole process group) and the prefix's Wine
-# processes. Only a still-valid lock is signalled.
+# processes. Only a still-valid lock is signalled (an old-format one as
+# the older script did: its pid alone).
 stop_session() {
   if session_valid; then
     kill -TERM "-$LOCK_PID" 2>/dev/null || true
+  elif old=$(legacy_pid); then
+    kill "$old" 2>/dev/null || true
   fi
   rm -f "$LOCK"
   $RUN env WINEPREFIX="$PREFIX" wineserver -k 2>/dev/null
@@ -201,11 +214,14 @@ INNER
   fi
 }
 
+# Interrupted while waiting: end the session and wait for it, so the
+# AppImage's mount stays until its Wine is gone.
 launch_interrupted() {
   trap - EXIT HUP INT TERM
   if session_valid; then
     kill -TERM "-$LOCK_PID" 2>/dev/null || true
   fi
+  wait "$pid" 2>/dev/null
   rm -f "$LOCK"
   exit 143
 }
@@ -217,9 +233,11 @@ launch_interrupted() {
 launch() {
   setsid $RUN env WINEPREFIX="$PREFIX" $GPU "$@" > "$STATE/play.log" 2>&1 < /dev/null &
   pid=$!
+  # No record possible (it already ended, or no /proc): still a started
+  # game, not a failure.
   stats=$(proc_stat "$pid") || {
-    [ -n "${CMR3_WAIT:-}" ] && wait "$pid"
-    return
+    if [ -n "${CMR3_WAIT:-}" ]; then wait "$pid"; return; fi
+    return 0
   }
   printf '%s %s\n' "$pid" "${stats#* }" > "$LOCK"
   [ -n "${CMR3_WAIT:-}" ] || return 0

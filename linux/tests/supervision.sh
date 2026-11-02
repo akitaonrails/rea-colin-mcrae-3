@@ -120,6 +120,38 @@ for case in 0:0 4:0 3:1 1:1; do
   if [ "$got" = "${case#*:}" ]; then ok "settings exit ${case%:*} -> $got"; else fail "settings exit ${case%:*} gave $got"; fi
 done
 
+# A lock from the previous cmr3-play (pid only) with a live pid counts as
+# running; stop ends that pid as the old script did.
+sleep 30 & OLD=$!
+echo "$OLD" > "$LOCK"
+if running; then ok "an old-format lock with a live pid is running"; else fail "old-format lock ignored"; fi
+stop_session
+wait "$OLD" 2>/dev/null
+if kill -0 "$OLD" 2>/dev/null; then fail "stop left the old-format session"; kill "$OLD"; else ok "stop ends an old-format session"; fi
+echo 999999999 > "$LOCK"
+if running; then fail "a dead old-format pid counts as running"; else ok "a dead old-format pid does not"; fi
+rm -f "$LOCK"
+
+# Interrupted while waiting (the AppImage closed): the session is ended
+# and waited for before cmr3-play exits.
+cat > "$T/slow-run" <<'FAKE'
+#!/bin/sh
+case "$*" in *inner.sh*) ;; *) exit 0 ;; esac
+trap 'sleep 0.3; touch "$T/ended"; exit 0' TERM
+sleep 30 & wait
+FAKE
+RUN=$T/slow-run
+( CMR3_WAIT=1 start > /dev/null ) & WAITER=$!
+i=0; while ! running && [ "$i" -lt 40 ]; do sleep 0.05; i=$((i + 1)); done
+kill -TERM "$WAITER"
+wait "$WAITER"
+if [ -f "$T/ended" ]; then ok "an interrupted launch waits for its session"; else fail "interrupted launch exited before its session"; fi
+if [ -f "$LOCK" ]; then fail "an interrupted launch left its lock"; else ok "an interrupted launch removes its lock"; fi
+RUN=$T/fake-run
+
+# A started game whose /proc record cannot be read is not a failure.
+if ( proc_stat() { return 1; }; start > /dev/null ); then ok "launch without a record still succeeds"; else fail "launch without a record failed"; fi
+
 # launch() reset the EXIT trap of the shell it ran in.
 trap cleanup EXIT HUP INT TERM
 [ "$fails" = 0 ] && echo "all passed" || { echo "$fails failed"; exit 1; }

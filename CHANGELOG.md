@@ -55,7 +55,9 @@
   quote broke it). The run is its own session, recorded by pid and start
   time: `status` and `stop` act only on that session (a stale lock or a
   `Rally_3PC.exe` started elsewhere no longer counts), and `stop` ends its
-  whole process group and the prefix's Wine processes. The resolution is
+  whole process group and the prefix's Wine processes. A game still
+  running from an older `cmr3-play` (its pid-only lock) counts as running,
+  and closing the AppImage while the game runs waits for it to end. The resolution is
   validated before it reaches gamescope, and the postfx Vulkan layer is
   given to the game only, no longer to gamescope as well.
 - `--resolution 1920x1080` on the command line now wins over a file's
