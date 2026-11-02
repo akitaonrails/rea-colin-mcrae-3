@@ -44,7 +44,8 @@
   `dinput8.dll`/`d3d9.dll` when it has one; a player's own files stay.
 - Started from plain Proton or Wine (without `cmr3-play`), the game now
   loads the installed ASI loader, Xidi and DXVK: the launcher gives it
-  `WINEDLLOVERRIDES` for them, keeping the player's other rules. Wine is
+  `WINEDLLOVERRIDES` for them, keeping the player's other rules (a rule
+  for the same DLL, spelled `dsound.dll` or `DSOUND`, is replaced). Wine is
   also recognised by `WINEPREFIX`, `WINELOADER` or
   `STEAM_COMPAT_DATA_PATH` when `wine_get_version` is hidden.
 - A `SilentPatchCMR3.ini` whose last line had no newline got the next new

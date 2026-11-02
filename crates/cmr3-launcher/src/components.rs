@@ -218,7 +218,15 @@ pub fn wine_overrides(existing: Option<&str>, natives: &[&str]) -> String {
         let kept: Vec<_> = names
             .split(',')
             .map(str::trim)
-            .filter(|n| !n.is_empty() && !natives.iter().any(|o| n.eq_ignore_ascii_case(o)))
+            .filter(|n| {
+                // `dsound.dll` names the same DLL as `dsound`.
+                let stem = n
+                    .len()
+                    .checked_sub(4)
+                    .filter(|&i| n.get(i..).is_some_and(|e| e.eq_ignore_ascii_case(".dll")))
+                    .map_or(*n, |i| &n[..i]);
+                !stem.is_empty() && !natives.iter().any(|o| stem.eq_ignore_ascii_case(o))
+            })
             .collect();
         if !kept.is_empty() {
             rules.push(format!("{}={action}", kept.join(",")));
@@ -446,6 +454,10 @@ mod tests {
         assert_eq!(
             wine_overrides(Some("D3D9=b;;xinput1_3"), &["d3d9"]),
             "d3d9=n,b;xinput1_3"
+        );
+        assert_eq!(
+            wine_overrides(Some("DSound.DLL,winmm.dll=b;é=n"), &["dsound"]),
+            "dsound=n,b;winmm.dll=b;é=n"
         );
     }
 
