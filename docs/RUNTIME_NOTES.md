@@ -338,6 +338,18 @@ under Wine) pass; none of this was run in the real game yet.
   descriptions under every row (the Picture tab now scrolls on a
   1080p screen). Not yet looked at on screen.
 
+## Unreleased — rea-launcher-sdk v0.3.0 (host- and Wine-tested only)
+
+Host tests, the shell tests and `sdk/scripts/wine-test` pass; nothing
+below was run in the real game yet.
+
+- **LLD-linked build.** `check-imports.sh` finds no orphaned imports
+  (GNU ld had left 13). Pending: start the game once from the new
+  `CMR3Launcher.exe` on Windows and under Wine.
+- **One-run flags through the SDK** (`REA_HELPER_KEYS`). Pending:
+  `cmr3-play --play --scaler fsr` (play.log shows `-F fsr`), then a plain
+  `cmr3-play --play` (back to launcher.cfg's scaler).
+
 ## Platform matrix
 
 What has been checked in the real game, per STANDARDS "Platforms to

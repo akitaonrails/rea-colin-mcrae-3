@@ -43,6 +43,9 @@
 - Updated rea-launcher-sdk to v0.3.0. Screen readers now name the two
   folder fields by their headings ("Game folder", "Profile folder") and
   read the example path as their description.
+- `cmr3-play --play --scaler fsr …`: the one-run flags are read by the
+  SDK's play library (`REA_HELPER_KEYS`) instead of a local copy of
+  `launcher.cfg`; `--scaler=fsr` now works too.
 - The portrait credit follows Wikimedia Commons ("Carolyn" on Flickr,
   CC BY 2.0); `THIRD_PARTY.md` lists every image in the window, README
   and package. README images are JPEG (the 13 MB 4K capture is now a

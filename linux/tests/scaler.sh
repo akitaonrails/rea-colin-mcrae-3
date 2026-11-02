@@ -68,7 +68,7 @@ done
 # the file as it was.
 printf 'resolution = 1920x1080\nscaler = linear\ndisplay_mode = windowed\n' > "$CFG"
 before=$(cat "$CFG")
-rea_hook_command --play --no-window --scaler fsr --resolution 1280x720 --display-mode fullscreen > /dev/null
+rea_main --play --no-window --scaler fsr --resolution 1280x720 --display-mode fullscreen > /dev/null
 ran=$(cat "$T/ran")
 case "$ran" in
   *"gamescope -W 1280 -H 720 -w 1280 -h 720 -f -S fit -F fsr --"*"--no-window --no-window --scaler fsr --resolution 1280x720 --display-mode fullscreen"*)
@@ -76,6 +76,17 @@ case "$ran" in
   *) echo "FAIL one-run flags: $ran"; fails=$((fails + 1)) ;;
 esac
 [ "$(cat "$CFG")" = "$before" ] && echo "ok   launcher.cfg untouched" || { echo "FAIL cfg changed"; fails=$((fails + 1)); }
-REA_CFG=$CFG
-rea_hook_command status > /dev/null; [ $? = 127 ] && echo "ok   other commands fall through" || { echo "FAIL hook"; fails=$((fails + 1)); }
+# The next plain run is back to launcher.cfg (windowed: no gamescope).
+rea_main --play > /dev/null
+case "$(cat "$T/ran")" in
+  *gamescope*) echo "FAIL the one-run values outlived their run: $(cat "$T/ran")"; fails=$((fails + 1)) ;;
+  *inner.sh*) echo "ok   a plain --play reads launcher.cfg again" ;;
+  *) echo "FAIL plain --play: $(cat "$T/ran")"; fails=$((fails + 1)) ;;
+esac
+# The --flag=value spelling works as well.
+printf 'resolution = 1920x1080
+scaler = linear
+' > "$CFG"
+rea_main --play --scaler=nearest > /dev/null
+case "$(cat "$T/ran")" in *"-F nearest --"*) echo "ok   --scaler=nearest for one run" ;; *) echo "FAIL --scaler=: $(cat "$T/ran")"; fails=$((fails + 1)) ;; esac
 [ "$fails" = 0 ] && echo "all passed" || { echo "$fails failed"; exit 1; }

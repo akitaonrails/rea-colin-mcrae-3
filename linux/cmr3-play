@@ -81,44 +81,10 @@ rea_hook_before_start() {
 }
 
 # `cmr3-play --play --scaler fsr --resolution 1280x720`: flags for one
-# run. The launcher reads them itself; the ones this script reads too
-# (gamescope's size, filter and window mode, post-processing) are laid
-# over launcher.cfg for this run only, in a copy the launcher never sees.
-rea_hook_command() {
-  case "${1:-}" in
-    --play|play|start)
-      shift
-      one_run_cfg "$@"
-      rea_cmd_play "$@"
-      return $?
-      ;;
-  esac
-  return 127
-}
-
-# Points REA_CFG at launcher.cfg plus the one-run values among "$@"
-# (later lines win in rea_get_key, as in the launcher).
-one_run_cfg() {
-  _extra=
-  while [ "$#" -gt 0 ]; do
-    case "$1" in
-      --scaler|--postfx|--resolution|--display-mode|--dxvk)
-        [ "$#" -ge 2 ] || break
-        _key=$(printf '%s' "${1#--}" | tr - _)
-        _extra="$_extra$_key = $2
-"
-        shift 2
-        ;;
-      --no-window|--settings|--linux|--check) shift ;;
-      --*) if [ "$#" -ge 2 ]; then shift 2; else shift; fi ;;
-      *) shift ;;
-    esac
-  done
-  [ -n "$_extra" ] || return 0
-  _one=$REA_STATE/one-run.cfg
-  { [ -f "$REA_CFG" ] && cat "$REA_CFG" && echo; printf '%s' "$_extra"; } > "$_one"
-  REA_CFG=$_one
-}
+# run. The launcher reads them itself; the library lays the ones this
+# script reads too (gamescope's size, filter and window mode,
+# post-processing) over launcher.cfg for this run only, never writing it.
+REA_HELPER_KEYS="scaler postfx resolution display_mode dxvk"
 
 # Post-processing over the finished frame (postfx = color|cinematic in
 # launcher.cfg): the vkBasalt layer over DXVK's Vulkan. The layer comes
