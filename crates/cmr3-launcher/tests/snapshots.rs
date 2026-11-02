@@ -79,7 +79,11 @@ fn describe(title: &str, settings: &Settings, envs: &[(&str, Env)]) -> String {
 
 #[test]
 fn help_and_template() {
-    check("help.txt", &format!("{}\n", config::usage()));
+    // The version changes every release; the snapshot keeps a placeholder.
+    check(
+        "help.txt",
+        &format!("{}\n", config::usage()).replace(env!("CARGO_PKG_VERSION"), "<version>"),
+    );
     check("launcher.cfg", &config::template());
 }
 

@@ -1,4 +1,4 @@
-CMR3Launcher 0.1.2
+CMR3Launcher <version>
 
 CMR3Launcher [options]
 
