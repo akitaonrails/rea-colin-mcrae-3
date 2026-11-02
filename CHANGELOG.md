@@ -62,6 +62,8 @@
 
 ### Changed
 
+- Updated rea-launcher-sdk to v0.3.3, for Wine's per-program DLL
+  overrides (below).
 - Updated rea-launcher-sdk to v0.3.2. Nothing changes for players on its own;
   the fixes below use what it adds.
 - Updated rea-launcher-sdk to v0.3.0. Screen readers now name the two
