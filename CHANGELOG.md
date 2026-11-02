@@ -19,6 +19,9 @@
   dangling symlink is ignored.
 - A runtime folder inside the game folder is refused even when it does
   not exist yet and is named through `..`, a relative path or a symlink.
+  On volumes that cannot resolve paths (Windows RAM disks, `subst`
+  drives, some FUSE mounts) the folders are compared as written instead
+  of the launch being refused.
 - Files the launcher puts in the runtime copy are written beside it and
   renamed into place: an interrupted or failed write no longer leaves a
   missing or half-written file (the settings ini, a DLL, the patched exe).

@@ -302,3 +302,6 @@ next release.
   end); `postfx = color` still grades the game with the layer variables
   now set inside gamescope (in the game's script) instead of around it,
   and gamescope itself no longer loads vkBasalt.
+- **Paths on volumes without canonicalization** (RAM disk, `subst`
+  drive): compared lexically. Not yet verified: a game on such a drive on
+  Windows launches.
