@@ -28,6 +28,14 @@
   `STEAM_COMPAT_DATA_PATH` when `wine_get_version` is hidden.
 - A `SilentPatchCMR3.ini` whose last line had no newline got the next new
   section header glued onto that line.
+- `cmr3-play`: the launcher's path is handed to the game's script as an
+  argument instead of being pasted into its text (a folder name with a
+  quote broke it). The run is its own session, recorded by pid and start
+  time: `status` and `stop` act only on that session (a stale lock or a
+  `Rally_3PC.exe` started elsewhere no longer counts), and `stop` ends its
+  whole process group and the prefix's Wine processes. The resolution is
+  validated before it reaches gamescope, and the postfx Vulkan layer is
+  given to the game only, no longer to gamescope as well.
 
 ## [0.1.2] - 2026-11-02
 

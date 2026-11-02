@@ -2,6 +2,7 @@
 # Tests vkBasalt manifest generation, including upgrades from the legacy
 # bare-soname manifest: sh linux/tests/postfx.sh
 set -u
+unset VK_INSTANCE_LAYERS VK_LAYER_PATH
 HERE=$(dirname "$(readlink -f "$0")")
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 export HOME=$T CMR3_PREFIX=$T/prefix CMR3_SYSFS=$T/nosys
@@ -32,10 +33,18 @@ for bits in 64 32; do
     fails=$((fails + 1))
   fi
 done
-case "$VK_INSTANCE_LAYERS" in
+case "$CMR3_VK_INSTANCE_LAYERS" in
   *post_processing:*post_processing32) echo "ok   both bitnesses requested" ;;
-  *) echo "FAIL layer names: $VK_INSTANCE_LAYERS"; fails=$((fails + 1)) ;;
+  *) echo "FAIL layer names: $CMR3_VK_INSTANCE_LAYERS"; fails=$((fails + 1)) ;;
 esac
+# The layers reach the game only, never gamescope: nothing Vulkan reads is
+# exported here; the game's script sets them (see supervision.sh).
+if [ -z "${VK_INSTANCE_LAYERS:-}${VK_LAYER_PATH:-}" ]; then
+  echo "ok   no Vulkan layer variables for gamescope"
+else
+  echo "FAIL VK_INSTANCE_LAYERS/VK_LAYER_PATH exported"
+  fails=$((fails + 1))
+fi
 conf=$STATE/vkbasalt/vkBasalt.conf
 if grep -qx "effects = lut:cas" "$conf" && grep -qx "lutFile = $STATE/vkbasalt/grade.cube" "$conf"; then
   echo "ok   colour grades through the LUT, then sharpens"

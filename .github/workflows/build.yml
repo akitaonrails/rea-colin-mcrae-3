@@ -36,8 +36,8 @@ jobs:
       - name: Unit tests (host)
         run: cargo test --workspace
 
-      - name: Linux helper tests (GPU choice, gamescope args, post-processing, Wine prefix)
-        run: sh linux/tests/gpu-env.sh && sh linux/tests/scaler.sh && sh linux/tests/postfx.sh && sh linux/tests/prefix.sh
+      - name: Linux helper tests (GPU choice, gamescope args, post-processing, Wine prefix, supervision)
+        run: sh linux/tests/gpu-env.sh && sh linux/tests/scaler.sh && sh linux/tests/postfx.sh && sh linux/tests/prefix.sh && sh linux/tests/supervision.sh
 
       - name: Lint (Windows target)
         run: cargo clippy --release --target i686-pc-windows-gnu --workspace -- -D warnings

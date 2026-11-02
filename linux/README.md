@@ -65,7 +65,10 @@ CMR3_RUN="distrobox enter gaming --" ~/Games/cmr3-launcher/linux/cmr3-play
 ```
 
 `cmr3-play` also understands `--play` (no settings window), `stop` and
-`status`.
+`status`. They look only at the session `cmr3-play` itself started (its
+own process group, recorded by pid and start time): `stop` ends that
+session and the prefix's Wine processes, and a `Rally_3PC.exe` started
+some other way is neither reported nor stopped.
 
 ## Where things are
 

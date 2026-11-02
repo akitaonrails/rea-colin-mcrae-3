@@ -290,3 +290,8 @@ next release.
   CMR3Launcher.exe added to Steam as a non-Steam game and run with Proton
   (no `cmr3-play`): SilentPatch, Xidi and DXVK should all load (the
   launcher log shows the overrides; DXVK's HUD or log shows it drawing).
+- **cmr3-play supervision and postfx scoping.** Not yet verified in the
+  game: `cmr3-play stop` while racing (gamescope, Wine and the game all
+  end); `postfx = color` still grades the game with the layer variables
+  now set inside gamescope (in the game's script) instead of around it,
+  and gamescope itself no longer loads vkBasalt.

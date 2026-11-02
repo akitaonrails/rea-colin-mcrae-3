@@ -46,14 +46,46 @@ if [ -z "$CFG" ]; then
   [ -z "$CFG" ] && CFG=$PREFIX/drive_c/users/$USER/AppData/Local/CMR3Launcher/launcher.cfg
 fi
 
-get_key() { [ -f "$CFG" ] && sed -n "s|^$1 *= *||p" "$CFG" | tail -1; }
+get_key() { [ -f "$CFG" ] && sed -n "s|^[[:space:]]*$1[[:space:]]*=[[:space:]]*||p" "$CFG" | tail -1; }
 LOCK=$STATE/running.pid
-# Running, or still starting: Rally_3PC.exe exists, or the gamescope
-# session we started is alive (the launcher copies files before the game
-# appears).
-running() {
-  pgrep -x Rally_3PC.exe >/dev/null && return 0
-  [ -f "$LOCK" ] && kill -0 "$(cat "$LOCK")" 2>/dev/null
+
+# Session id and start time of a pid, from /proc. Fields are read after
+# the last ") ", so a command name with spaces or parentheses is fine.
+proc_stat() {
+  [ -r "/proc/$1/stat" ] || return 1
+  stat=$(cat "/proc/$1/stat") || return 1
+  rest=${stat##*) }
+  set -- $rest
+  [ "$#" -ge 20 ] || return 1
+  printf '%s %s\n' "$4" "${20}"
+}
+
+read_lock() {
+  [ -r "$LOCK" ] || return 1
+  IFS=' ' read -r LOCK_PID LOCK_START < "$LOCK" || return 1
+  case "$LOCK_PID" in ''|*[!0-9]*) return 1 ;; esac
+  case "$LOCK_START" in ''|*[!0-9]*) return 1 ;; esac
+}
+
+# Our session is running when the locked pid is still the session leader
+# we started, with the start time recorded then: a stale lock whose pid
+# was reused, or a Rally_3PC.exe started elsewhere, does not count.
+session_valid() {
+  read_lock || return 1
+  stats=$(proc_stat "$LOCK_PID") || return 1
+  [ "$stats" = "$LOCK_PID $LOCK_START" ]
+}
+
+running() { session_valid; }
+
+# Ends our session (its whole process group) and the prefix's Wine
+# processes. Only a still-valid lock is signalled.
+stop_session() {
+  if session_valid; then
+    kill -TERM "-$LOCK_PID" 2>/dev/null || true
+  fi
+  rm -f "$LOCK"
+  $RUN env WINEPREFIX="$PREFIX" wineserver -k 2>/dev/null
 }
 
 # The best GPU for the game, as environment assignments (none: the
@@ -116,17 +148,33 @@ start() {
   if [ -z "$LAUNCHER" ] || [ ! -f "$LAUNCHER" ]; then
     echo "CMR3Launcher.exe not found next to cmr3-play (or set CMR3_LAUNCHER)"; exit 1
   fi
-  res=$(get_key resolution); W=1920; H=1080
+  # The spellings the launcher accepts (1920X1080, spaces, CRLF); anything
+  # else keeps the default size.
+  res=$(get_key resolution | tr -d ' \r' | tr X x)
+  W=1920; H=1080
   case "$res" in
     original) W=640; H=480 ;;
-    *x*) W=${res%x*}; H=${res#*x} ;;
+    *x*)
+      w=${res%x*} h=${res#*x}
+      case "$w:$h" in
+        :*|*:|*[!0-9:]*) ;;
+        *) W=$w H=$h ;;
+      esac ;;
   esac
   F=$(get_key scaler); F=${F:-linear}
   inner=$STATE/inner.sh
-  cat > "$inner" <<INNER
+  # The launcher is positional parameter 1, never part of the script's
+  # text. The Vulkan layers (postfx) are set here, for the game only:
+  # gamescope, itself a Vulkan program, must not load them.
+  cat > "$inner" <<'INNER'
 #!/bin/sh
 trap 'wineserver -k; exit' INT TERM HUP
-wine '$LAUNCHER' --no-window
+if [ -n "${CMR3_VK_INSTANCE_LAYERS:-}" ]; then
+  export VK_LAYER_PATH="$CMR3_VK_LAYER_PATH"
+  export VK_INSTANCE_LAYERS="$CMR3_VK_INSTANCE_LAYERS"
+  export VKBASALT_CONFIG_FILE="$CMR3_VKBASALT_CONFIG_FILE"
+fi
+wine "$1" --no-window
 sleep 3; while pgrep -x Rally_3PC.exe >/dev/null; do sleep 1; done
 wineserver -k
 INNER
@@ -146,22 +194,42 @@ INNER
      || [ -n "${GAMESCOPE_WAYLAND_DISPLAY:-}" ] \
      || ! $RUN sh -c "command -v gamescope" >/dev/null 2>&1; then
     echo "starting without a gamescope of our own"
-    launch sh "$inner"
+    launch sh "$inner" "$LAUNCHER"
   else
     echo "starting at ${W}x${H}, scaler $F"
-    launch gamescope -W "$W" -H "$H" -w "$W" -h "$H" -f -S fit -F "$F" -- "$inner"
+    launch gamescope -W "$W" -H "$H" -w "$W" -h "$H" -f -S fit -F "$F" -- "$inner" "$LAUNCHER"
   fi
 }
 
-# Runs a command in the prefix: in the background, or with CMR3_WAIT (the
-# AppImage, unmounted when its script ends) until it exits.
-launch() {
-  if [ -n "${CMR3_WAIT:-}" ]; then
-    $RUN env WINEPREFIX="$PREFIX" $GPU "$@" > "$STATE/play.log" 2>&1
-  else
-    setsid $RUN env WINEPREFIX="$PREFIX" $GPU "$@" > "$STATE/play.log" 2>&1 < /dev/null &
-    echo $! > "$LOCK"
+launch_interrupted() {
+  trap - EXIT HUP INT TERM
+  if session_valid; then
+    kill -TERM "-$LOCK_PID" 2>/dev/null || true
   fi
+  rm -f "$LOCK"
+  exit 143
+}
+
+# Runs a command in the prefix in its own session (so stop can end exactly
+# this launch), recorded in the lock by pid and start time. In the
+# background, or with CMR3_WAIT (the AppImage, unmounted when its script
+# ends) until it exits; then the lock goes too.
+launch() {
+  setsid $RUN env WINEPREFIX="$PREFIX" $GPU "$@" > "$STATE/play.log" 2>&1 < /dev/null &
+  pid=$!
+  stats=$(proc_stat "$pid") || {
+    [ -n "${CMR3_WAIT:-}" ] && wait "$pid"
+    return
+  }
+  printf '%s %s\n' "$pid" "${stats#* }" > "$LOCK"
+  [ -n "${CMR3_WAIT:-}" ] || return 0
+  trap 'rm -f "$LOCK"' EXIT
+  trap 'launch_interrupted' HUP INT TERM
+  wait "$pid"
+  rc=$?
+  rm -f "$LOCK"
+  trap - EXIT HUP INT TERM
+  return "$rc"
 }
 
 # Post-processing over the finished frame (postfx = color|cinematic in
@@ -247,9 +315,11 @@ reshadeTexturePath = $STATE/vkbasalt/shaders"
     echo "casSharpness = 0.65"
     echo "executeAt = end"
   } > "$STATE/vkbasalt/vkBasalt.conf"
-  export VK_LAYER_PATH="$STATE/vkbasalt"
-  export VK_INSTANCE_LAYERS="$names"
-  export VKBASALT_CONFIG_FILE="$STATE/vkbasalt/vkBasalt.conf"
+  # Passed on under our own names; the game's script turns them into the
+  # real ones (see start).
+  export CMR3_VK_LAYER_PATH="$STATE/vkbasalt"
+  export CMR3_VK_INSTANCE_LAYERS="$names"
+  export CMR3_VKBASALT_CONFIG_FILE="$STATE/vkbasalt/vkBasalt.conf"
   echo "postfx: $fx via $lib ($names)"
   return 0
 }
@@ -309,9 +379,7 @@ case "${1:-}" in
     if running; then echo "already running"; else start; fi ;;
   status) if running; then echo running; else echo idle; fi ;;
   stop)
-    $RUN env WINEPREFIX="$PREFIX" wineserver -k 2>/dev/null
-    [ -f "$LOCK" ] && kill "$(cat "$LOCK")" 2>/dev/null
-    rm -f "$LOCK"
+    stop_session
     echo stopped ;;
   *) echo "usage: $0 [--play|stop|status]"; exit 2 ;;
 esac
