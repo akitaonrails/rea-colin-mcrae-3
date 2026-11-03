@@ -6,34 +6,21 @@
 //! only what the launcher generates.
 //!
 //! A diff is reviewed like code. To accept an intended change:
-//! `CMR3_UPDATE_SNAPSHOTS=1 cargo test --test snapshots`, then read the diff.
-
-use std::path::PathBuf;
+//! `CMR3_UPDATE_SNAPSHOTS=1 cargo test --test snapshots` (or the SDK's
+//! `REA_UPDATE_SNAPSHOTS=1`), then read the diff.
 
 use cmr3_launcher::config::{self, Settings};
 use cmr3_launcher::form::{Form, Look};
 use cmr3_launcher::plan::{self, Env};
 
+/// Compares with `tests/snapshots/NAME` through the SDK helper: the crate
+/// version is stored as `<version>`, line endings don't matter, and a
+/// difference names its first line. `CMR3_UPDATE_SNAPSHOTS=1` (or the
+/// SDK's `REA_UPDATE_SNAPSHOTS=1`) writes them.
 fn check(name: &str, actual: &str) {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/snapshots")
-        .join(name);
-    if std::env::var_os("CMR3_UPDATE_SNAPSHOTS").is_some() {
-        std::fs::write(&path, actual).unwrap();
-        return;
-    }
-    let expected = std::fs::read_to_string(&path).unwrap_or_else(|e| {
-        panic!(
-            "{}: {e} (CMR3_UPDATE_SNAPSHOTS=1 writes it)",
-            path.display()
-        )
-    });
-    // Compared without regard to line endings (a Windows checkout).
-    assert_eq!(
-        expected.replace("\r\n", "\n"),
-        actual,
-        "{name} changed: review the difference, then update it on purpose"
-    );
+    rea_launcher::snapshots!()
+        .update_var("CMR3_UPDATE_SNAPSHOTS")
+        .assert(name, actual);
 }
 
 const SCREEN: Option<(u32, u32)> = Some((2560, 1440));
@@ -79,11 +66,7 @@ fn describe(title: &str, settings: &Settings, envs: &[(&str, Env)]) -> String {
 
 #[test]
 fn help_and_template() {
-    // The version changes every release; the snapshot keeps a placeholder.
-    check(
-        "help.txt",
-        &format!("{}\n", config::usage()).replace(env!("CARGO_PKG_VERSION"), "<version>"),
-    );
+    check("help.txt", &format!("{}\n", config::usage()));
     check("launcher.cfg", &config::template());
 }
 
