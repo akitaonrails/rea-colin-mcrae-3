@@ -13,6 +13,7 @@
 //! is the shared `rea_launcher` SDK; this crate holds the game's own
 //! knowledge.
 
+#[cfg(any(windows, test))]
 pub mod audience;
 pub mod check;
 pub mod components;

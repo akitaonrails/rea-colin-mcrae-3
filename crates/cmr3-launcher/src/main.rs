@@ -29,7 +29,7 @@ mod app {
     use std::fs;
     use std::path::{Path, PathBuf};
 
-    use cmr3_launcher::audience::{self, Audience};
+    use cmr3_launcher::audience;
     use cmr3_launcher::check;
     use cmr3_launcher::components::{self, Installed};
     use cmr3_launcher::config::{self, Settings};
@@ -63,22 +63,23 @@ mod app {
         Log::new(home().join("launcher.log")).line(line);
     }
 
-    /// Who sees this run's messages (`audience`): under Wine (cmr3-play,
-    /// the AppImage, Proton) a person even with `--no-window`.
-    fn audience() -> Audience {
+    /// Who sees this run's messages: the SDK's rule (`report::audience`)
+    /// for the family flags on the command line. Under Wine (cmr3-play,
+    /// the AppImage, Proton) a person, even with `--no-window`.
+    fn mode() -> report::Mode {
         let args: Vec<String> = std::env::args().skip(1).collect();
-        audience::audience(&args, wine::is_wine())
+        report::audience(audience::run(&args)).mode()
     }
 
     /// An error the launcher stops on: a dialog whenever a person may be
     /// watching, and printed (cmr3-play's log).
     pub fn fatal(text: &str) {
-        report::fatal(TITLE, text, audience().mode());
+        report::fatal(TITLE, text, mode());
     }
 
     /// Information or a warning, routed like [`fatal`].
     fn note(text: &str, warning: bool) {
-        report::note(TITLE, text, audience().mode(), warning);
+        report::note(TITLE, text, mode(), warning);
     }
 
     /// A `launcher.cfg` next to the exe wins (portable installs);
@@ -186,8 +187,7 @@ mod app {
                     // A play-time message: the player started a second
                     // copy and must see why nothing happened.
                     if let Some(message) = second.message() {
-                        let interactive = audience().interactive;
-                        report::note(TITLE, message, report::Mode::Play { interactive }, true);
+                        note(message, true);
                     }
                     // cmr3-play --settings: nothing was started.
                     return Ok(if settings_only { WINDOW_CLOSED } else { 0 });
