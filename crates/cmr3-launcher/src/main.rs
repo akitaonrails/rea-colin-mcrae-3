@@ -41,11 +41,12 @@ mod app {
     use rea_launcher::cfg::ArgError;
     use rea_launcher::log::Log;
     use rea_launcher::{cfg, fsx, paths};
+    use rea_launcher_win32::gpu::{self, Glx};
     use rea_launcher_win32::instance::{self as win32_instance, SecondStart, Window};
     use rea_launcher_win32::process::{self, Launch};
     use rea_launcher_win32::report;
     use rea_launcher_win32::wine::DllMode;
-    use rea_launcher_win32::{display, gpu, wine};
+    use rea_launcher_win32::{display, wine};
 
     use crate::ui;
 
@@ -174,7 +175,7 @@ mod app {
         // One launcher at a time, held until the game this run starts has
         // ended: a second start raises the window or says the game runs
         // (`instance`). --check only reads and runs alongside.
-        let _instance = if check_only {
+        let mut held = if check_only {
             None
         } else {
             match win32_instance::single(instance::NAME) {
@@ -198,11 +199,26 @@ mod app {
         };
         if settings_only || (!other_options && !no_window) {
             // A window under Wine draws through OpenGL: GLX, not Wine 11's
-            // default EGL (software on NVIDIA boxes without egl-x11).
-            if wine::is_wine()
-                && let Ok(true) = gpu::prefer_glx()
-            {
-                log_line("Wine: OpenGL through GLX (UseEGL=N)");
+            // default EGL (software on NVIDIA boxes without egl-x11). On a
+            // fresh prefix the setting only takes effect in a new process:
+            // the launcher runs itself once more, so this first start
+            // already gets its window.
+            match gpu::prefer_glx_or_restart(held.take()) {
+                Glx::Restarted { exit_code } => {
+                    log_line(
+                        "Wine: OpenGL through GLX (UseEGL=N) on a fresh prefix, started again",
+                    );
+                    return Ok(exit_code);
+                }
+                Glx::Ready {
+                    instance: guard,
+                    warning,
+                } => {
+                    held = guard;
+                    if let Some(warning) = warning {
+                        log_line(&format!("warning: {warning}"));
+                    }
+                }
             }
             let text = read_settings(&settings_path)
                 .ok()
@@ -512,6 +528,9 @@ mod app {
                 )),
             }
         }
+        // One launcher at a time until here: the game has ended and its
+        // profile is saved.
+        drop(held);
         Ok(code)
     }
 
