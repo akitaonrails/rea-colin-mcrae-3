@@ -446,28 +446,48 @@ run ended with the game, launcher, wineserver and gamescope gone.
 Still pending: the same on real Proton (Steam, non-Steam game) and the
 Steam Deck.
 
-## Unreleased — rea-launcher-sdk v0.4.1 (host- and Wine-tested; real game pending)
+## 2026-11-03 — rea-launcher-sdk v0.4.1, real game, headless (gaming box)
 
-Host tests, the shell tests (`linux/tests/*.sh` except `e2e.sh`) and
-`sdk/scripts/wine-test --locked --workspace` in the gaming box pass;
-`sdk/scripts/launcher-check`: 0 errors, 0 warnings, the DRM waiver. What
-changed for players, to run headless in the real game (as above):
+The owner's install (DRM-free v1.1 variant B, read-only) through a fresh
+release build of this branch and `linux/cmr3-play`, everything under
+`.work/realgame/v041/`: a new throwaway prefix, `HOME` and the XDG dirs,
+every process started from `env -i`. gamescope ran headless (a
+`gamescope` first in `PATH` adding `--backend headless`); audio went to a
+private PipeWire with one null sink and WirePlumber's hardware monitors
+off (no device detection). The supervisor (`run.sh NAME CFG QUIT`) found
+this test's processes by their working folder (inside the test folder,
+or this prefix's wineserver folder), never by command line or
+environment, and signalled only those. Logs per run in
+`.work/realgame/v041/logs/<run>/`, screenshots in `shots/`. Every run
+ended with nothing left.
 
-- `--look original|enhanced|steam_deck` (and `look =`): each look reaches
-  the game with the values of its window card; `cmr3-play --play --look
-  steam_deck` opens gamescope at 1280×800 (REA_LOOK_SIZES). **Pending.**
-- A second `CMR3Launcher.exe` while the game runs: the SDK's message
-  ("… is already running from this launcher …") and exit **5** (was 0);
-  while the window is open it still comes forward (exit 0). **Pending.**
-- Play while `Rally_3PC.exe` still runs from the runtime copy (its
-  launcher killed): refused with the same message, exit 5. **Pending.**
-- A Play-time error (a wrong game folder) under `cmr3-play` shows a
-  dialog (`report::audience`). **Pending.**
-- The first start on a fresh prefix opens the settings window
-  (`gpu::prefer_glx_or_restart`). **Pending.**
-- Quitting and leftovers: game menu, window close / Alt+F4, gamescope
-  closed, SIGINT/SIGTERM, `cmr3-play stop` leave no process behind.
-  **Pending** (to rerun on this build).
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Fresh prefix: the settings window on the first start | VERIFIED | `window`: no prefix before; window up after 8 s inside a headless gamescope; launcher.log "Wine: OpenGL through GLX (UseEGL=N) on a fresh prefix, started again" (two launcher processes while the window was open: the first waits for the restarted one) |
+| Settings window unchanged | VERIFIED | `window/play.png` matches `docs/images/launcher-play.jpg` apart from the state (no game folder yet); README screenshots not retaken |
+| Second start, window open | VERIFIED | plain: exit 0, "brought the running launcher's window forward"; `--settings --linux`: exit 3; one launcher window |
+| Window closed (WM_CLOSE) | VERIFIED | exit 3 through the restarted process and its parent |
+| `--look enhanced` over a customised file | VERIFIED | `look-enhanced`: helper "starting at 1920x1080", ini `WIDTH=1920 HEIGHT=1080 VSYNC=1 ANISOTROPIC=4 FSAA=0 FOV 75`, HD UI 38 files, swapchain 1920×1080 |
+| `--look original` | VERIFIED | `look-original`: gamescope 640×480, ini 640×480 with the launcher's other keys removed, swapchain 640×480 |
+| `--look steam_deck` | VERIFIED | `look-deck`: gamescope 1280×800, ini 1280×800 VSYNC=1 ANISOTROPIC=4 FSAA=0 FOV 75, swapchain 1280×800 |
+| `look = steam_deck` in launcher.cfg alone | VERIFIED | `file-look`: same as above |
+| Play-time error under cmr3-play | VERIFIED | `play-error` (game folder that doesn't exist): a dialog in gamescope with "cannot read Z:\no\such\folder\Rally_3PC.exe …" (`shots/play-error.png`); a bad flag also shows its dialog (`shots/bad-arg-dialog.png`) |
+| Second `cmr3-play --play` while playing | VERIFIED | exit 5, "already running" |
+| Second `CMR3Launcher.exe` while the game runs | VERIFIED | `second-start`: the SDK message in a dialog (`shots/second-dialog.png`), exit 5, the game kept running |
+| Play while the runtime's game runs, its launcher killed | VERIFIED | `killed-launcher`: the waiting launcher ended with `taskkill /f`; a new start got the instance, identified the game, then refused: same message (`shots/busy-dialog.png`), exit 5, the game untouched |
+| `cmr3-play stop` | VERIFIED | everything gone in 0.4 s |
+| SIGTERM to a waiting `cmr3-play` | VERIFIED | gone in 0.4 s, helper exit 143 |
+| SIGINT (Ctrl+C) to a waiting `cmr3-play` | VERIFIED | gone in 0.4 s, exit 143 |
+| gamescope closed | VERIFIED | gone in 0.2 s |
+| WM_CLOSE (`wine taskkill /pid`, no `/f`) | VERIFIED | gone in 4.1 s |
+| Alt+F4 as key presses | VERIFIED | gone in 1.9 s (after the launcher-killed case) |
+| WM_SYSCOMMAND SC_CLOSE (the close button) | VERIFIED | gone in 3.8 s |
+| The game's own Exit (main menu) | NOT CHECKABLE HEADLESS | as on 2026-11-02: injected arrow keys don't move the menu |
+| `CMR3_E2E=1 linux/tests/e2e.sh` | PASSED | headless, against this prefix: game up in 5 s, alive 15 s later, ended, every line ok |
+
+The kit used the v0.1.0 package's `thirdparty/` (the same pinned
+SilentPatch, Xidi, DXVK, patcher and HD UI) beside the new
+`CMR3Launcher.exe`.
 
 ## Platform matrix
 

@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- A `--look` flag and a `look` setting in `launcher.cfg`: `original`,
+  `enhanced` or `steam_deck` sets every picture option the way the
+  matching card in the window does. Picture options you also give win
+  over it. `cmr3-play --play --look steam_deck` sizes gamescope for that
+  look too.
+
+### Changed
+
+- Starting the launcher again while the game runs now exits with code 5
+  instead of 0, so scripts can tell nothing was started. The message is
+  the same as before. With the window open, a second start still brings
+  the window to the front.
+- Updated rea-launcher-sdk to v0.4.1.
+
+### Fixed
+
+- If the launcher was closed or killed while the game kept running,
+  pressing Play again no longer starts a second copy over the first one's
+  files. It says the game is running instead.
+- On a fresh Wine or Proton prefix the settings window now opens on the
+  very first start. Before, it only appeared from the second start on.
+- `cmr3-play`'s settings window and `--check --linux` no longer pop up a
+  message box of their own; the window or the helper shows the message.
+  Errors while starting the game still show one.
+
 ## [0.2.1] - 2026-11-02
 
 ### Fixed
