@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fixed
+
+- The weekly upstream check no longer reports vkBasalt 0.3.2.10 as an
+  update to itself (#4). The package now fetches vkBasalt from its
+  release's own source archive instead of the matching commit archive.
+  Both hold the same files, so the built layers don't change.
+
 ## [0.3.0] - 2026-11-03
 
 ### Added
