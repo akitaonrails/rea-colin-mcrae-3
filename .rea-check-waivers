@@ -1,0 +1,3 @@
+# Owner decisions that launcher-check reports instead of failing on
+# (sdk/docs/STANDARDS.md, "What a machine can check, it checks").
+drm-exception: owner decision 2026-11-02, the SilentPatch project's community xdelta patcher turns an official 1.1 executable (SecuROM/SafeDisc, which Windows 10/11 and Wine can't run) into the publisher's own DRM-free 1.1 build; no crack of our own, anything it doesn't convert is refused (AGENTS.md "Owner decisions", docs/RESEARCH.md, THIRD_PARTY.md)

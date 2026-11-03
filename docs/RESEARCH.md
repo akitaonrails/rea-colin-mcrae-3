@@ -20,3 +20,15 @@ longer history (what was tried and why) is in `docs/PLAN.md` and
 | AuToMaNiAk005's widescreen hex patches | widescreen before SilentPatch | none stated | no | not used (superseded by SilentPatch) |
 | dgVoodoo2 | D3D9 → D3D11 for broken drivers | freeware, no redistribution grant | yes | not used (native d3d9 on Windows, DXVK on Linux) |
 | PCGamingWiki, ProtonDB, WineHQ AppDB 7563 | known issues, Linux reports | — | — | read; our own Linux findings drafted in `docs/CONTRIBUTIONS.md` |
+
+## Owner decisions
+
+Recorded in `AGENTS.md` ("Owner decisions") and `THIRD_PARTY.md`;
+gathered here as `sdk/docs/STANDARDS.md` ("DRM exceptions") asks. The DRM
+one is the `drm-exception` line in `.rea-check-waivers`.
+
+| Date | Decision | Why |
+|---|---|---|
+| 2026-11-01 | Bekoha's HD UI ships with the package, fetched and checksummed at build time, never committed | it has no licence text; the owner chose to bundle it for 4K-sharp menus |
+| 2026-11-02 | The SilentPatch project's community xdelta patcher is the approved way to remove the disc protection: it turns an official 1.1 executable into the publisher's own DRM-free 1.1 build. No crack of our own; anything it doesn't convert is refused | Windows 10/11 block SecuROM/SafeDisc and Wine can't run it, so the official 1.1 exe can't start at all |
+| — | SilentPatch's Language Pack is never bundled | original game content from regional releases |
