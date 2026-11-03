@@ -52,6 +52,21 @@ INI=$(ls "$PREFIX"/drive_c/users/*/AppData/Local/CMR3Launcher/Rally3/SilentPatch
 $BOX sh -c "CMR3_PREFIX='$PREFIX' '$PLAY' stop" >/dev/null 2>&1
 sleep 2
 
+# This run's game only: a Rally_3PC.exe whose working folder is inside
+# this prefix (the runtime copy). Another prefix's game, or anything else
+# on the machine, is never signalled; nothing about other processes is
+# printed.
+PREFIX_REAL=$(readlink -f "$PREFIX")
+our_games() {
+  for pid in $(pgrep -x Rally_3PC.exe); do
+    case "$(readlink "/proc/$pid/cwd" 2>/dev/null)" in "$PREFIX_REAL"/*) echo "$pid" ;; esac
+  done
+}
+game_running() { [ -n "$(our_games)" ]; }
+end_games() { # signal
+  for pid in $(our_games); do kill "-$1" "$pid" 2>/dev/null; done
+}
+
 BOXLOG=$(mktemp)
 # Headless: a `gamescope` first in PATH that adds --backend headless to the
 # real one (the play library's own seam is for its shell tests only).
@@ -81,14 +96,14 @@ $BOX sh -c "${WRAP:+PATH='$WRAP':\$PATH }CMR3_PREFIX='$PREFIX' CMR3_LAUNCHER='$K
 boot=${CMR3_E2E_BOOT:-180}
 waited=0
 while [ "$waited" -lt "$boot" ]; do
-  pgrep -x Rally_3PC.exe >/dev/null && break
+  game_running && break
   sleep 5
   waited=$((waited + 5))
 done
-if pgrep -x Rally_3PC.exe >/dev/null; then
+if game_running; then
   ok "game running after ${waited}s"
   sleep "${CMR3_E2E_ALIVE_AT:-10}"
-  pgrep -x Rally_3PC.exe >/dev/null && ok "still alive ${ALIVE_AT:=10}s later" \
+  game_running && ok "still alive ${ALIVE_AT:=10}s later" \
     || bad "game died right after starting"
 else
   bad "game never started within ${boot}s; cmr3-play said: $(tail -5 "$BOXLOG" | tr '\n' ' ')"
@@ -98,10 +113,10 @@ fi
 # the process instead of deadlocking it. Either way the game must stop.
 faults=$(grep -c "page fault" "$BOXLOG" 2>/dev/null)
 faults=${faults:-0}
-pkill -x Rally_3PC.exe
+end_games TERM
 sleep 8
-if pgrep -x Rally_3PC.exe >/dev/null; then
-  pkill -9 -x Rally_3PC.exe
+if game_running; then
+  end_games KILL
   bad "game would not exit (faults seen: $faults) — the frozen-quit bug"
 else
   ok "game exits when ended (faults during run: $faults)"

@@ -74,4 +74,11 @@ got=$(env -i PATH="$T/wrap:$T/tools" "$T/wrap/gamescope" 2>&1); code=$?
 [ "$code" = 127 ] && echo "ok   the wrapper never runs itself" || { echo "FAIL wrapper alone: $code $got"; fails=$((fails + 1)); }
 grep -q 'CMR3_E2E_VISIBLE' "$HERE/e2e.sh" && echo "ok   a visible window only with CMR3_E2E_VISIBLE" \
   || { echo "FAIL no CMR3_E2E_VISIBLE in e2e.sh"; fails=$((fails + 1)); }
+# It never signals a process by bare name (another prefix's game, another
+# agent's run): only this prefix's game, found by its working folder.
+if grep -nE '(^|[^_a-z])(pkill|killall)([^_a-z]|$)' "$HERE/e2e.sh" > "$T/kills"; then
+  echo "FAIL e2e.sh signals by name: $(cat "$T/kills")"; fails=$((fails + 1))
+else
+  echo "ok   e2e.sh signals only its own prefix's game"
+fi
 [ "$fails" = 0 ] && echo "all passed" || { echo "$fails failed"; exit 1; }
