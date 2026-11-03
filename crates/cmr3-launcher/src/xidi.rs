@@ -1,5 +1,6 @@
 //! `Xidi.ini`: the DirectInput-to-XInput bridge the launcher installs as
-//! `dinput8.dll` (Xidi by samuelgr, BSD-3-Clause).
+//! `dinput8.dll` with its main binary `Xidi.32.dll` (Xidi 5 by samuelgr,
+//! BSD-3-Clause).
 //!
 //! Colin McRae Rally 3 reads its pad through DirectInput with the
 //! accelerator and brake bound to the left stick's Y axis. The `rally`
@@ -58,9 +59,6 @@ SaturationPercentTriggerRT = 100\n\
 Enabled = {log_enabled}\n\
 Level = 3\n\
 \n\
-[Import]\n\
-dinput8.dll = C:\\Windows\\system32\\dinput8.dll\n\
-\n\
 [Workarounds]\n\
 ActiveVirtualControllerMask = 0x01\n",
         log_enabled = if log { "yes" } else { "no" },
@@ -112,7 +110,11 @@ mod tests {
             ]
         );
         assert!(t.contains("DeadzonePercentStickLeft = 5"));
-        assert!(t.contains("dinput8.dll = C:\\Windows\\system32\\dinput8.dll"));
+        // Xidi 5 has no [Import] section: one would be a configuration
+        // error, shown to the player as a message box.
+        for preset in [Gamepad::Rally, Gamepad::Standard] {
+            assert!(!ini(preset, false).unwrap().contains("[Import]"));
+        }
         assert!(t.contains("Enabled = no"));
         assert!(ini(Gamepad::Rally, true).unwrap().contains("Enabled = yes"));
     }

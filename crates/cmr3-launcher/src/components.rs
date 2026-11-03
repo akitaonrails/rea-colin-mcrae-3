@@ -7,7 +7,7 @@
 //! ```text
 //! thirdparty/silentpatch/SilentPatchCMR3.asi   the fixes (MIT)
 //! thirdparty/silentpatch/dinput8.dll           the ASI loader; installed as dsound.dll
-//! thirdparty/xidi/dinput8.dll                  the pad bridge (BSD-3-Clause)
+//! thirdparty/xidi/dinput8.dll + Xidi.32.dll    the pad bridge (BSD-3-Clause)
 //! thirdparty/patcher/xdelta.exe + *.xdelta     the DRM-free patcher (Apache-2.0)
 //! thirdparty/dxvk/d3d9.dll                     DXVK for Wine (Zlib)
 //! thirdparty/hd-ui/…                           the HD UI overlay (Bekoha)
@@ -52,7 +52,7 @@ pub fn bundle_dir() -> std::path::PathBuf {
 pub const PARTS: [(&str, &[&str], bool); 6] = [
     ("SilentPatch", &["silentpatch/SilentPatchCMR3.asi"], false),
     ("ASI loader", &["silentpatch/dinput8.dll"], false),
-    ("Xidi", &["xidi/dinput8.dll"], false),
+    ("Xidi", &["xidi/dinput8.dll", "xidi/Xidi.32.dll"], false),
     (
         "DRM-free patcher",
         &["patcher/xdelta.exe", "patcher/efigs.xdelta"],
@@ -147,10 +147,35 @@ fn xidi_inis() -> Vec<Vec<u8>> {
         .collect()
 }
 
-/// Installs Xidi as `dinput8.dll` with the preset's `Xidi.ini` (its
-/// logger on when `log`); the `off` preset takes out what the launcher
-/// put in, bringing back a `dinput8.dll` of the game's own (the game then
-/// loads it, or the system DirectInput).
+/// Xidi files earlier releases installed, by sha256: Xidi 4.3.1's Win32
+/// `dinput8.dll` and the `Xidi.ini` texts of 0.2.0–0.3.0 (rally and
+/// standard, log off and on). A runtime from before the ledger may hold
+/// them; they are the launcher's and get replaced.
+const EARLIER_XIDI: [&str; 5] = [
+    "dedbf4aa0d1cc3b0c036feb1a089d181345c03ef07a118886b66654f04395efd",
+    "1bbf46f735f129ea058204295475a8f1a95383c27667a40cc04ddda2dcfc9fc1",
+    "7a510df3a9fa10a332da185c1e057c620a8e206e89862c1eadbca6f766eb5c82",
+    "9868dfaa075b30e5999a6a1efda39fe77b3b2836713581da57590545c42f8486",
+    "a7e88ecf8bbf65d48f9511f593a74ad1c99b2a913c864a015a81e5fffceaeed6",
+];
+
+/// `current` (the bytes this release would recognise as its own), plus
+/// the runtime file's own bytes when they are one of `earlier`.
+fn with_earlier(file: &Path, mut current: Vec<Vec<u8>>, earlier: &[&str]) -> Vec<Vec<u8>> {
+    if let Ok(bytes) = fs::read(file) {
+        let digest = rea_launcher::identify::hex(&rea_launcher::identify::sha256(&bytes));
+        if earlier.contains(&digest.as_str()) {
+            current.push(bytes);
+        }
+    }
+    current
+}
+
+/// Installs Xidi — its `dinput8.dll` wrapper and the `Xidi.32.dll` main
+/// binary the wrapper loads — with the preset's `Xidi.ini` (its logger on
+/// when `log`); the `off` preset takes out what the launcher put in,
+/// bringing back a `dinput8.dll` of the game's own (the game then loads
+/// it, or the system DirectInput).
 pub fn install_xidi(
     game: &Path,
     runtime: &Path,
@@ -158,29 +183,42 @@ pub fn install_xidi(
     preset: Gamepad,
     log: bool,
 ) -> io::Result<Installed> {
-    let dll = bundle.join("xidi/dinput8.dll");
+    const FILES: [&str; 2] = ["dinput8.dll", "Xidi.32.dll"];
+    let from = |name: &str| bundle.join("xidi").join(name);
     let mut ledger = ledger(game, runtime);
-    let inis = xidi_inis();
+    // What counts as ours in the runtime: what this bundle holds, plus a
+    // file an earlier release installed there before the ledger.
+    let known = |name: &str, current: Vec<Vec<u8>>| {
+        with_earlier(&runtime.join(name), current, &EARLIER_XIDI)
+    };
+    let ours = |name: &str| known(name, fs::read(from(name)).into_iter().collect());
+    let inis = known("Xidi.ini", xidi_inis());
     let inis: Vec<&[u8]> = inis.iter().map(Vec::as_slice).collect();
-    let ours: Vec<Vec<u8>> = fs::read(&dll).into_iter().collect();
-    let ours: Vec<&[u8]> = ours.iter().map(Vec::as_slice).collect();
     match xidi::ini(preset, log) {
         Some(ini) => {
-            if !dll.is_file() {
+            if !FILES.iter().all(|name| from(name).is_file()) {
                 return Ok(Installed::NotBundled);
             }
             // The settings first: Xidi without them would map nothing.
             if let Some(refused) = put(&mut ledger, "Xidi.ini", ini.as_bytes(), &inis)? {
                 return Ok(refused);
             }
-            let bytes = fs::read(&dll)?;
-            if let Some(refused) = put(&mut ledger, "dinput8.dll", &bytes, &ours)? {
-                return Ok(refused);
+            for name in FILES {
+                let bytes = fs::read(from(name))?;
+                let ours = ours(name);
+                let ours: Vec<&[u8]> = ours.iter().map(Vec::as_slice).collect();
+                if let Some(refused) = put(&mut ledger, name, &bytes, &ours)? {
+                    return Ok(refused);
+                }
             }
             Ok(Installed::Done)
         }
         None => {
-            ledger.take_out("dinput8.dll", &ours)?;
+            for name in FILES {
+                let ours = ours(name);
+                let ours: Vec<&[u8]> = ours.iter().map(Vec::as_slice).collect();
+                ledger.take_out(name, &ours)?;
+            }
             ledger.take_out("Xidi.ini", &inis)?;
             Ok(Installed::Done)
         }
@@ -358,6 +396,7 @@ mod tests {
         fs::write(b.join("silentpatch/SilentPatchCMR3.asi"), b"asi").unwrap();
         fs::write(b.join("silentpatch/dinput8.dll"), b"loader").unwrap();
         fs::write(b.join("xidi/dinput8.dll"), b"xidi").unwrap();
+        fs::write(b.join("xidi/Xidi.32.dll"), b"xidi-main").unwrap();
         fs::write(b.join("patcher/xdelta.exe"), b"xd3").unwrap();
         fs::write(b.join("patcher/efigs.xdelta"), b"e").unwrap();
         fs::write(b.join("patcher/polish.xdelta"), b"p").unwrap();
@@ -480,6 +519,59 @@ mod tests {
         assert_eq!(fs::read(game.join("dinput8.dll")).unwrap(), b"game's own");
         for d in [bundle, game, rt] {
             fs::remove_dir_all(d).unwrap();
+        }
+    }
+
+    #[test]
+    fn xidi_brings_its_main_binary_and_takes_it_out_again() {
+        let bundle = bundle_with("xidi5-bundle");
+        let game = temp("xidi5-game");
+        let rt = temp("xidi5-rt");
+        install_xidi(&game, &rt, &bundle, Gamepad::Rally, false).unwrap();
+        // Xidi 5's wrapper loads its main binary from beside the game.
+        assert_eq!(fs::read(rt.join("dinput8.dll")).unwrap(), b"xidi");
+        assert_eq!(fs::read(rt.join("Xidi.32.dll")).unwrap(), b"xidi-main");
+        install_xidi(&game, &rt, &bundle, Gamepad::Off, false).unwrap();
+        for name in ["dinput8.dll", "Xidi.32.dll", "Xidi.ini"] {
+            assert!(!rt.join(name).exists(), "{name}");
+        }
+        for d in [bundle, game, rt] {
+            fs::remove_dir_all(d).unwrap();
+        }
+    }
+
+    #[test]
+    fn an_earlier_releases_file_is_ours_before_the_ledger() {
+        let rt = temp("earlier-rt");
+        let file = rt.join("dinput8.dll");
+        fs::write(&file, b"xidi-4").unwrap();
+        let digest = rea_launcher::identify::hex(&rea_launcher::identify::sha256(b"xidi-4"));
+        let current = vec![b"xidi-5".to_vec()];
+        // Listed by digest: its own bytes join the known ones.
+        let known = with_earlier(&file, current.clone(), &[digest.as_str()]);
+        assert_eq!(known, [b"xidi-5".to_vec(), b"xidi-4".to_vec()]);
+        // Anything else stays unknown (a player's own file).
+        fs::write(&file, b"players").unwrap();
+        assert_eq!(
+            with_earlier(&file, current, &[digest.as_str()]),
+            [b"xidi-5".to_vec()]
+        );
+        fs::remove_dir_all(rt).unwrap();
+    }
+
+    #[test]
+    fn earlier_xidi_files_are_the_ones_releases_installed() {
+        // Xidi 4.3.1's Win32 dinput8.dll (from the pinned zip, sha256
+        // 78120f44…) and the four Xidi.ini texts 0.2.0–0.3.0 wrote.
+        assert!(
+            EARLIER_XIDI
+                .contains(&"dedbf4aa0d1cc3b0c036feb1a089d181345c03ef07a118886b66654f04395efd")
+        );
+        assert_eq!(EARLIER_XIDI.len(), 5);
+        // None of them is a file this release writes.
+        for ini in xidi_inis() {
+            let d = rea_launcher::identify::hex(&rea_launcher::identify::sha256(&ini));
+            assert!(!EARLIER_XIDI.contains(&d.as_str()));
         }
     }
 

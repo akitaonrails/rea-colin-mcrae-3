@@ -140,7 +140,7 @@ a private runtime folder — the product rules' "reuse open source" path.
 CMR3Launcher.exe          settings window, edition check, runtime sync,
                           component install, SilentPatchCMR3.ini, launch
 thirdparty/silentpatch/   SilentPatchCMR3.asi + ASI loader (as dsound.dll)
-thirdparty/xidi/          dinput8.dll + generated Xidi.ini
+thirdparty/xidi/          dinput8.dll + Xidi.32.dll + generated Xidi.ini
 thirdparty/patcher/       xdelta.exe + efigs/polish patches (DRM-free)
 thirdparty/dxvk/          d3d9.dll (Wine only)
 thirdparty/hd-ui/         the 4K interface overlay

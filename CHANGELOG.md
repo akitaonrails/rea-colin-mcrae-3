@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Changed
+
+- Updated Xidi, the gamepad bridge, from 4.3.1 to 5.0.0 (#3). Xidi 5
+  needs its main file, `Xidi.32.dll`, next to the game as well, so the
+  launcher now installs both and takes both out again when the gamepad
+  is set to off. `Xidi.ini` no longer has an `[Import]` section, which
+  Xidi 5 would report as a configuration error. Game copies made by any
+  earlier release are upgraded in place.
+
 ### Fixed
 
 - The weekly upstream check no longer reports vkBasalt 0.3.2.10 as an

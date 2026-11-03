@@ -112,6 +112,7 @@ fn syncs_a_runtime_and_installs_everything() {
         "SilentPatchCMR3.asi",
         "dsound.dll",
         "dinput8.dll",
+        "Xidi.32.dll",
         "Xidi.ini",
         "d3d9.dll",
     ] {
@@ -156,6 +157,7 @@ fn bundle_layout_is_complete() {
         "silentpatch/SilentPatchCMR3.asi",
         "silentpatch/dinput8.dll",
         "xidi/dinput8.dll",
+        "xidi/Xidi.32.dll",
         "patcher/xdelta.exe",
         "patcher/efigs.xdelta",
         "patcher/polish.xdelta",
@@ -164,10 +166,14 @@ fn bundle_layout_is_complete() {
         assert!(bundle.join(rel).is_file(), "{rel} missing");
     }
     assert!(bundle.join("hd-ui").is_dir());
+    // The Xidi v5.0.0 Win32 build this setup was validated with.
     assert_eq!(
         hex(&file_md5(&bundle.join("xidi/dinput8.dll"))),
-        // The Xidi v4.3.1 Win32 build this setup was validated with.
-        "ac44d28829d1aa81d1dec4246e2139c4"
+        "1d4cf3b8f7061efaf9dd4961dd31e2de"
+    );
+    assert_eq!(
+        hex(&file_md5(&bundle.join("xidi/Xidi.32.dll"))),
+        "4beb9a6db0579fcd4033f4acaa22a9a1"
     );
 
     let wine = std::env::var("CMR3_SMOKE_WINE").unwrap_or_else(|_| "wine".into());

@@ -18,8 +18,9 @@
 # with.
 silentpatch https://github.com/CookiePLMonster/SilentPatchCMR3/releases/download/BUILD-2.1/SilentPatchCMR3.zip 927cc81b377a33fbe8450dfc01d22d7a37ab9ece44c45ba479205e890693b131 mirror https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/SilentPatchCMR3.zip
 
-# Xidi v4.3.1 Win32 (BSD-3-Clause) — DirectInput for XInput controllers.
-xidi https://github.com/samuelgr/Xidi/releases/download/v4.3.1/Xidi-v4.3.1.zip 78120f44baa816fc264fb722495776aab437a36be515e42345428b7f32ac17ff mirror https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/Xidi-v4.3.1.zip
+# Xidi v5.0.0 Win32 (BSD-3-Clause) — DirectInput for XInput controllers:
+# the dinput8.dll wrapper and the Xidi.32.dll main binary it loads.
+xidi https://github.com/samuelgr/Xidi/releases/download/v5.0.0/Xidi-v5.0.0.zip 41b6d23692d7e8043deef032ae5e619ee96aaef1586f58e4a541d4c15429b8cd mirror https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/Xidi-v5.0.0.zip
 
 # DRM-free patcher from the SilentPatch project (MIT distribution;
 # xdelta3 is Apache-2.0): turns the official 1.1 executables into the

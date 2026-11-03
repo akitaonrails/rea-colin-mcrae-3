@@ -505,3 +505,28 @@ verify". Update a row when it is run.
 | HiDPI / 4K settings window | verified at Wine 96 DPI on 4K (1.5×); 144/192 DPI **pending** |
 | Ultrawide (21:9) | **pending** (SilentPatch supports any aspect ratio; not seen here) |
 | Old-game trouble spots | timers/multi-core: SilentPatch's fixes; audio (DirectSound, no EAX needed): plays under Wine; CD audio: none; intro videos: Wine's quartz fault noted above (crash dialog off); focus loss: **pending** |
+
+## 2026-11-03 — Xidi 5.0.0 and the vkBasalt release pin (#3, #4)
+
+Headless, through `linux/tests/e2e.sh` (gamescope `--backend headless`)
+on a package built by `packaging/package.sh` from the new pins, a
+throwaway prefix under `.work/`, and the owner's game folder (read-only).
+
+- `--check`: every part present, Xidi's `dinput8.dll` and `Xidi.32.dll`
+  included. The smoke tests passed against the real game folder: both
+  Xidi files in the runtime copy, the game folder unchanged byte for byte.
+- `e2e.sh`, twice: the game started, ran 90 s, ended when asked, no page
+  faults; SilentPatch, Xidi and DXVK installed; resolution and display
+  mode in `SilentPatchCMR3.ini`. (The first run's last check looks for
+  that ini before a fresh prefix has a runtime copy; the second run, with
+  one, passed everything.)
+- Xidi's own log: version 5.0.0 loaded from the runtime's `Xidi.32.dll`,
+  no configuration error (the `[Import]` section is gone; Xidi 5 would
+  have shown a message box for it), the Rally mapper built with 4 axes
+  (X, Y, Z, RotZ), 12 buttons and no hat, and the game selected 16
+  controls — the same layout as with Xidi 4.3.1, so the bindings written
+  into new profiles (steering 12, pedals 13) still match.
+- Not checked: driving with a pad (needs a person); the layout above is
+  what the bindings depend on.
+- vkBasalt from its release archive: the same 124 source files as commit
+  4f97f09; built both bitnesses in `package.sh`.
