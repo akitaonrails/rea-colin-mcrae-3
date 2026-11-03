@@ -1,7 +1,7 @@
 #!/bin/sh
 # Tests that cmr3-play hands launcher.cfg's scaler to gamescope (-F), for
-# every scaler, the resolution (-W/-H/-w/-h), and that a windowed mode
-# skips gamescope: sh linux/tests/scaler.sh
+# every scaler, the resolution (-W/-H/-w/-h), the size of each look, and
+# that a windowed mode skips gamescope: sh linux/tests/scaler.sh
 set -u
 unset GAMESCOPE_WAYLAND_DISPLAY DRI_PRIME __NV_PRIME_RENDER_OFFLOAD WINEDLLOVERRIDES
 HERE=$(dirname "$(readlink -f "$0")")
@@ -96,5 +96,29 @@ case "$(cat "$T/ran")" in
   *gamescope*) echo "FAIL --display-mode Windowed must skip gamescope"; fails=$((fails + 1)) ;;
   *inner.sh*) echo "ok   --display-mode Windowed runs directly" ;;
   *) echo "FAIL --display-mode Windowed: $(cat "$T/ran")"; fails=$((fails + 1)) ;;
+esac
+# Looks (--look / look =, REA_LOOK_SIZES): gamescope opens at the size
+# the launcher gives the game, as it resolves it: this run's --resolution,
+# else its --look, else the file's resolution, else the file's look.
+look_case() { # name, launcher.cfg text, wanted size, cmr3-play args...
+  name=$1 text=$2 want=$3; shift 3
+  printf '%b' "$text" > "$CFG"
+  REA_SCREEN=2560x1440 rea_main --play "$@" > /dev/null
+  case "$(cat "$T/ran")" in
+    *"-w ${want%x*} -h ${want#*x} -f"*) echo "ok   $name" ;;
+    *) echo "FAIL $name: $(cat "$T/ran")"; fails=$((fails + 1)) ;;
+  esac
+}
+look_case "--look steam_deck is 1280x800" 'resolution = 1920x1080\n' 1280x800 --look steam_deck
+look_case "--look original is 640x480" 'resolution = 1920x1080\n' 640x480 --look original
+look_case "--look enhanced is the screen" 'resolution = original\n' 2560x1440 --look enhanced
+look_case "--resolution beats --look" '' 1600x900 --look steam_deck --resolution 1600x900
+look_case "look = steam_deck in the file" 'look = steam_deck\n' 1280x800
+look_case "the file's resolution beats its look" 'look = steam_deck\nresolution = 1920x1080\n' 1920x1080
+printf 'resolution = 1920x1080\n' > "$CFG"
+rea_main --play --look steam_deck > /dev/null
+case "$(cat "$T/ran")" in
+  *"--no-window --look steam_deck"*) echo "ok   --look reaches the launcher" ;;
+  *) echo "FAIL --look not passed on: $(cat "$T/ran")"; fails=$((fails + 1)) ;;
 esac
 [ "$fails" = 0 ] && echo "all passed" || { echo "$fails failed"; exit 1; }

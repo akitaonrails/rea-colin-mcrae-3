@@ -4,7 +4,7 @@
 #   cmr3-play           show the settings window, then start the game
 #   cmr3-play --play    start the game with the saved settings (no window);
 #                       launcher flags may follow for one run, e.g.
-#                       --scaler fsr --resolution 1280x720
+#                       --scaler fsr --resolution 1280x720 or --look steam_deck
 #   cmr3-play stop      end the game
 #   cmr3-play status    running or idle
 #
@@ -57,6 +57,10 @@ REA_CFG_APPDATA=CMR3Launcher
 # game sizes itself, so gamescope only runs for fullscreen.
 REA_ORIGINAL_SIZE=640x480
 REA_WINDOWED_KEY=display_mode
+# The size each look gives the game (--look / look =), as the launcher
+# resolves it: this run's --resolution, else its --look, else
+# launcher.cfg's resolution, else its look. Enhanced is the screen's own.
+REA_LOOK_SIZES="original=640x480 enhanced=screen steam_deck=1280x800"
 # Pads reach the game through Wine's SDL backend (Xidi reads them as
 # XInput). SDL finds every pad itself; naming a device as well
 # (SDL_JOYSTICK_DEVICE) would add the same pad a second time.
