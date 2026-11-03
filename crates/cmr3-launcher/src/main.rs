@@ -34,15 +34,15 @@ mod app {
     use cmr3_launcher::components::{self, Installed};
     use cmr3_launcher::config::{self, Settings};
     use cmr3_launcher::edition;
-    use cmr3_launcher::instance::{self, SecondStart};
+    use cmr3_launcher::instance;
     use cmr3_launcher::plan::{self, Env};
     use cmr3_launcher::profile;
     use cmr3_launcher::runtime;
     use rea_launcher::cfg::ArgError;
     use rea_launcher::log::Log;
     use rea_launcher::{cfg, fsx, paths};
-    use rea_launcher_win32::instance::{self as win32_instance, Window};
-    use rea_launcher_win32::process::Launch;
+    use rea_launcher_win32::instance::{self as win32_instance, SecondStart, Window};
+    use rea_launcher_win32::process::{self, Launch};
     use rea_launcher_win32::report;
     use rea_launcher_win32::wine::DllMode;
     use rea_launcher_win32::{display, gpu, wine};
@@ -180,17 +180,19 @@ mod app {
             match win32_instance::single(instance::NAME) {
                 Ok(guard) => Some(guard),
                 Err(running) => {
-                    let second = SecondStart::new(
-                        running.bring_to_front(Window::Title(instance::WINDOW_TITLE)),
-                    );
-                    log_line(&format!("another launcher is running: {second:?}"));
+                    // A plain start brings the open window forward;
+                    // otherwise the game (or a run without a window) is
+                    // in progress: say so and exit 5.
+                    let second = running.second_start(false, Window::Own(TITLE));
+                    log_line(second.log_line());
                     // A play-time message: the player started a second
                     // copy and must see why nothing happened.
-                    if let Some(message) = second.message() {
-                        note(message, true);
+                    if let Some(message) = second.message(instance::GAME) {
+                        fatal(&message);
                     }
-                    // cmr3-play --settings: nothing was started.
-                    return Ok(if settings_only { WINDOW_CLOSED } else { 0 });
+                    return Ok(
+                        instance::second_start_exit(second.exit_code(), settings_only) as u32,
+                    );
                 }
             }
         };
@@ -271,6 +273,14 @@ mod app {
             .clone()
             .unwrap_or_else(|| home().join("Rally3"));
         paths::check_separate(&game, &rt)?;
+        // A launcher that was killed released the instance, but its game
+        // may still run from this runtime copy: never sync under it.
+        if !process::find_running(&rt.join(EXE)).is_empty() {
+            let busy = SecondStart::Busy;
+            log_line(busy.log_line());
+            fatal(&busy.message(instance::GAME).unwrap_or_default());
+            return Ok(busy.exit_code() as u32);
+        }
         let report = runtime::sync(&game, &rt)
             .map_err(|e| format!("cannot prepare {}: {e}", rt.display()))?;
         log_line(&format!(
