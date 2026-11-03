@@ -208,6 +208,7 @@ underscores) and on the command line (with hyphens); `CMR3Launcher.exe
 | `game` / `--game` | Play: Game folder | a folder | found next to the launcher | The folder with your `Rally_3PC.exe`; only read. Remembered. |
 | `saves` / `--saves` | Play: Profile folder | a folder | `Saved Games\Colin McRae Rally 3` | Where your profile (the game's `CMR3` file) is kept. |
 | `runtime` / `--runtime` | — (file and flag only) | a folder | `%LOCALAPPDATA%\CMR3Launcher\Rally3` | Where the launcher's private copy goes (about 3 GB). |
+| `look` / `--look` | Play: Look | `original`, `enhanced`, `steam_deck` | the picture values saved | Every picture setting at once, as the window's look cards set them. Picture options given on their own win over it. The window saves the values themselves. |
 | `resolution` / `--resolution` | Picture: Resolution | `WIDTHxHEIGHT`, `original` | the desktop's size | Any size and aspect ratio; `original` is the 640×480 of 2003. |
 | `display_mode` / `--display-mode` | Picture: Display mode | `fullscreen`, `windowed`, `borderless` | fullscreen | Fullscreen plays borderless under Wine without gamescope. |
 | `vsync` / `--vsync` | Picture: VSync | `on`, `off` | the game's (Enhanced: on) | Waits for the screen's refresh: no tearing. |
@@ -243,6 +244,12 @@ launcher's own switches:
 - `--help`: every option and its values.
 
 A bad flag or value exits with 2 and a message naming what it takes.
+
+One launcher runs at a time. Starting it again while its window is open
+brings the window to the front (exit 0). While the game runs, a second
+start says so and exits 5, and so does Play when the game is still
+running from the launcher's private copy (a launcher that was ended while
+playing, say). `--check` runs alongside.
 
 ## Where things live
 

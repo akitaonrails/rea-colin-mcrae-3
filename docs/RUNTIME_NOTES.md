@@ -446,6 +446,29 @@ run ended with the game, launcher, wineserver and gamescope gone.
 Still pending: the same on real Proton (Steam, non-Steam game) and the
 Steam Deck.
 
+## Unreleased — rea-launcher-sdk v0.4.1 (host- and Wine-tested; real game pending)
+
+Host tests, the shell tests (`linux/tests/*.sh` except `e2e.sh`) and
+`sdk/scripts/wine-test --locked --workspace` in the gaming box pass;
+`sdk/scripts/launcher-check`: 0 errors, 0 warnings, the DRM waiver. What
+changed for players, to run headless in the real game (as above):
+
+- `--look original|enhanced|steam_deck` (and `look =`): each look reaches
+  the game with the values of its window card; `cmr3-play --play --look
+  steam_deck` opens gamescope at 1280×800 (REA_LOOK_SIZES). **Pending.**
+- A second `CMR3Launcher.exe` while the game runs: the SDK's message
+  ("… is already running from this launcher …") and exit **5** (was 0);
+  while the window is open it still comes forward (exit 0). **Pending.**
+- Play while `Rally_3PC.exe` still runs from the runtime copy (its
+  launcher killed): refused with the same message, exit 5. **Pending.**
+- A Play-time error (a wrong game folder) under `cmr3-play` shows a
+  dialog (`report::audience`). **Pending.**
+- The first start on a fresh prefix opens the settings window
+  (`gpu::prefer_glx_or_restart`). **Pending.**
+- Quitting and leftovers: game menu, window close / Alt+F4, gamescope
+  closed, SIGINT/SIGTERM, `cmr3-play stop` leave no process behind.
+  **Pending** (to rerun on this build).
+
 ## Platform matrix
 
 What has been checked in the real game, per STANDARDS "Platforms to

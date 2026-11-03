@@ -72,7 +72,9 @@ CMR3_RUN="distrobox enter gaming --" ~/Games/cmr3-launcher/linux/cmr3-play
 `cmr3-play` also understands `--play` (no settings window), `stop` and
 `status`. Launcher flags may follow `--play` for one run and reach
 gamescope too, e.g. `cmr3-play --play --scaler fsr --resolution
-1280x720`. These commands only look at the session `cmr3-play` itself
+1280x720`, or `cmr3-play --play --look steam_deck` (gamescope opens at
+the look's size: 640×480, the screen's, or 1280×800). A start while the
+game runs exits 5 and starts nothing. These commands only look at the session `cmr3-play` itself
 started (its own process group, recorded by pid and start time): `stop`
 ends that session and the prefix's Wine processes, and it neither reports
 nor stops a `Rally_3PC.exe` started some other way.
