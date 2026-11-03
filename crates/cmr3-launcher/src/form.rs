@@ -2,10 +2,12 @@
 //! so it can be tested on any host.
 //!
 //! The window offers one choice first, the look: the original 2003 game,
-//! an enhanced preset that fits the player's screen, or custom values. The
-//! preset is never stored: the file keeps the individual settings (as the
-//! command line and older launchers read them) and the look is worked out
-//! from them when the window opens.
+//! an enhanced preset that fits the player's screen, the Steam Deck's, or
+//! custom values. The window never stores the preset: the file keeps the
+//! individual settings (as older launchers read them) and the look is
+//! worked out from them when the window opens. A `look =` line or a
+//! `--look` flag names one for scripts and the command line
+//! ([`with_look`]).
 
 use rea_launcher::cfg::on_off;
 use rea_launcher::display::{STEAM_DECK_SCREEN, is_steam_deck, landscape};
@@ -35,6 +37,38 @@ pub struct Picture {
 }
 
 impl Picture {
+    /// The picture values in settings (unset display mode: fullscreen).
+    pub fn of(s: &Settings) -> Picture {
+        Picture {
+            resolution: s.resolution,
+            original: s.original_resolution,
+            display_mode: s.display_mode.unwrap_or(DisplayMode::Fullscreen),
+            vsync: s.vsync,
+            anisotropic: s.anisotropic,
+            fsaa: s.fsaa,
+            fov: s.fov,
+            hd_ui: s.hd_ui == Some(true),
+            shadows: s.shadows,
+            postfx: s.postfx.unwrap_or_default(),
+        }
+    }
+
+    /// Sets every picture value of `s` to this picture's, as the window
+    /// saves them: an unset value is unset (the game's own).
+    pub fn apply(&self, s: &mut Settings) {
+        s.resolution = self.resolution;
+        s.original_resolution = self.original;
+        s.display_mode =
+            (self.display_mode != DisplayMode::Fullscreen).then_some(self.display_mode);
+        s.vsync = self.vsync;
+        s.anisotropic = self.anisotropic;
+        s.fsaa = self.fsaa;
+        s.fov = self.fov;
+        s.hd_ui = self.hd_ui.then_some(true);
+        s.shadows = self.shadows;
+        s.postfx = (self.postfx != Postfx::Off).then_some(self.postfx);
+    }
+
     /// The game as it was in 2003: 640×480, everything else the game's.
     pub const ORIGINAL: Picture = Picture {
         resolution: Some((640, 480)),
@@ -97,6 +131,59 @@ pub enum Look {
     Enhanced,
     SteamDeck,
     Custom,
+}
+
+impl Look {
+    /// The look a `look` value (`config::LOOKS`) names.
+    pub fn from_key(key: &str) -> Option<Look> {
+        match key {
+            "original" => Some(Look::Original),
+            "enhanced" => Some(Look::Enhanced),
+            "steam_deck" => Some(Look::SteamDeck),
+            _ => None,
+        }
+    }
+
+    /// Its `look` value; Custom has none.
+    pub fn key(self) -> Option<&'static str> {
+        match self {
+            Look::Original => Some("original"),
+            Look::Enhanced => Some("enhanced"),
+            Look::SteamDeck => Some("steam_deck"),
+            Look::Custom => None,
+        }
+    }
+
+    /// The look's picture on a screen; `None` for Custom.
+    pub fn picture(self, screen: Option<(u32, u32)>) -> Option<Picture> {
+        match self {
+            Look::Original => Some(Picture::ORIGINAL),
+            Look::Enhanced => Some(Picture::enhanced(screen)),
+            Look::SteamDeck => Some(Picture::STEAM_DECK),
+            Look::Custom => None,
+        }
+    }
+}
+
+/// The settings a run uses (`sdk/docs/STANDARDS.md`: "Looks have a
+/// `--look` flag that sets all of the look's values"): the file's look
+/// under the picture values the file sets itself; then a `--look` from
+/// the command line replaces every picture value; then the other flags on
+/// top.
+pub fn with_look(file: Settings, args: Settings, screen: Option<(u32, u32)>) -> Settings {
+    let picture = |look: Option<&str>| look.and_then(Look::from_key)?.picture(screen);
+    let mut base = match picture(file.look) {
+        Some(look) => {
+            let mut from_look = Settings::default();
+            look.apply(&mut from_look);
+            from_look.merged(file)
+        }
+        None => file,
+    };
+    if let Some(look) = picture(args.look) {
+        look.apply(&mut base);
+    }
+    base.merged(args)
 }
 
 /// Everything the window edits.
@@ -188,18 +275,7 @@ impl Form {
                 .map(|p| p.display().to_string())
                 .unwrap_or_default()
         };
-        let picture = Picture {
-            resolution: s.resolution,
-            original: s.original_resolution,
-            display_mode: s.display_mode.unwrap_or(DisplayMode::Fullscreen),
-            vsync: s.vsync,
-            anisotropic: s.anisotropic,
-            fsaa: s.fsaa,
-            fov: s.fov,
-            hd_ui: s.hd_ui == Some(true),
-            shadows: s.shadows,
-            postfx: s.postfx.unwrap_or_default(),
-        };
+        let picture = Picture::of(s);
         Form {
             game: path(&s.game),
             saves: path(&s.saves),
@@ -272,7 +348,9 @@ impl Form {
     /// line (comments, keys the window doesn't show) is kept.
     pub fn save(&self, text: &str) -> String {
         let p = &self.picture;
-        let mut t = text.to_string();
+        // The window saves every value on its own; a `look =` line would
+        // fill the values left unset on the next read.
+        let mut t = config::clear_key(text, "look");
         let mut put = |key: &str, value: Option<String>| {
             t = match &value {
                 Some(v) => config::set_key(&t, key, v),
@@ -403,6 +481,102 @@ mod tests {
         );
         // Elsewhere those values are still the Steam Deck look.
         assert_eq!(form(&saved).look, Look::SteamDeck);
+    }
+
+    /// Every picture value set to something no look uses.
+    const CUSTOM: &str = "resolution = 1600x900\ndisplay_mode = windowed\nvsync = off\n\
+        anisotropic = 2\nfsaa = on\nfov = 110\nhd_ui = on\nshadows = soft\npostfx = color\n\
+        gamepad = standard\n";
+
+    fn cli(flags: &[&str]) -> Settings {
+        Settings::parse_args(flags.iter().map(|f| f.to_string()))
+            .unwrap()
+            .0
+    }
+
+    /// What the window saves for a look.
+    fn window_saves(look: Look) -> Settings {
+        let mut f = form("");
+        f.set_look(look, SCREEN);
+        Settings::parse_file(&f.save("")).0
+    }
+
+    /// `--look` (STANDARDS: "Looks have a --look flag that sets all of
+    /// the look's values"): a run with the flag plays exactly what the
+    /// window saves for that look, whatever the file held.
+    #[test]
+    fn the_look_flag_sets_every_picture_value() {
+        let file = Settings::parse_file(CUSTOM).0;
+        for (key, look) in [
+            ("original", Look::Original),
+            ("enhanced", Look::Enhanced),
+            ("steam_deck", Look::SteamDeck),
+        ] {
+            assert_eq!(Look::from_key(key), Some(look));
+            assert_eq!(look.key(), Some(key));
+            let run = with_look(file.clone(), cli(&["--look", key]), SCREEN);
+            assert_eq!(Picture::of(&run), Picture::of(&window_saves(look)), "{key}");
+            assert_eq!(Form::look_of(&Picture::of(&run), SCREEN), look, "{key}");
+            // Settings that aren't picture values stay the file's.
+            assert_eq!(run.gamepad, Some(Gamepad::Standard), "{key}");
+        }
+        assert_eq!(Look::Custom.key(), None);
+        assert_eq!(Look::from_key("custom"), None);
+    }
+
+    #[test]
+    fn picture_flags_given_with_the_look_win_over_it() {
+        for flags in [
+            &["--look", "enhanced", "--fov", "90"][..],
+            &["--fov", "90", "--look", "enhanced"],
+        ] {
+            let run = with_look(Settings::default(), cli(flags), SCREEN);
+            assert_eq!(
+                Picture::of(&run),
+                Picture {
+                    fov: Some(90),
+                    ..Picture::enhanced(SCREEN)
+                },
+                "{flags:?}"
+            );
+        }
+    }
+
+    /// `look = ` in launcher.cfg: the look's values for every picture key
+    /// the file doesn't set; the window opens on that look and saves the
+    /// values themselves.
+    #[test]
+    fn a_look_in_the_file_fills_the_keys_it_leaves_out() {
+        let run = with_look(
+            Settings::parse_file("look = steam_deck\nfov = 90\n").0,
+            Settings::default(),
+            SCREEN,
+        );
+        assert_eq!(
+            Picture::of(&run),
+            Picture {
+                fov: Some(90),
+                ..Picture::STEAM_DECK
+            }
+        );
+        let file = "look = steam_deck\n";
+        let settings = with_look(Settings::parse_file(file).0, Settings::default(), SCREEN);
+        assert!(!Form::is_first_run(&settings), "a look is a choice");
+        let f = Form::new(&settings, SCREEN);
+        assert_eq!(f.look, Look::SteamDeck);
+        let saved = f.save(file);
+        assert!(
+            !saved.lines().any(|l| l.trim_start().starts_with("look")),
+            "{saved}"
+        );
+        assert_eq!(Settings::parse_file(&saved).0.resolution, Some((1280, 800)));
+        // An unknown look name is reported by the parser and changes nothing.
+        let (s, warnings) = Settings::parse_file("look = modern\n");
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert_eq!(
+            with_look(s, Settings::default(), SCREEN),
+            Settings::default()
+        );
     }
 
     #[test]

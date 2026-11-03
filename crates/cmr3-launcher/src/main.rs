@@ -34,6 +34,7 @@ mod app {
     use cmr3_launcher::components::{self, Installed};
     use cmr3_launcher::config::{self, Settings};
     use cmr3_launcher::edition;
+    use cmr3_launcher::form;
     use cmr3_launcher::instance;
     use cmr3_launcher::plan::{self, Env};
     use cmr3_launcher::profile;
@@ -260,7 +261,9 @@ mod app {
         for w in &warnings {
             log_line(&format!("warning: {w}"));
         }
-        let settings = saved.clone().merged(cli);
+        // A `look` (the file's, or this run's --look) under the picture
+        // values given on their own.
+        let settings = form::with_look(saved.clone(), cli, display::screen_size());
 
         if check_only {
             return Ok(check(&settings));

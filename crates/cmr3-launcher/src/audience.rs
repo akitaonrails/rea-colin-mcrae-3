@@ -51,6 +51,7 @@ mod tests {
         for args in [
             &["--no-window"][..],
             &["--no-window", "--scaler", "fsr"],
+            &["--no-window", "--look", "steam_deck"],
             &[],
         ] {
             let mode = mode(args, true);

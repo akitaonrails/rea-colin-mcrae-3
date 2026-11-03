@@ -23,6 +23,9 @@ pub struct Settings {
     pub runtime: Option<PathBuf>,
     /// Where the player's profile (`CMR3` file) is kept (see `TEMPLATE`).
     pub saves: Option<PathBuf>,
+    /// A look's name ([`LOOKS`]): its picture values for every picture
+    /// setting not given (`form::with_look`).
+    pub look: Option<&'static str>,
     /// Race resolution written to SilentPatchCMR3.ini; `None` keeps the
     /// file's (SilentPatch itself defaults to the desktop size).
     pub resolution: Option<(u32, u32)>,
@@ -262,6 +265,14 @@ pub const SCALERS: &[(&str, &str)] = &[
     ("fsr", "FSR"),
     ("linear", "Smooth"),
 ];
+/// The looks (`look = ` / `--look`): the game as it shipped, the screen's
+/// own size with every improvement (the recommended look), the Steam
+/// Deck's screen. The window's fourth card, Custom, is any other mix.
+pub const LOOKS: &[(&str, &str)] = &[
+    ("original", "Original 2003"),
+    ("enhanced", "Enhanced"),
+    ("steam_deck", "Steam Deck"),
+];
 pub const POSTFXS: &[(&str, &str)] = &[
     ("off", "Off"),
     ("color", "Colour"),
@@ -296,6 +307,14 @@ pub const OPTIONS: &[OptionSpec] = &[
          hard-linked when it can be). Default: %LOCALAPPDATA%\\CMR3Launcher\\Rally3.",
     )
     .launcher_only(),
+    OptionSpec::new(
+        "look",
+        Kind::Choice(LOOKS),
+        "Look",
+        "Every picture setting at once: the game as it shipped in 2003, your screen's own size \
+         with every improvement (recommended), or the Steam Deck's screen. Picture settings \
+         given on their own win over it.",
+    ),
     OptionSpec::new(
         "resolution",
         Kind::Size {
@@ -494,6 +513,11 @@ impl Settings {
             "game" => self.game = Some(path(value)?),
             "runtime" => self.runtime = Some(path(value)?),
             "saves" => self.saves = Some(path(value)?),
+            "look" => {
+                self.look = Some(choice(value, |c| {
+                    LOOKS.iter().find(|(v, _)| *v == c).map(|(v, _)| *v)
+                })?);
+            }
             "resolution" => {
                 let Value::Size(r) = value else {
                     return Err(mismatch());
@@ -545,6 +569,7 @@ impl Settings {
             game: over.game.or(self.game),
             runtime: over.runtime.or(self.runtime),
             saves: over.saves.or(self.saves),
+            look: over.look.or(self.look),
             resolution: over.resolution.or(self.resolution),
             // Follows whichever resolution won.
             original_resolution: if over.resolution.is_some() {
@@ -676,6 +701,25 @@ mod tests {
     }
 
     #[test]
+    fn the_look_reads_from_the_file_and_the_flag() {
+        let (s, warnings) = Settings::parse_file("look = steam_deck\n");
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(s.look, Some("steam_deck"));
+        assert_eq!(
+            args(&["--look", "original"]).unwrap().look,
+            Some("original")
+        );
+        assert_eq!(
+            args(&["--look", "modern"]).unwrap_err(),
+            "--look needs original, enhanced or steam_deck, not modern"
+        );
+        // A flag's look wins over the file's when merged.
+        let file = Settings::parse_file("look = original\n").0;
+        let run = file.merged(args(&["--look", "enhanced"]).unwrap());
+        assert_eq!(run.look, Some("enhanced"));
+    }
+
+    #[test]
     fn unknown_keys_are_reported_and_kept() {
         let (_, warnings) = Settings::parse_file("future = 1\nvsync = on\n");
         assert_eq!(warnings.len(), 1);
@@ -708,6 +752,7 @@ mod tests {
         ("game", r"C:\G"),
         ("saves", r"D:\Saves"),
         ("runtime", r"E:\Rt"),
+        ("look", "steam_deck"),
         ("resolution", "3840x2160"),
         ("display_mode", "borderless"),
         ("vsync", "off"),
@@ -727,6 +772,7 @@ mod tests {
         assert_eq!(s.game, Some(PathBuf::from(r"C:\G")));
         assert_eq!(s.saves, Some(PathBuf::from(r"D:\Saves")));
         assert_eq!(s.runtime, Some(PathBuf::from(r"E:\Rt")));
+        assert_eq!(s.look, Some("steam_deck"));
         assert_eq!(s.resolution, Some((3840, 2160)));
         assert_eq!(s.display_mode, Some(DisplayMode::Borderless));
         assert_eq!(s.vsync, Some(false));

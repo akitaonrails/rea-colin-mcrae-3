@@ -101,9 +101,10 @@ pub struct State {
 
 impl State {
     /// The window over a settings file's text (the template on a first
-    /// run, which picks the recommended look).
+    /// run, which picks the recommended look). A `look =` line shows as
+    /// that look, and the window saves its values.
     pub fn new(text: &str, linux: bool, screen: Option<(u32, u32)>, pads: usize) -> State {
-        let settings = Settings::parse_file(text).0;
+        let settings = form::with_look(Settings::parse_file(text).0, Settings::default(), screen);
         let form = if Form::is_first_run(&settings) {
             Form::first_run(&settings, screen)
         } else {
@@ -288,7 +289,10 @@ fn play_tab(ui: &mut egui::Ui, state: &mut State, pick: Pick<'_>) {
     ui.add(egui::Label::new(egui::RichText::new(note).font(body(13.0)).color(color)).wrap());
     ui.add_space(10.0);
 
-    widgets::heading(ui, "Look");
+    // The look cards are the `look` option's control (`--look`).
+    let looks = config::option("look");
+    mark_rendered(ui.ctx(), looks.key);
+    widgets::heading(ui, looks.label);
     ui.add_space(6.0);
     let enhanced_note = match Picture::enhanced(state.screen).resolution {
         Some((w, h)) => format!("{w}×{h}, widescreen, HD menus."),
@@ -718,6 +722,22 @@ mod tests {
             testing::description(&chip).as_deref(),
             Some("Needs Vulkan (DXVK) on")
         );
+    }
+
+    /// `look = steam_deck` in launcher.cfg (or a script's `--look`
+    /// saved there): the window opens on that card, and saving writes
+    /// the look's values in place of the line.
+    #[test]
+    fn a_look_named_in_the_file_opens_on_its_card() {
+        let ui = open("look = steam_deck\n", false);
+        assert_eq!(ui.state().state.form.look, Look::SteamDeck);
+        assert!(testing::checked(
+            &ui.get_by_role_and_label(Role::RadioButton, "Steam Deck")
+        ));
+        let text = ui.state().state.form.save("look = steam_deck\n");
+        assert!(!text.lines().any(|l| l.starts_with("look")), "{text}");
+        let s = saved(&ui);
+        assert_eq!((s.resolution, s.hd_ui), (Some((1280, 800)), Some(true)));
     }
 
     #[test]

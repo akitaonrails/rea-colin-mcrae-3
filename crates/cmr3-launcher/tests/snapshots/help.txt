@@ -5,6 +5,7 @@ CMR3Launcher [options]
   --game <folder>                                Game folder
   --saves <folder>                               Profile folder
   --runtime <folder>                             Runtime folder
+  --look original|enhanced|steam_deck            Look
   --resolution <WxH>                             Resolution
   --display-mode fullscreen|windowed|borderless  Display mode
   --vsync on|off                                 VSync

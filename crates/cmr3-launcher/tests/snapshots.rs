@@ -10,7 +10,7 @@
 //! `REA_UPDATE_SNAPSHOTS=1`), then read the diff.
 
 use cmr3_launcher::config::{self, Settings};
-use cmr3_launcher::form::{Form, Look};
+use cmr3_launcher::form::{self, Form, Look};
 use cmr3_launcher::plan::{self, Env};
 
 /// Compares with `tests/snapshots/NAME` through the SDK helper: the crate
@@ -105,6 +105,33 @@ fn looks() {
             )],
         ),
     );
+}
+
+/// `--look` end to end: a `--no-window` run with the flag (as
+/// `cmr3-play --play --look steam_deck` starts it) plays what the window
+/// saves for that look, over a file the player customised.
+#[test]
+fn the_look_flag_plays_what_the_window_saves() {
+    let file = Settings::parse_file(
+        "resolution = 1600x900\ndisplay_mode = windowed\nvsync = off\nanisotropic = 2\n\
+         fsaa = on\nfov = 110\nhd_ui = off\nshadows = soft\n",
+    )
+    .0;
+    for (key, chosen, screen) in [
+        ("original", Look::Original, SCREEN),
+        ("enhanced", Look::Enhanced, SCREEN),
+        ("steam_deck", Look::SteamDeck, DECK),
+    ] {
+        let (cli, _) = Settings::parse_args(["--look", key].map(String::from)).unwrap();
+        let run = form::with_look(file.clone(), cli, screen);
+        for env in [windows(screen), wine(screen, true), wine(screen, false)] {
+            assert_eq!(
+                plan::plan(&run, &env).describe(GAME_INI.as_bytes()),
+                plan::plan(&look(chosen, screen), &env).describe(GAME_INI.as_bytes()),
+                "--look {key}"
+            );
+        }
+    }
 }
 
 #[test]
