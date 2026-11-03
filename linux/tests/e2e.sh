@@ -2,7 +2,11 @@
 # End-to-end check on the dev box: boots the game through cmr3-play and
 # verifies the machine-checkable parts of docs/RELEASE-CHECKLIST.md.
 #
-#   sh linux/tests/e2e.sh
+#   CMR3_E2E=1 sh linux/tests/e2e.sh
+#
+# It runs the real game, so it does nothing unless CMR3_E2E=1 asks for it
+# (a loop over linux/tests/*.sh skips it). gamescope runs headless
+# (--backend headless, no window on the desktop) unless CMR3_E2E_VISIBLE=1.
 #
 # Needs the gaming distrobox, the test kit (launcher + thirdparty/ +
 # launcher.cfg) and a game — set:
@@ -13,9 +17,14 @@
 #   CMR3_E2E_PLAYLOG  the helper's play.log   (default: ~/.config/cmr3-launcher)
 #   CMR3_E2E_BOX      gamescope+wine wrapper  (default: distrobox enter gaming --)
 #   CMR3_E2E_ALIVE_AT seconds to wait first   (default 90)
+#   CMR3_E2E_VISIBLE  1: gamescope opens a window on the desktop
 # Nothing here presses pad buttons or listens to music: those lines of the
 # checklist stay human.
 set -u
+if [ "${CMR3_E2E:-}" != 1 ]; then
+  echo "skipped: real-game test; set CMR3_E2E=1 to run it (headless by default)"
+  return 0 2>/dev/null || exit 0
+fi
 HERE=$(dirname "$(readlink -f "$0")")
 KIT=${CMR3_E2E_KIT:-}
 if [ -z "$KIT" ] && [ -f "$HERE/.e2e-kit" ]; then KIT=$(cat "$HERE/.e2e-kit"); fi
@@ -44,7 +53,27 @@ $BOX sh -c "CMR3_PREFIX='$PREFIX' '$PLAY' stop" >/dev/null 2>&1
 sleep 2
 
 BOXLOG=$(mktemp)
-$BOX sh -c "CMR3_PREFIX='$PREFIX' CMR3_LAUNCHER='$KIT/CMR3Launcher.exe' '$PLAY' --play" \
+# Headless: a `gamescope` first in PATH that adds --backend headless to the
+# real one (the play library's own seam is for its shell tests only).
+WRAP=""
+if [ "${CMR3_E2E_VISIBLE:-}" != 1 ]; then
+  WRAP=$(mktemp -d)
+  cat > "$WRAP/gamescope" <<'WRAPPER'
+#!/bin/sh
+# The first gamescope in PATH that isn't this wrapper, headless.
+self=$(readlink -f "$0")
+IFS=:
+for dir in $PATH; do
+  [ -x "$dir/gamescope" ] && [ "$(readlink -f "$dir/gamescope")" != "$self" ] &&
+    exec "$dir/gamescope" --backend headless "$@"
+done
+echo "gamescope not found" >&2
+exit 127
+WRAPPER
+  chmod +x "$WRAP/gamescope"
+  echo "gamescope: headless (CMR3_E2E_VISIBLE=1 shows a window)"
+fi
+$BOX sh -c "${WRAP:+PATH='$WRAP':\$PATH }CMR3_PREFIX='$PREFIX' CMR3_LAUNCHER='$KIT/CMR3Launcher.exe' '$PLAY' --play" \
   > "$BOXLOG" 2>&1 &
 
 # Wait for the game (a fresh prefix boots Wine first; that can take a
@@ -131,4 +160,5 @@ else
 fi
 
 rm -f "$BOXLOG"
+[ -n "$WRAP" ] && rm -rf "$WRAP"
 [ "$fails" = 0 ] && echo "all passed" || { echo "$fails failed"; exit 1; }

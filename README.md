@@ -336,7 +336,7 @@ cargo fmt --all --check
 cargo test --workspace --locked                 # host tests, the settings window headless
 cargo clippy --release --target i686-pc-windows-gnu --workspace --all-targets -- -D warnings
 cargo deny check
-for t in linux/tests/*.sh packaging/tests/*.sh; do sh "$t"; done   # e2e.sh needs a game; skipped by default
+for t in linux/tests/*.sh packaging/tests/*.sh; do sh "$t"; done   # e2e.sh runs the game only with CMR3_E2E=1
 sh <sdk>/scripts/sdk-sync --check .             # sdk/ matches the pinned SDK tag
 cargo build --release --locked --target i686-pc-windows-gnu
 sdk/scripts/wine-test --locked --workspace      # Windows-target tests under Wine, headless

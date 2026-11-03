@@ -91,6 +91,20 @@ nor stops a `Rally_3PC.exe` started some other way.
 | `CMR3_WAIT` | Set: wait for the game to end (the AppImage sets it) |
 | `CMR3_VKBASALT` | A folder with `libvkbasalt.so`, for post-processing |
 
+## Tests
+
+`sh linux/tests/<name>.sh` runs each one with fakes: nothing starts Wine,
+gamescope or the game. The exception is `e2e.sh`, the real-game check on
+a development box, which only runs when asked:
+
+```sh
+CMR3_E2E=1 CMR3_E2E_KIT=/path/to/kit sh linux/tests/e2e.sh
+```
+
+It boots the game through `cmr3-play` with gamescope headless (no window
+on the desktop); `CMR3_E2E_VISIBLE=1` shows the window. Without
+`CMR3_E2E=1` it prints "skipped" and exits 0.
+
 ## Where things are
 
 | What | Where |

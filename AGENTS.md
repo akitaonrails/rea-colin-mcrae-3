@@ -47,6 +47,14 @@ in the `gaming` distrobox: run the release build and `sdk/scripts/wine-test
 /absolute/path && …'`. Examples take the game folder from `CMR3_GAME`,
 never a developer's path.
 
+`linux/tests/e2e.sh` is the real-game test: it boots the owner's game
+through `cmr3-play`, so it only runs with `CMR3_E2E=1` (otherwise it says
+"skipped" and exits 0; `linux/tests/e2e-gate.sh` tests that). Run it only
+when the task asks for a real-game check:
+`CMR3_E2E=1 CMR3_E2E_KIT=/path/to/kit sh linux/tests/e2e.sh`. gamescope
+runs headless (`--backend headless`); `CMR3_E2E_VISIBLE=1` opens a window
+on the desktop, so say so first.
+
 ## Colin McRae Rally 3: what is specific to this game
 
 - **Editions:** the publisher's DRM-free 1.1 builds are known by SHA-256
