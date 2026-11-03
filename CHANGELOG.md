@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.3.0] - 2026-11-03
+
 ### Added
 
 - A `--look` flag and a `look` setting in `launcher.cfg`: `original`,
