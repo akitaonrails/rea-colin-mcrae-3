@@ -177,27 +177,23 @@ mod app {
         let other_options = given > switches.len() || check_only;
         // One launcher at a time, held until the game this run starts has
         // ended: a second start raises the window or says the game runs
-        // (`instance`). --check only reads and runs alongside.
-        let mut held = if check_only {
-            None
-        } else {
-            match win32_instance::single(instance::NAME) {
-                Ok(guard) => Some(guard),
-                Err(running) => {
-                    // A plain start brings the open window forward;
-                    // otherwise the game (or a run without a window) is
-                    // in progress: say so and exit 5.
-                    let second = running.second_start(false, Window::Own(TITLE));
-                    log_line(second.log_line());
-                    // A play-time message: the player started a second
-                    // copy and must see why nothing happened.
-                    if let Some(message) = second.message(instance::GAME) {
-                        fatal(&message);
-                    }
-                    return Ok(
-                        instance::second_start_exit(second.exit_code(), settings_only) as u32,
-                    );
+        // (`instance`). `--check` takes it like any action.
+        let mut held = match win32_instance::single(instance::NAME) {
+            Ok(guard) => Some(guard),
+            Err(running) => {
+                // A plain start brings the open window forward; an action
+                // (`--check`) with the window open, or any start while the
+                // game (or a run without a window) is in progress, says
+                // so and exits 5.
+                let action = instance::is_action(&switches);
+                let second = running.second_start(action, Window::Own(TITLE));
+                log_line(second.log_line());
+                // A play-time message: the player started a second copy
+                // and must see why nothing happened.
+                if let Some(message) = second.message(instance::GAME) {
+                    fatal(&message);
                 }
+                return Ok(instance::second_start_exit(second.exit_code(), settings_only) as u32);
             }
         };
         if settings_only || (!other_options && !no_window) {

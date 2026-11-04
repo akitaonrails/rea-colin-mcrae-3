@@ -9,8 +9,10 @@
 //! finds a window of this launcher's own exe. Before Play the launcher
 //! also refuses while the runtime's game still runs (`process::find_running`):
 //! a launcher killed mid-game released the instance, its game did not.
-//! `--help` and `--check` only read, and run alongside. On Linux,
-//! `cmr3-play`'s session lock does the same job.
+//! `--check` takes the instance like any action (SDK STANDARDS, "Action
+//! flags and one instance"): with the window open it says to use the
+//! window and exits 5; `--help` runs alongside. On Linux, `cmr3-play`'s
+//! session lock does the same job.
 
 /// The instance name (`Local\rea-launcher-rea-colin-mcrae-3`).
 pub const NAME: &str = "rea-colin-mcrae-3";
@@ -28,6 +30,15 @@ pub const GAME_WINDOW_TITLE: &str = "Colin McRae Rally 3";
 /// The game's name in the SDK's second-start messages
 /// (`instance::SecondStart::message`).
 pub const GAME: &str = "Colin McRae Rally 3";
+
+/// Whether a run does work without the window (`--check`; the SDK's
+/// `instance::is_action`): the second start's `action`. `switches` are the
+/// parsed ones (`Settings::parse_args`), so `--game --check`, a folder
+/// called `--check`, is no action. This launcher has no actions of its own.
+#[cfg(any(windows, test))]
+pub fn is_action(switches: &[String]) -> bool {
+    rea_launcher_win32::instance::is_action(switches, &[])
+}
 
 /// The exit code of a second start (`SecondStart::exit_code`: 0 when the
 /// open window came forward, else 5). Under `--settings` cmr3-play reads
@@ -70,6 +81,47 @@ mod tests {
                  Quit the game first, then start the launcher again."
             )
         );
+    }
+
+    /// Windows 10 test (rea-launcher-sdk#1): `--check` with the window
+    /// open ran the check anyway. It is an action now: refused with the
+    /// family's message and exit 5, the window left where it is.
+    #[test]
+    fn check_with_the_window_open_is_refused_with_exit_5() {
+        use crate::config::Settings;
+        use rea_launcher_win32::instance::{ALREADY_RUNNING, SecondStart};
+        let switches = |args: &[&str]| {
+            Settings::parse_args(args.iter().map(|a| a.to_string()))
+                .unwrap()
+                .1
+        };
+        let check = is_action(&switches(&["--check"]));
+        assert!(check);
+        let second = SecondStart::decide(check, || true, || panic!("an action never raises"));
+        assert_eq!(second, SecondStart::WindowOpen);
+        assert_eq!(
+            second_start_exit(second.exit_code(), false),
+            ALREADY_RUNNING
+        );
+        assert_eq!(
+            second.message(GAME).as_deref(),
+            Some(
+                "The Colin McRae Rally 3 launcher window is open. Use it there, \
+                 or close it and try again."
+            )
+        );
+        // While the game runs (no window): the game is running, exit 5.
+        let second = SecondStart::decide(check, || false, || panic!("an action never raises"));
+        assert_eq!(second, SecondStart::Busy);
+        assert_eq!(second.exit_code(), ALREADY_RUNNING);
+        // A plain start, a play run and a folder called `--check` are no
+        // action: the open window comes forward.
+        for args in [&[][..], &["--no-window"], &["--game", "--check"]] {
+            let action = is_action(&switches(args));
+            assert!(!action, "{args:?}");
+            let second = SecondStart::decide(action, || unreachable!(), || true);
+            assert_eq!(second, SecondStart::Focused, "{args:?}");
+        }
     }
 
     /// Under Wine (`sdk/scripts/wine-test`): while one launcher holds the

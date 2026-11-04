@@ -75,3 +75,16 @@ fn a_bad_command_line_prints_the_usage_and_exits_2() {
         );
     }
 }
+
+/// `--check` takes the instance like any action (Windows 10 test,
+/// rea-launcher-sdk#1: it ran alongside an open launcher). With another
+/// launcher holding it and no window to find (headless), it is refused
+/// with exit 5 instead of checking.
+#[test]
+fn check_while_another_launcher_runs_exits_5() {
+    use rea_launcher_win32::instance::{self, ALREADY_RUNNING};
+    let held = instance::single(cmr3_launcher::instance::NAME).expect("no launcher runs yet");
+    let (code, text) = launcher("check-held", &["--check", "--linux"]);
+    assert_eq!(code, Some(ALREADY_RUNNING), "{text}");
+    drop(held);
+}
