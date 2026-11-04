@@ -272,7 +272,7 @@ dependencies = [
 
 [[package]]
 name = "cmr3-launcher"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "md-5",
  "rea-launcher",

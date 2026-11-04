@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.3.1] - 2026-11-04
+
 ### Changed
 
 - Updated Xidi, the gamepad bridge, from 4.3.1 to 5.0.0 (#3). Xidi 5
