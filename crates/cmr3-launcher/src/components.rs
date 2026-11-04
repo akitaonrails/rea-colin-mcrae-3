@@ -159,18 +159,6 @@ const EARLIER_XIDI: [&str; 5] = [
     "a7e88ecf8bbf65d48f9511f593a74ad1c99b2a913c864a015a81e5fffceaeed6",
 ];
 
-/// `current` (the bytes this release would recognise as its own), plus
-/// the runtime file's own bytes when they are one of `earlier`.
-fn with_earlier(file: &Path, mut current: Vec<Vec<u8>>, earlier: &[&str]) -> Vec<Vec<u8>> {
-    if let Ok(bytes) = fs::read(file) {
-        let digest = rea_launcher::identify::hex(&rea_launcher::identify::sha256(&bytes));
-        if earlier.contains(&digest.as_str()) {
-            current.push(bytes);
-        }
-    }
-    current
-}
-
 /// Installs Xidi — its `dinput8.dll` wrapper and the `Xidi.32.dll` main
 /// binary the wrapper loads — with the preset's `Xidi.ini` (its logger on
 /// when `log`); the `off` preset takes out what the launcher put in,
@@ -183,17 +171,36 @@ pub fn install_xidi(
     preset: Gamepad,
     log: bool,
 ) -> io::Result<Installed> {
+    install_xidi_over(game, runtime, bundle, preset, log, &EARLIER_XIDI)
+}
+
+/// [`install_xidi`], with the digests of the files earlier releases
+/// installed (`earlier`) given.
+fn install_xidi_over(
+    game: &Path,
+    runtime: &Path,
+    bundle: &Path,
+    preset: Gamepad,
+    log: bool,
+    earlier: &[&str],
+) -> io::Result<Installed> {
     const FILES: [&str; 2] = ["dinput8.dll", "Xidi.32.dll"];
     let from = |name: &str| bundle.join("xidi").join(name);
     let mut ledger = ledger(game, runtime);
     // What counts as ours in the runtime: what this bundle holds, plus a
-    // file an earlier release installed there before the ledger.
-    let known = |name: &str, current: Vec<Vec<u8>>| {
-        with_earlier(&runtime.join(name), current, &EARLIER_XIDI)
-    };
-    let ours = |name: &str| known(name, fs::read(from(name)).into_iter().collect());
-    let inis = known("Xidi.ini", xidi_inis());
+    // file an earlier release installed there before the ledger (the
+    // SDK's `Ledger::known_with_earlier`).
+    let mut known = Vec::new();
+    for name in FILES {
+        let current = fs::read(from(name)).into_iter().collect();
+        known.push(ledger.known_with_earlier(name, current, earlier)?);
+    }
+    let inis = ledger.known_with_earlier("Xidi.ini", xidi_inis(), earlier)?;
     let inis: Vec<&[u8]> = inis.iter().map(Vec::as_slice).collect();
+    let ours = |name: &str| -> Vec<&[u8]> {
+        let i = FILES.iter().position(|f| *f == name).expect("a Xidi file");
+        known[i].iter().map(Vec::as_slice).collect()
+    };
     match xidi::ini(preset, log) {
         Some(ini) => {
             if !FILES.iter().all(|name| from(name).is_file()) {
@@ -206,7 +213,6 @@ pub fn install_xidi(
             for name in FILES {
                 let bytes = fs::read(from(name))?;
                 let ours = ours(name);
-                let ours: Vec<&[u8]> = ours.iter().map(Vec::as_slice).collect();
                 if let Some(refused) = put(&mut ledger, name, &bytes, &ours)? {
                     return Ok(refused);
                 }
@@ -215,9 +221,7 @@ pub fn install_xidi(
         }
         None => {
             for name in FILES {
-                let ours = ours(name);
-                let ours: Vec<&[u8]> = ours.iter().map(Vec::as_slice).collect();
-                ledger.take_out(name, &ours)?;
+                ledger.take_out(name, &ours(name))?;
             }
             ledger.take_out("Xidi.ini", &inis)?;
             Ok(Installed::Done)
@@ -542,21 +546,25 @@ mod tests {
 
     #[test]
     fn an_earlier_releases_file_is_ours_before_the_ledger() {
+        let bundle = bundle_with("earlier-bundle");
+        let game = temp("earlier-game");
         let rt = temp("earlier-rt");
-        let file = rt.join("dinput8.dll");
-        fs::write(&file, b"xidi-4").unwrap();
         let digest = rea_launcher::identify::hex(&rea_launcher::identify::sha256(b"xidi-4"));
-        let current = vec![b"xidi-5".to_vec()];
-        // Listed by digest: its own bytes join the known ones.
-        let known = with_earlier(&file, current.clone(), &[digest.as_str()]);
-        assert_eq!(known, [b"xidi-5".to_vec(), b"xidi-4".to_vec()]);
-        // Anything else stays unknown (a player's own file).
-        fs::write(&file, b"players").unwrap();
-        assert_eq!(
-            with_earlier(&file, current, &[digest.as_str()]),
-            [b"xidi-5".to_vec()]
-        );
-        fs::remove_dir_all(rt).unwrap();
+        // An earlier release's dinput8.dll, from before the ledger: listed
+        // by digest, so it is ours and gets replaced.
+        fs::write(rt.join("dinput8.dll"), b"xidi-4").unwrap();
+        let done = install_xidi_over(&game, &rt, &bundle, Gamepad::Rally, false, &[&digest]);
+        assert_eq!(done.unwrap(), Installed::Done);
+        assert_eq!(fs::read(rt.join("dinput8.dll")).unwrap(), b"xidi");
+        // Anything else stays the player's.
+        let rt2 = temp("earlier-rt-players");
+        fs::write(rt2.join("dinput8.dll"), b"players").unwrap();
+        let refused = install_xidi_over(&game, &rt2, &bundle, Gamepad::Rally, false, &[&digest]);
+        assert_eq!(refused.unwrap(), Installed::NotOurs("dinput8.dll"));
+        assert_eq!(fs::read(rt2.join("dinput8.dll")).unwrap(), b"players");
+        for d in [bundle, game, rt, rt2] {
+            fs::remove_dir_all(d).unwrap();
+        }
     }
 
     #[test]
