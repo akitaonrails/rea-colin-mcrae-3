@@ -10,15 +10,12 @@ use crate::config::Settings;
 
 /// The run `args` ask for (the launcher's arguments, program name
 /// excluded). `--help` and a command line the launcher can't read answer
-/// like a command: the terminal, or a dialog when a person started it and
-/// sees no terminal.
+/// like a command (`Run::bad_command_line`): the terminal, or a dialog
+/// when a person started it and sees no terminal.
 pub fn run(args: &[String]) -> Run {
     match Settings::parse_args(args.iter().cloned()) {
         Ok((_, switches)) => Run::from_args(&switches, &[]),
-        Err(_) => Run {
-            command: true,
-            ..Run::from_args(args, &[])
-        },
+        Err(_) => Run::bad_command_line(args),
     }
 }
 
@@ -110,6 +107,45 @@ mod tests {
             mode(&["--no-such-flag", "--no-window"], false),
             Mode::Command { interactive: false }
         ));
+    }
+
+    /// Windows 10 test (rea-launcher-sdk#1): from PowerShell, an unknown
+    /// flag or a known one with a bad value is printed and never opens a
+    /// modal box that holds a script until OK is pressed.
+    #[test]
+    fn a_bad_command_line_from_a_terminal_is_printed_without_a_dialog() {
+        let terminal = Terminal {
+            attached: true,
+            redirected: false,
+            wine: false,
+        };
+        for args in [&["--bogus-flag"][..], &["--look", "invalid"]] {
+            let mode = mode(args, false);
+            assert_eq!(mode, Mode::Command { interactive: true }, "{args:?}");
+            assert_eq!(
+                route(mode, terminal),
+                Route {
+                    print: true,
+                    dialog: false
+                },
+                "{args:?}"
+            );
+        }
+    }
+
+    /// cmr3-play reads a bad command line's exit code itself: no dialog
+    /// under Wine with `--linux` (also what keeps the headless Wine test
+    /// of the built exe from waiting on a box nobody can answer).
+    #[test]
+    fn a_bad_command_line_with_linux_never_asks_for_a_dialog() {
+        for args in [
+            &["--bogus-flag", "--linux"][..],
+            &["--look", "invalid", "--linux"],
+        ] {
+            let mode = mode(args, true);
+            assert_eq!(mode, Mode::Command { interactive: false }, "{args:?}");
+            assert!(!route(mode, UNDER_HELPER).dialog, "{args:?}");
+        }
     }
 
     #[test]

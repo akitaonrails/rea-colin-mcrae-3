@@ -135,8 +135,6 @@ mod app {
     /// no window could be shown (play with the saved settings).
     const WINDOW_CLOSED: u32 = 3;
     const WINDOW_UNAVAILABLE: u32 = 4;
-    /// A flag the launcher doesn't know, or a value it can't use.
-    const BAD_ARGUMENTS: u32 = 2;
     /// `--check` found a part missing or a build it doesn't know.
     const CHECK_FAILED: u32 = 1;
 
@@ -151,16 +149,20 @@ mod app {
         let settings_path = settings_path();
         let args: Vec<String> = std::env::args().skip(1).collect();
         let given = args.len();
-        let (cli, switches) = match Settings::parse_args(args) {
+        let (cli, switches) = match Settings::parse_args(args.iter().cloned()) {
             Ok(parsed) => parsed,
             Err(ArgError::Help(_)) => {
                 note(&config::usage(), false);
                 return Ok(0);
             }
             Err(e) => {
+                // A flag the launcher doesn't know, or a value it can't
+                // use: answered like a command (the terminal; a dialog
+                // only when nobody sees one), exit 2.
                 log_line(&format!("error: {e}"));
-                fatal(&format!("{e}\n\n{}", config::usage()));
-                return Ok(BAD_ARGUMENTS);
+                let mode = report::audience(report::Run::bad_command_line(&args)).mode();
+                report::fatal(TITLE, &format!("{e}\n\n{}", config::usage()), mode);
+                return Ok(report::BAD_COMMAND_LINE as u32);
             }
         };
         let switch = |name: &str| switches.iter().any(|s| s == name);
