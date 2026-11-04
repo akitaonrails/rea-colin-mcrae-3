@@ -10,6 +10,11 @@
   is set to off. `Xidi.ini` no longer has an `[Import]` section, which
   Xidi 5 would report as a configuration error. Game copies made by any
   earlier release are upgraded in place.
+- `CMR3Launcher.exe --check` while the launcher's window is open no
+  longer runs the check next to it: it says to use the window, or close
+  it and try again, and exits 5, like the other launchers of the family
+  (from the Windows 10 test report, rea-launcher-sdk#1).
+- Updated rea-launcher-sdk to v0.4.2.
 
 ### Fixed
 
@@ -17,6 +22,13 @@
   update to itself (#4). The package now fetches vkBasalt from its
   release's own source archive instead of the matching commit archive.
   Both hold the same files, so the built layers don't change.
+
+### Documentation
+
+- The README says what to do when Windows SmartScreen stops the
+  unsigned launcher ("Windows protected your PC": More info, then Run
+  anyway), and lists every registry entry the launcher writes, in
+  "Where things live" and "Uninstall" (rea-launcher-sdk#1).
 
 ## [0.3.0] - 2026-11-03
 
