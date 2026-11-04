@@ -85,7 +85,10 @@ the Linux helper). Keep `thirdparty/` next to the launcher.
 
 1. Unzip `CMR3Launcher-<version>.zip` anywhere, for example into your
    game folder. Keep its folders next to `CMR3Launcher.exe`.
-2. Run `CMR3Launcher.exe` and follow [First run](#first-run).
+2. Run `CMR3Launcher.exe` and follow [First run](#first-run). The
+   launcher is not signed, so the first start from a downloaded zip may
+   show "Windows protected your PC": choose *More info*, then *Run
+   anyway*.
 
 ### Steam Deck
 
@@ -249,7 +252,8 @@ One launcher runs at a time. Starting it again while its window is open
 brings the window to the front (exit 0). While the game runs, a second
 start says so and exits 5, and so does Play when the game is still
 running from the launcher's private copy (a launcher that was ended while
-playing, say). `--check` runs alongside.
+playing, say). `--check` with the window open says to use the window
+and exits 5 too.
 
 ## Where things live
 
@@ -260,6 +264,9 @@ playing, say). `--check` runs alongside.
 | Your profile (saves) | `%USERPROFILE%\Saved Games\Colin McRae Rally 3` (or your `saves` folder) | in the prefix, `drive_c/users/<you>/Saved Games/Colin McRae Rally 3` |
 | Wine prefix | — | `~/.local/share/cmr3-launcher/prefix` |
 | `cmr3-play`'s logs (`play.log`, `settings.log`) and lock | — | `~/.config/cmr3-launcher` |
+| Graphics preference (registry) | `HKCU\Software\Microsoft\DirectX\UserGpuPreferences`, value named after the copy's `Rally_3PC.exe` (`GpuPreference=2;`, the high-performance GPU) | — |
+| Wine DLL overrides (registry, in the prefix) | — | `HKCU\Software\Wine\AppDefaults\Rally_3PC.exe\DllOverrides` (`dsound`, `dinput8`, `d3d9`), and the launcher's record of the ones it wrote in `HKCU\Software\rea-launcher\DllOverrides\Rally_3PC.exe` |
+| Wine's OpenGL setting (registry, in the prefix) | — | `HKCU\Software\Wine\X11 Driver`, `UseEGL=N` (the settings window draws through GLX) |
 
 A `launcher.cfg` next to `CMR3Launcher.exe` is used instead (a portable
 install). Under Proton everything is inside Steam's prefix for the
@@ -270,7 +277,7 @@ The game reads and writes its profile (`CMR3`) in the launcher's copy. The
 launcher copies it in from your profile folder before the game starts and
 back when it ends, so your progress lives in the profile folder. On
 Windows the launcher also sets the game's graphics preference to the
-high-performance GPU (`HKCU\Software\Microsoft\DirectX\UserGpuPreferences`).
+high-performance GPU (the registry value in the table).
 
 ## Troubleshooting
 
@@ -314,9 +321,15 @@ high-performance GPU (`HKCU\Software\Microsoft\DirectX\UserGpuPreferences`).
 3. Windows: delete `%LOCALAPPDATA%\CMR3Launcher` (settings, log and the
    launcher's ~3 GB copy of the game). The graphics preference in
    `HKCU\Software\Microsoft\DirectX\UserGpuPreferences` names the copy's
-   `Rally_3PC.exe`; you can delete that value too.
+   `Rally_3PC.exe`; you can delete that value too. Nothing else goes in
+   the Windows registry.
 4. Linux: copy your profile out of the prefix, then delete
-   `~/.local/share/cmr3-launcher` and `~/.config/cmr3-launcher`. With
+   `~/.local/share/cmr3-launcher` and `~/.config/cmr3-launcher`. The
+   Wine registry entries (DLL overrides, `UseEGL`) live in the prefix
+   and go with it; with your own Wine prefix, delete
+   `HKCU\Software\Wine\AppDefaults\Rally_3PC.exe`,
+   `HKCU\Software\rea-launcher\DllOverrides\Rally_3PC.exe` and, if
+   nothing else needs it, the `UseEGL` value with `wine regedit`. With
    Proton, removing the shortcut in Steam offers to delete its prefix,
    saves included.
 
