@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.3.2] - 2026-11-05
+
 ### Changed
 
 - `CMR3Launcher.exe` now says what it is: Windows shows its name, version,
