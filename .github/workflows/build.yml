@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   ci:
-    uses: akitaonrails/rea-launcher-sdk/.github/workflows/launcher-ci.yml@v0.4.2
+    uses: akitaonrails/rea-launcher-sdk/.github/workflows/launcher-ci.yml@v0.4.3
     with:
       # The MinGW linker, zip, and the vkBasalt build (both bitnesses).
       apt-i386: true
@@ -49,7 +49,7 @@ jobs:
       contents: write
       id-token: write
       attestations: write
-    uses: akitaonrails/rea-launcher-sdk/.github/workflows/launcher-release.yml@v0.4.2
+    uses: akitaonrails/rea-launcher-sdk/.github/workflows/launcher-release.yml@v0.4.3
     with:
       package: cmr3-launcher
       artifact-pattern: CMR3Launcher-*
