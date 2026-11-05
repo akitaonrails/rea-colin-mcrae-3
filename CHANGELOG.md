@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Changed
+
+- `CMR3Launcher.exe` now says what it is: Windows shows its name, version,
+  publisher and icon (Properties > Details), so antivirus programs are
+  less likely to flag it as an unknown program by mistake.
+- Updated rea-launcher-sdk to v0.4.3.
+
 ## [0.3.1] - 2026-11-04
 
 ### Changed
