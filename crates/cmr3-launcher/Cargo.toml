@@ -19,6 +19,10 @@ rea-launcher.workspace = true
 rea-launcher-win32.workspace = true
 rea-launcher-ui.workspace = true
 
+[build-dependencies]
+# Version information, icon and manifest in CMR3Launcher.exe (build.rs).
+rea-launcher-build.workspace = true
+
 [dev-dependencies]
 # The settings window is tested headless (egui_kittest), on the host and
 # under Wine.
