@@ -25,6 +25,10 @@ thirdparty/patcher/ReadMe-Patcher.txt
 thirdparty/patcher/LICENSE
 thirdparty/xidi/dinput8.dll
 thirdparty/xidi/Xidi.32.dll
+thirdparty/xidi/msvcp140.dll
+thirdparty/xidi/msvcp140_atomic_wait.dll
+thirdparty/xidi/concrt140.dll
+thirdparty/xidi/vcruntime140.dll
 thirdparty/xidi/LICENSE
 thirdparty/xidi/Xidi-LICENSE
 thirdparty/xidi/Xidi-Hookshot-LICENSE

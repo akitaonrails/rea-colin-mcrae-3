@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## [0.3.3] - 2026-11-06
+
+### Fixed
+
+- Windows: bundled the 32-bit Microsoft Visual C++ 2015–2022 runtime DLLs
+  (`msvcp140.dll`, `msvcp140_atomic_wait.dll`, `concrt140.dll` and
+  `vcruntime140.dll`) alongside Xidi, so the game starts out of the box on
+  a clean Windows 10/11 install where the 32-bit Visual C++ Redistributable
+  is not installed.
+- If `Rally_3PC.exe` exits with a fatal Windows status code (`0xC0000000`
+  and above), the launcher now shows a clear error dialog with the status
+  code and log path instead of closing silently.
+
 ## [0.3.2] - 2026-11-05
 
 ### Changed

@@ -25,7 +25,7 @@ jobs:
       # The MinGW linker, zip, and the vkBasalt build (both bitnesses).
       apt-i386: true
       apt-packages: >-
-        gcc-mingw-w64-i686 zip unzip gcc-multilib g++-multilib meson
+        gcc-mingw-w64-i686 zip unzip cabextract gcc-multilib g++-multilib meson
         ninja-build pkg-config glslang-tools spirv-headers libx11-dev
         libx11-dev:i386 libvulkan-dev libvulkan-dev:i386
       # The Windows-target tests (settings window included), headless

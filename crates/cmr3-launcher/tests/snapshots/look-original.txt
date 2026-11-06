@@ -68,8 +68,8 @@ components:
   HD UI overlay: off
   profile controller set to the pad when new: on
 patch sets: DRM-free xdelta (efigs, then polish) only for a protected official 1.1 Rally_3PC.exe
-WINEDLLOVERRIDES: dsound,dinput8,d3d9=n,b;winedbg=d
-app DLL overrides (Rally_3PC.exe, native,builtin): dsound, dinput8, d3d9; removed: none
+WINEDLLOVERRIDES: dsound,dinput8,msvcp140,msvcp140_atomic_wait,concrt140,vcruntime140,d3d9=n,b;winedbg=d
+app DLL overrides (Rally_3PC.exe, native,builtin): dsound, dinput8, msvcp140, msvcp140_atomic_wait, concrt140, vcruntime140, d3d9; removed: none
 game arguments: (none)
 cmr3-play (Linux): scaler linear, postfx off
 ini log: WIDTH=640, HEIGHT=480, DISPLAY_MODE=0

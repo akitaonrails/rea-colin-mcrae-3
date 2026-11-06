@@ -370,7 +370,7 @@ mod app {
             Ok(Installed::Done) => {
                 log_line(&format!("Xidi installed ({gamepad:?})"));
                 if plan.xidi_ini.is_some() {
-                    natives.push("dinput8");
+                    natives.extend_from_slice(&components::XIDI_DLLS);
                 }
                 true
             }
@@ -518,7 +518,14 @@ mod app {
             launch = launch.env("WINEDLLOVERRIDES", o);
         }
         let code = launch.run()?;
-        log_line(&format!("game exited with {code}"));
+        log_line(&format!("game exited with {code} (0x{code:08x})"));
+        if code >= 0xC000_0000 {
+            fatal(&format!(
+                "{EXE} stopped unexpectedly (Windows status 0x{code:08X}).\n\n\
+                 Launcher log: {}",
+                home().join("launcher.log").display()
+            ));
+        }
         if rt_profile.is_file() {
             match mirror.after() {
                 Ok(copied) if !copied.is_empty() => log_line("profile: saved"),

@@ -46,6 +46,18 @@ cp "$WORK/patcher/patcher/xdelta.exe" "$WORK/patcher/patcher/efigs.xdelta" \
    "$WORK/patcher/patcher/polish.xdelta" "$WORK/patcher/ReadMe-Patcher.txt" "$TP/patcher/"
 cp "$WORK/xidi/Xidi-v5.0.0/Win32/dinput8.dll" "$WORK/xidi/Xidi-v5.0.0/Win32/Xidi.32.dll" "$TP/xidi/"
 cp "$WORK/xidi/Xidi-v5.0.0/LICENSE" "$TP/xidi/LICENSE"
+cabextract -q -d "$WORK/vc" "$(fetch vcredist)"
+for cab in "$WORK"/vc/a*; do
+  if cabextract -l "$cab" 2>/dev/null | grep -q 'vcruntime140.dll_x86'; then
+    cabextract -q -d "$WORK/vcdll" -F 'msvcp140.dll_x86' -F 'msvcp140_atomic_wait.dll_x86' \
+      -F 'concrt140.dll_x86' -F 'vcruntime140.dll_x86' "$cab"
+    break
+  fi
+done
+for dll in msvcp140 msvcp140_atomic_wait concrt140 vcruntime140; do
+  [ -f "$WORK/vcdll/$dll.dll_x86" ] || { echo "VC++ runtime: $dll.dll not found" >&2; exit 1; }
+  mv "$WORK/vcdll/$dll.dll_x86" "$TP/xidi/$dll.dll"
+done
 cp "$WORK/dxvk-3.1.1/x32/d3d9.dll" "$TP/dxvk/"
 pin_verify "$TP/dxvk/d3d9.dll" "$(pin_sha dxvk-d3d9-sha256)"
 cp packaging/licenses/DXVK-LICENSE "$TP/dxvk/LICENSE"

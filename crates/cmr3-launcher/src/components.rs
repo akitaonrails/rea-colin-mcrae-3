@@ -52,7 +52,18 @@ pub fn bundle_dir() -> std::path::PathBuf {
 pub const PARTS: [(&str, &[&str], bool); 6] = [
     ("SilentPatch", &["silentpatch/SilentPatchCMR3.asi"], false),
     ("ASI loader", &["silentpatch/dinput8.dll"], false),
-    ("Xidi", &["xidi/dinput8.dll", "xidi/Xidi.32.dll"], false),
+    (
+        "Xidi",
+        &[
+            "xidi/dinput8.dll",
+            "xidi/Xidi.32.dll",
+            "xidi/msvcp140.dll",
+            "xidi/msvcp140_atomic_wait.dll",
+            "xidi/concrt140.dll",
+            "xidi/vcruntime140.dll",
+        ],
+        false,
+    ),
     (
         "DRM-free patcher",
         &["patcher/xdelta.exe", "patcher/efigs.xdelta"],
@@ -184,7 +195,14 @@ fn install_xidi_over(
     log: bool,
     earlier: &[&str],
 ) -> io::Result<Installed> {
-    const FILES: [&str; 2] = ["dinput8.dll", "Xidi.32.dll"];
+    const FILES: [&str; 6] = [
+        "dinput8.dll",
+        "Xidi.32.dll",
+        "msvcp140.dll",
+        "msvcp140_atomic_wait.dll",
+        "concrt140.dll",
+        "vcruntime140.dll",
+    ];
     let from = |name: &str| bundle.join("xidi").join(name);
     let mut ledger = ledger(game, runtime);
     // What counts as ours in the runtime: what this bundle holds, plus a
@@ -247,9 +265,27 @@ pub fn install_dxvk(game: &Path, runtime: &Path, bundle: &Path, on: bool) -> io:
     Ok(put(&mut ledger, "d3d9.dll", bytes, &ours)?.unwrap_or(Installed::Done))
 }
 
+/// The DLLs Xidi installs beside the game that Wine also ships: its
+/// `dinput8` wrapper and the 32-bit VC++ 2015–2022 runtime DLLs it imports.
+pub const XIDI_DLLS: [&str; 5] = [
+    "dinput8",
+    "msvcp140",
+    "msvcp140_atomic_wait",
+    "concrt140",
+    "vcruntime140",
+];
+
 /// The DLLs the launcher puts beside the game that Wine also ships: dsound
-/// (the ASI loader), dinput8 (Xidi), d3d9 (DXVK).
-pub const BUNDLED_DLLS: [&str; 3] = ["dsound", "dinput8", "d3d9"];
+/// (the ASI loader), Xidi (`dinput8` + its VC++ runtime DLLs), d3d9 (DXVK).
+pub const BUNDLED_DLLS: [&str; 7] = [
+    "dsound",
+    "dinput8",
+    "msvcp140",
+    "msvcp140_atomic_wait",
+    "concrt140",
+    "vcruntime140",
+    "d3d9",
+];
 
 /// Wine's per-program DLL overrides for the game (`HKCU\Software\Wine\
 /// AppDefaults\Rally_3PC.exe\DllOverrides`, native then builtin), which
@@ -401,6 +437,10 @@ mod tests {
         fs::write(b.join("silentpatch/dinput8.dll"), b"loader").unwrap();
         fs::write(b.join("xidi/dinput8.dll"), b"xidi").unwrap();
         fs::write(b.join("xidi/Xidi.32.dll"), b"xidi-main").unwrap();
+        fs::write(b.join("xidi/msvcp140.dll"), b"msvcp140").unwrap();
+        fs::write(b.join("xidi/msvcp140_atomic_wait.dll"), b"msvcp140_aw").unwrap();
+        fs::write(b.join("xidi/concrt140.dll"), b"concrt140").unwrap();
+        fs::write(b.join("xidi/vcruntime140.dll"), b"vcruntime140").unwrap();
         fs::write(b.join("patcher/xdelta.exe"), b"xd3").unwrap();
         fs::write(b.join("patcher/efigs.xdelta"), b"e").unwrap();
         fs::write(b.join("patcher/polish.xdelta"), b"p").unwrap();
@@ -627,14 +667,24 @@ mod tests {
     #[test]
     fn app_overrides_cover_every_bundled_dll_once() {
         assert_eq!(
-            app_overrides(&["dsound", "dinput8", "d3d9"]),
-            (vec!["dsound", "dinput8", "d3d9"], vec![])
+            app_overrides(&BUNDLED_DLLS),
+            (BUNDLED_DLLS.to_vec(), vec![])
         );
         // A part not installed (turned off, or the game's own DLL kept)
         // loses the override we wrote for it.
         assert_eq!(
             app_overrides(&["dsound"]),
-            (vec!["dsound"], vec!["dinput8", "d3d9"])
+            (
+                vec!["dsound"],
+                vec![
+                    "dinput8",
+                    "msvcp140",
+                    "msvcp140_atomic_wait",
+                    "concrt140",
+                    "vcruntime140",
+                    "d3d9",
+                ]
+            )
         );
         assert_eq!(app_overrides(&[]), (vec![], BUNDLED_DLLS.to_vec()));
     }
@@ -672,7 +722,7 @@ mod tests {
         let (on, off) = app_overrides(&["dsound"]);
         wine::app_dll_overrides(&exe, &modes(&on)).unwrap();
         let removed = wine::remove_app_dll_overrides(&exe, &modes(&off)).unwrap();
-        assert_eq!(removed, ["dinput8"]);
+        assert_eq!(removed, XIDI_DLLS);
         assert_eq!(read("dsound").as_deref(), Some("native,builtin"));
         assert_eq!(read("dinput8"), None);
         assert_eq!(read("d3d9").as_deref(), Some("builtin"));

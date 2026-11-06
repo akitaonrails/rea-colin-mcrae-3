@@ -70,7 +70,7 @@ pub fn plan(settings: &Settings, env: &Env) -> Plan {
     let dxvk = env.wine && settings.dxvk != Some(false);
     let mut natives = vec!["dsound"];
     if gamepad != Gamepad::Off {
-        natives.push("dinput8");
+        natives.extend_from_slice(&components::XIDI_DLLS);
     }
     if dxvk {
         natives.push("d3d9");
@@ -217,16 +217,29 @@ mod tests {
         assert!(p.dxvk);
         assert_eq!(p.effective_mode, DisplayMode::Borderless);
         assert_eq!(p.resolution, Some((2560, 1440)));
-        assert_eq!(p.wine_overrides.as_deref(), Some("dsound,dinput8,d3d9=n,b"));
+        assert_eq!(
+            p.wine_overrides.as_deref(),
+            Some("dsound,dinput8,msvcp140,msvcp140_atomic_wait,concrt140,vcruntime140,d3d9=n,b")
+        );
         // What Wine's loader reads for a game the launcher starts: the
         // per-program registry key (the environment block is ignored).
-        assert_eq!(p.app_overrides, ["dsound", "dinput8", "d3d9"]);
+        assert_eq!(p.app_overrides, components::BUNDLED_DLLS);
         assert!(p.app_overrides_off.is_empty());
         let p = plan(&settings("dxvk = off\ngamepad = off\n"), &WINE);
         assert_eq!(p.wine_overrides.as_deref(), Some("dsound=n,b"));
         assert_eq!(p.xidi_ini, None);
         assert_eq!(p.app_overrides, ["dsound"]);
-        assert_eq!(p.app_overrides_off, ["dinput8", "d3d9"]);
+        assert_eq!(
+            p.app_overrides_off,
+            [
+                "dinput8",
+                "msvcp140",
+                "msvcp140_atomic_wait",
+                "concrt140",
+                "vcruntime140",
+                "d3d9"
+            ]
+        );
         assert!(!p.choose_controller);
     }
 
@@ -298,7 +311,10 @@ mod tests {
         let (_, p, _) = run(&["--gamepad-log", "on"]);
         assert!(p.xidi_ini.unwrap().contains("Enabled = yes"));
         let (_, p, _) = run(&["--dxvk", "off"]);
-        assert_eq!(p.wine_overrides.as_deref(), Some("dsound,dinput8=n,b"));
+        assert_eq!(
+            p.wine_overrides.as_deref(),
+            Some("dsound,dinput8,msvcp140,msvcp140_atomic_wait,concrt140,vcruntime140=n,b")
+        );
         let (_, p, _) = run(&["--scaler", "pixel", "--postfx", "cinematic"]);
         assert_eq!((p.scaler, p.postfx), (Scaler::Pixel, Postfx::Cinematic));
     }
@@ -312,7 +328,9 @@ mod tests {
         let p = plan(&settings(""), &env);
         assert_eq!(
             p.wine_overrides.as_deref(),
-            Some("dsound,dinput8,d3d9=n,b;winedbg=d")
+            Some(
+                "dsound,dinput8,msvcp140,msvcp140_atomic_wait,concrt140,vcruntime140,d3d9=n,b;winedbg=d"
+            )
         );
     }
 }
