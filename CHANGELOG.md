@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.3.4] - 2026-11-07
+
 ### Changed
 
 - Updated rea-launcher-sdk to v0.4.4: the AppImage's portable Wine is
