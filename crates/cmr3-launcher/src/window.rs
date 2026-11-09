@@ -21,6 +21,7 @@ use crate::config::{self, DisplayMode, Gamepad, Postfx, Scaler, Settings, Shadow
 use crate::edition;
 use crate::form::{self, Form, Look, Picture};
 use crate::look::{self, ERROR, GOLD, INK, MUTED};
+use crate::source;
 use crate::xidi;
 
 pub const TITLE: &str = "Colin McRae Rally 3";
@@ -50,6 +51,11 @@ pub enum Check {
     /// A Rally_3PC.exe the launcher doesn't know: the DRM-free patcher
     /// converts an official 1.1 one; anything else is refused at Play.
     Unknown,
+    /// An installer the launcher knows, unpacked at the first Play: what
+    /// the window says about it (`source::installer_note`).
+    Installer(String),
+    /// A game the launcher unpacked from an installer: the note.
+    Unpacked(String),
     Problem(String),
 }
 
@@ -62,19 +68,26 @@ pub fn check_game(folder: &str) -> Check {
     if !dir.is_dir() {
         return Check::Problem("No such folder. Check the path, or use Browse… to pick it.".into());
     }
-    let Some(exe) = std::fs::read_dir(dir).ok().and_then(|entries| {
-        entries.flatten().map(|e| e.path()).find(|p| {
-            p.file_name()
-                .is_some_and(|n| n.eq_ignore_ascii_case("rally_3pc.exe"))
-        })
-    }) else {
-        return Check::Problem(
-            "There is no Rally_3PC.exe in this folder. Choose the folder the game is installed in."
-                .into(),
-        );
+    let exe = match source::find(dir) {
+        Ok(source::Found::Game(exe)) => exe,
+        Ok(source::Found::Installer(found)) => {
+            return Check::Installer(source::installer_note(&found));
+        }
+        Ok(source::Found::Nothing) => {
+            return Check::Problem(
+                "There is no Rally_3PC.exe in this folder, and no installer the launcher knows. \
+                 Choose the folder the game is installed in, or the folder with its installer."
+                    .into(),
+            );
+        }
+        // An installer it doesn't know, or one with a part missing.
+        Err(e) => return Check::Problem(e),
     };
     match std::fs::read(&exe) {
         Ok(bytes) => match edition::identify(&bytes) {
+            edition::Edition::DrmFree(name) if source::is_unpacked_by_launcher(dir) => {
+                Check::Unpacked(source::unpacked_note(name))
+            }
             edition::Edition::DrmFree(name) => Check::Found(name),
             edition::Edition::NeedsPatching => Check::Unknown,
         },
@@ -123,9 +136,13 @@ impl State {
         }
     }
 
-    /// Play is possible: a game folder with a Rally_3PC.exe.
+    /// Play is possible: a game folder with a Rally_3PC.exe, or with an
+    /// installer the launcher unpacks.
     pub fn ready(&self) -> bool {
-        matches!(self.check, Check::Found(_) | Check::Unknown)
+        matches!(
+            self.check,
+            Check::Found(_) | Check::Unknown | Check::Installer(_) | Check::Unpacked(_)
+        )
     }
 
     /// Checks the game folder again after its text changed.
@@ -216,7 +233,13 @@ fn draw_photo(ui: &mut egui::Ui, rect: Rect, portrait: Option<&TextureHandle>) {
 fn status(ui: &mut egui::Ui, state: &State) {
     let (text, color) = match (&state.error, &state.check) {
         (Some(e), _) => (e.clone(), ERROR),
-        (None, Check::Found(_)) => ("Ready. Press Play or Enter.".to_string(), MUTED),
+        (None, Check::Found(_) | Check::Unpacked(_)) => {
+            ("Ready. Press Play or Enter.".to_string(), MUTED)
+        }
+        (None, Check::Installer(_)) => (
+            "Ready. Play unpacks the game first, once; that takes a few minutes.".to_string(),
+            MUTED,
+        ),
         (None, Check::Unknown) => (
             "Ready. This executable is checked when you press Play.".to_string(),
             MUTED,
@@ -267,12 +290,13 @@ fn play_tab(ui: &mut egui::Ui, state: &mut State, pick: Pick<'_>) {
     mark_rendered(ui.ctx(), game.key);
     widgets::heading(ui, game.label);
     let game_hint = if state.linux {
-        "The folder with your Rally_3PC.exe, e.g. Z:\\home\\you\\Games\\Colin McRae Rally 3"
+        "The folder with your Rally_3PC.exe or the game's installer, e.g. \
+         Z:\\home\\you\\Games\\Colin McRae Rally 3"
     } else {
-        "The folder with your installed Rally_3PC.exe"
+        "The folder with your installed Rally_3PC.exe, or with the game's installer"
     };
     if widgets::folder_field(ui, &mut state.form.game, game.label, game_hint, || {
-        pick("Choose the folder with your Rally_3PC.exe")
+        pick("Choose the folder with your Rally_3PC.exe or the game's installer")
     }) {
         state.error = None;
         state.refresh();
@@ -284,6 +308,7 @@ fn play_tab(ui: &mut egui::Ui, state: &mut State, pick: Pick<'_>) {
         ),
         Check::Found(name) => (format!("Found: {name}"), GOLD),
         Check::Unknown => (edition::UNKNOWN_NOTE.to_string(), GOLD),
+        Check::Installer(note) | Check::Unpacked(note) => (note.clone(), GOLD),
         Check::Problem(p) => (p.clone(), ERROR),
     };
     ui.add(egui::Label::new(egui::RichText::new(note).font(body(13.0)).color(color)).wrap());
@@ -558,7 +583,8 @@ mod tests {
         assert_eq!(
             testing::description(&game).as_deref(),
             Some(
-                "The folder with your Rally_3PC.exe, e.g. Z:\\home\\you\\Games\\Colin McRae Rally 3"
+                "The folder with your Rally_3PC.exe or the game's installer, e.g. \
+                 Z:\\home\\you\\Games\\Colin McRae Rally 3"
             )
         );
         ui.get_by_role_and_label(Role::TextInput, "Profile folder");
@@ -775,5 +801,92 @@ mod tests {
             Check::Problem(_)
         ));
         std::fs::remove_dir_all(temp("José")).unwrap();
+    }
+
+    #[test]
+    fn a_folder_with_an_installer_can_be_played_and_says_so() {
+        let mut ui = open("", false);
+        let note = "Found: the installer of the Magipack repack (v4). Play unpacks it once \
+                    into the launcher's own folder.";
+        // The real repack's digest can't be made here: the note is the
+        // one `source::installer_note` gives (tested there).
+        ui.state_mut().state.check = Check::Installer(note.into());
+        ui.state_mut().state.checked = ui.state().state.form.game.clone();
+        ui.run();
+        ui.get_by_label(note);
+        ui.get_by_role_and_label(Role::Button, "Play").click();
+        ui.run();
+        assert_eq!(ui.state().played, 1);
+    }
+
+    #[test]
+    fn an_unknown_installer_is_refused_with_its_digest() {
+        let dir = temp("unknown-installer");
+        std::fs::write(dir.join("setup.exe"), b"MZ Inno Setup Setup Data (5.5.0)").unwrap();
+        let Check::Problem(text) = check_game(&dir.display().to_string()) else {
+            panic!("an unknown installer is a problem");
+        };
+        assert!(
+            text.contains("left alone") && text.contains("SHA-256"),
+            "{text}"
+        );
+        let mut ui = open("", false);
+        ui.state_mut().state.form.game = dir.display().to_string();
+        ui.run();
+        assert!(!ui.state().state.ready());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_game_the_launcher_unpacked_says_the_installer_is_no_longer_needed() {
+        let dir = temp("unpacked");
+        // The DRM-free executable is the game's own; a known name stands
+        // in for it through the marker check only when it is DRM-free, so
+        // an unknown build still reads as Unknown.
+        std::fs::write(dir.join("Rally_3PC.exe"), b"x").unwrap();
+        std::fs::write(dir.join(".rea-unpacked"), "ab").unwrap();
+        assert_eq!(check_game(&dir.display().to_string()), Check::Unknown);
+        let mut ui = open("", false);
+        let note = source::unpacked_note("DRM-free v1.1");
+        ui.state_mut().state.check = Check::Unpacked(note.clone());
+        ui.state_mut().state.checked = ui.state().state.form.game.clone();
+        ui.run();
+        ui.get_by_label(&note);
+        assert!(ui.state().state.ready());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn an_empty_folder_points_to_the_game_or_its_installer() {
+        let dir = temp("nothing");
+        let Check::Problem(text) = check_game(&dir.display().to_string()) else {
+            panic!("an empty folder is a problem");
+        };
+        assert!(text.contains("installer"), "{text}");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn the_unpack_window_names_the_repack_and_can_be_stopped() {
+        use rea_launcher_ui::unpack::{self, Unpacking};
+        let build = source::INSTALLERS[0].value;
+        let state = Unpacking::new(TITLE, build.name, build.unpacked);
+        let mut ui = testing::harness(&look::PALETTE, &look::METRICS, state, |ui, u| {
+            unpack::draw_unpack(ui, u)
+        });
+        ui.get_by_label("Colin McRae Rally 3");
+        ui.get_by_label(
+            "Unpacking the game from the Magipack repack (v4). This happens once, on the first \
+             start.",
+        );
+        ui.get_by_label(unpack::NOTE);
+        let stop = ui.get_by_role_and_label(Role::Button, unpack::STOP);
+        assert_eq!(
+            testing::description(&stop).as_deref(),
+            Some(unpack::STOP_DESCRIPTION)
+        );
+        stop.click();
+        ui.run();
+        assert!(ui.state().cancel);
     }
 }

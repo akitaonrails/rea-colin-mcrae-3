@@ -4,6 +4,8 @@
 //! ```sh
 //! CMR3_SMOKE_GAME=/path/to/game CMR3_SMOKE_BUNDLE=/path/to/thirdparty \
 //!   cargo test --test smoke -- --ignored --nocapture
+//! CMR3_SMOKE_INSTALLER=/path/to/repack \
+//!   cargo test --test smoke identifies_the_real_installer -- --ignored --nocapture
 //! ```
 
 use std::path::Path;
@@ -31,6 +33,26 @@ fn identifies_the_real_executable() {
     let exe = std::fs::read(game().join("Rally_3PC.exe")).unwrap();
     println!("{:?}", cmr3_launcher::edition::identify(&exe));
     println!("sha256 {}", hex(&sha256(&exe)));
+}
+
+/// The repack's folder (only read): the setup program's SHA-256 and every
+/// part's size match the table.
+#[test]
+#[ignore]
+fn identifies_the_real_installer() {
+    let dir: PathBuf = std::env::var("CMR3_SMOKE_INSTALLER")
+        .expect("CMR3_SMOKE_INSTALLER names the installer folder")
+        .into();
+    match cmr3_launcher::source::find(&dir).unwrap() {
+        cmr3_launcher::source::Found::Installer(found) => {
+            println!(
+                "{} {}",
+                found.build.name,
+                cmr3_launcher::source::sha256_hex(&found)
+            );
+        }
+        other => panic!("not the known installer: {other:?}"),
+    }
 }
 
 #[test]

@@ -289,8 +289,9 @@ pub const OPTIONS: &[OptionSpec] = &[
         "game",
         Kind::Path,
         "Game folder",
-        "The folder with your installed Rally_3PC.exe. It is only read, never changed. \
-         Remembered once given.",
+        "The folder with your installed Rally_3PC.exe, or with the game's installer (the \
+         Magipack repack v4: unpacked once into the launcher's own folder, never run). It is \
+         only read, never changed. Remembered once given.",
     ),
     OptionSpec::new(
         "saves",

@@ -26,7 +26,10 @@ pub mod look;
 pub mod plan;
 pub mod profile;
 pub mod runtime;
+pub mod source;
 pub mod sp;
+#[cfg(windows)]
+pub mod unpack;
 #[cfg(any(windows, test))]
 pub mod window;
 pub mod xidi;

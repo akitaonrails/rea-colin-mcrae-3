@@ -39,9 +39,13 @@ mod app {
     use cmr3_launcher::plan::{self, Env};
     use cmr3_launcher::profile;
     use cmr3_launcher::runtime;
+    use cmr3_launcher::source::{self, Found};
+    use cmr3_launcher::unpack;
     use rea_launcher::cfg::ArgError;
+    use rea_launcher::installer;
     use rea_launcher::log::Log;
     use rea_launcher::{cfg, fsx, paths};
+    use rea_launcher_win32::disk;
     use rea_launcher_win32::gpu::{self, Glx};
     use rea_launcher_win32::instance::{self as win32_instance, SecondStart, Window};
     use rea_launcher_win32::process::{self, Launch};
@@ -127,7 +131,7 @@ mod app {
             return Ok(dir);
         }
         Err(format!(
-            "Tell the launcher where the game is: run it once with\n\n  CMR3Launcher --game <folder with {EXE}>\n\nThe folder is remembered."
+            "Tell the launcher where the game is: run it once with\n\n  CMR3Launcher --game <folder with {EXE}, or with the game's installer>\n\nThe folder is remembered."
         ))
     }
 
@@ -166,6 +170,9 @@ mod app {
             }
         };
         let switch = |name: &str| switches.iter().any(|s| s == name);
+        // A game folder from the command line is remembered as given;
+        // never swapped for the launcher's unpacked copy.
+        let game_from_command_line = cli.game.is_some();
         // The settings window: shown when started without options (a
         // double click), or alone with --settings (Linux: cmr3-play shows
         // it, then starts the game in gamescope). Any other option skips
@@ -266,7 +273,40 @@ mod app {
         if check_only {
             return Ok(check(&settings));
         }
-        let game = find_game(&settings)?;
+        let chosen = find_game(&settings)?;
+        let rt = settings
+            .runtime
+            .clone()
+            .unwrap_or_else(|| home().join("Rally3"));
+        // The folder holds the game, or an installer the launcher unpacks
+        // once into its own folder and plays from (`source`).
+        let game = match source::find(&chosen)? {
+            Found::Game(_) => chosen.clone(),
+            Found::Installer(found) => {
+                paths::check_separate(&chosen, &rt)?;
+                let mut log = |line: &str| log_line(line);
+                let watch = |job: &mut dyn installer::UnpackJob| {
+                    if no_window {
+                        Err("--no-window".to_string())
+                    } else {
+                        ui::show_unpack(&found, job)
+                    }
+                };
+                match unpack::unpack(
+                    &found,
+                    &chosen,
+                    &rt,
+                    &components::components_dir(),
+                    &mut log,
+                    watch,
+                )? {
+                    Some(dest) => dest,
+                    None => return Ok(0),
+                }
+            }
+            Found::Nothing => return Err(source::nothing_here(&chosen)),
+        };
+        let unpacked = game != chosen;
         let exe_path = game.join(EXE);
         let exe_bytes =
             fs::read(&exe_path).map_err(|e| format!("cannot read {}: {e}", exe_path.display()))?;
@@ -285,10 +325,6 @@ mod app {
         ));
         let bundle = components::bundle_dir();
 
-        let rt = settings
-            .runtime
-            .clone()
-            .unwrap_or_else(|| home().join("Rally3"));
         paths::check_separate(&game, &rt)?;
         // A launcher that was killed released the instance, but its game
         // may still run from this runtime copy: never sync under it.
@@ -448,18 +484,41 @@ mod app {
             Err(e) => log_line(&format!("warning: cannot write the settings: {e}")),
         }
 
-        // Remember the game folder; the rest of the file stays as written.
-        if writable && (existing.is_none() || saved.game.as_ref() != Some(&game)) {
+        // Remember the game folder (after an unpack, the unpacked one,
+        // unless --game named the folder); the rest of the file stays as
+        // written.
+        let on_file = existing.as_ref().and(saved.game.as_deref());
+        let mut written = !game_from_command_line && on_file == Some(game.as_path());
+        if writable
+            && let Some(folder) =
+                source::game_to_save(on_file, game_from_command_line, &chosen, &game)
+        {
             let text = rea_launcher::cfg::spec::set_key(
                 file_text,
                 config::option("game"),
-                &game.display().to_string(),
+                &folder.display().to_string(),
             );
-            if let Err(e) = fsx::write_atomic(&settings_path, text) {
-                log_line(&format!(
+            match fsx::write_atomic(&settings_path, text) {
+                Ok(()) => written = folder == game,
+                Err(e) => log_line(&format!(
                     "warning: cannot write {}: {e}",
                     settings_path.display()
-                ));
+                )),
+            }
+        }
+        if unpacked {
+            let setting = if game_from_command_line {
+                source::Setting::CommandLine
+            } else if written {
+                source::Setting::Saved
+            } else {
+                source::Setting::NotSaved
+            };
+            let message = source::unpacked_message(&game, setting);
+            log_line(&message);
+            // Said, not asked: a dialog here would hold the game back.
+            if report::route_here(mode()).print {
+                println!("{TITLE}: {message}");
             }
         }
 
@@ -623,9 +682,52 @@ mod app {
     /// says whether everything needed is there.
     fn check(settings: &Settings) -> u32 {
         let bundle = components::bundle_dir();
-        let game = find_game(settings);
-        let exe = game.as_ref().ok().map(|game| {
-            let path = game.join(EXE);
+        let rt = settings
+            .runtime
+            .clone()
+            .unwrap_or_else(|| home().join("Rally3"));
+        let mut game = find_game(settings);
+        // The folder the executable is read from: the game folder, or the
+        // launcher's unpacked copy of the installer found there. Nothing
+        // is unpacked here.
+        let mut unpack = None;
+        let mut exe_dir = None;
+        if let Ok(chosen) = &game {
+            match source::find(chosen) {
+                Ok(Found::Game(_)) => exe_dir = Some(chosen.clone()),
+                Ok(Found::Installer(found)) => {
+                    let dest = source::unpacked_dir(&rt);
+                    let setup = found
+                        .setup
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .into_owned();
+                    if installer::is_unpacked(&dest, &found) {
+                        unpack = Some(check::Unpack::Done {
+                            setup,
+                            name: found.build.name,
+                            dest: dest.display().to_string(),
+                        });
+                        exe_dir = Some(dest);
+                    } else {
+                        let parent = dest.parent().unwrap_or(&dest);
+                        unpack = Some(check::Unpack::Pending {
+                            setup,
+                            name: found.build.name,
+                            sha256: source::sha256_hex(&found),
+                            dest: dest.display().to_string(),
+                            need: installer::space_needed(found.build),
+                            free: disk::free_space(parent),
+                        });
+                    }
+                }
+                Ok(Found::Nothing) => game = Err(source::nothing_here(chosen)),
+                Err(e) => game = Err(e),
+            }
+        }
+        let exe = exe_dir.map(|dir| {
+            let path = dir.join(EXE);
             let bytes = fs::read(&path).map_err(|e| e.to_string())?;
             let sha = edition::sha256_hex(&bytes);
             let exe = check::Exe::from_edition(edition::identify(&bytes), || {
@@ -642,7 +744,11 @@ mod app {
             Ok((exe, sha))
         });
         let game = game.map(|g| g.display().to_string());
-        let (lines, ok) = check::report(game, exe, &components::present(&bundle));
+        let pending = unpack.as_ref().is_some_and(check::Unpack::pending);
+        let innoextract = components::components_dir().join(components::INNOEXTRACT);
+        let mut parts = components::present(&bundle);
+        parts.push(components::innoextract_part(innoextract.is_file(), pending));
+        let (lines, ok) = check::report(game, unpack.as_ref(), exe, &parts);
         for line in &lines {
             log_line(&format!("check: {line}"));
         }

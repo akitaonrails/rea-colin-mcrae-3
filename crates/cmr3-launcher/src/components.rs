@@ -73,6 +73,31 @@ pub const PARTS: [(&str, &[&str], bool); 6] = [
     ("HD UI", &["hd-ui/"], true),
 ];
 
+/// innoextract's file name in the `components` folder beside the
+/// launcher (the SDK's `rea_launcher_win32::innoextract::EXE`): it
+/// unpacks the game's installer (`source`).
+pub const INNOEXTRACT: &str = "innoextract.exe";
+
+/// The folder beside the launcher with the SDK's tools: innoextract
+/// (`sdk/packaging/innoextract.sh` puts it there, in the zip and the
+/// AppImage alike).
+pub fn components_dir() -> std::path::PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("components")))
+        .unwrap_or_else(|| std::path::PathBuf::from("components"))
+}
+
+/// innoextract as a `--check` part: needed only while an installer waits
+/// to be unpacked.
+pub fn innoextract_part(there: bool, needed: bool) -> crate::check::Part {
+    crate::check::Part {
+        name: "innoextract (unpacks the installer)",
+        there,
+        optional: !needed,
+    }
+}
+
 /// Which bundled parts are present, for `--check` and the log.
 pub fn present(bundle: &Path) -> Vec<crate::check::Part> {
     let there = |rel: &str| match rel.strip_suffix('/') {

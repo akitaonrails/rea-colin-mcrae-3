@@ -16,6 +16,9 @@ use rea_launcher_ui::widgets;
 use rea_launcher_ui::window::WindowFit;
 use rea_launcher_win32::{dialog, display, wine, xinput};
 
+use rea_launcher::installer::{Installer, UnpackJob, UnpackOutcome};
+use rea_launcher_ui::unpack;
+
 /// How the window was left.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Outcome {
@@ -64,6 +67,30 @@ pub fn show(settings_path: &Path, text: &str, linux: bool) -> Result<Outcome, St
     )
     .map_err(|e| e.to_string())?;
     Ok(outcome)
+}
+
+/// The unpack window over `job` (the SDK's, in the settings window's
+/// looks and size): the game's title, which installer, the progress, and
+/// "Stop unpacking". Errors when no window can be made; the caller then
+/// waits without one.
+pub fn show_unpack(found: &Installer, job: &mut dyn UnpackJob) -> Result<UnpackOutcome, String> {
+    let wine = wine::is_wine();
+    let wine_scale = display::wine_dpi_scale();
+    let fit =
+        WindowFit::new(look::SIZE, wine, display::screen_size(), wine_scale).with_native_fit(true);
+    unpack::show(
+        &PALETTE,
+        &look::METRICS,
+        unpack::Window {
+            title: instance::WINDOW_TITLE,
+            fit,
+            hero_jpeg: Some(include_bytes!("../assets/portrait.jpg")),
+            photo_width: look::PHOTO_W,
+        },
+        unpack::Unpacking::new(window::TITLE, found.build.name, found.build.unpacked),
+        job,
+        xinput::buttons,
+    )
 }
 
 struct Window<'a> {
