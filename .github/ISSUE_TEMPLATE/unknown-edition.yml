@@ -1,5 +1,5 @@
 name: Unknown edition
-description: "CMR3Launcher.exe said your Rally_3PC.exe is a build it does not know."
+description: "CMR3Launcher.exe said your Rally_3PC.exe, or your game's installer, is a build it does not know."
 title: "Unknown edition: "
 labels: ["edition"]
 body:
@@ -7,12 +7,18 @@ body:
     attributes:
       value: |
         The launcher only changes builds it has identified by SHA-256, so it refused yours and
-        left it untouched. Tell us about your copy and we will add it. Never attach game files.
+        left it untouched. Tell us about your copy: a build we can verify is added. Some builds
+        need a fix written for that exact file, so we may ask more about your copy first.
+        Never attach or link game files.
   - type: input
     id: sha256
     attributes:
       label: SHA-256
-      description: The 64-character SHA-256 the launcher showed (also in launcher.log).
+      description: >-
+        The SHA-256 the launcher showed (also in launcher.log): 64 characters, digits 0-9 and
+        letters a-f. Or run `sha256sum Rally_3PC.exe` (Linux) or
+        `certutil -hashfile Rally_3PC.exe SHA256` (Windows); for an installer, the same on its
+        setup program.
     validations:
       required: true
   - type: dropdown
@@ -24,15 +30,21 @@ body:
         - GOG
         - Steam
         - Another store
+        - An installer or repack (name it below)
         - Patched by hand (official or community patch)
         - Not sure
     validations:
       required: true
   - type: input
+    id: size
+    attributes:
+      label: File size of Rally_3PC.exe (or the installer's setup program) in bytes
+      description: Properties on Windows, or `stat -c %s Rally_3PC.exe` on Linux.
+  - type: input
     id: details
     attributes:
       label: Version, language and patches
-      description: e.g. "v1.1, English, official 1.1 patch". The file's size in bytes helps too.
+      description: e.g. "v1.1, English, official 1.1 patch", or the installer's file names.
   - type: input
     id: version
     attributes:

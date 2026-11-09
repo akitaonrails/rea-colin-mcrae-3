@@ -19,6 +19,7 @@ longer history (what was tried and why) is in `docs/PLAN.md` and
 | SilentPatch Language Pack / Nicky Grist Pack | other languages and co-drivers | original game content | — | **never bundled** (game content); players add it to their game folder |
 | AuToMaNiAk005's widescreen hex patches | widescreen before SilentPatch | none stated | no | not used (superseded by SilentPatch) |
 | dgVoodoo2 | D3D9 → D3D11 for broken drivers | freeware, no redistribution grant | yes | not used (native d3d9 on Windows, DXVK on Linux) |
+| [innoextract](https://constexpr.org/innoextract/) 1.9 (Daniel Scharrer) | unpacks Inno Setup installers without running them | zlib (links Boost, liblzma, libstdc++) | yes (1.9, 2020; packages still maintained) | **bundle** the official Windows build (`components/`), through the SDK's `sdk/packaging/innoextract.sh`; unpacks the Magipack repack (below) |
 | PCGamingWiki, ProtonDB, WineHQ AppDB 7563 | known issues, Linux reports | — | — | read; our own Linux findings drafted in `docs/CONTRIBUTIONS.md` |
 
 ## Owner decisions
@@ -32,3 +33,36 @@ one is the `drm-exception` line in `.rea-check-waivers`.
 | 2026-11-01 | Bekoha's HD UI ships with the package, fetched and checksummed at build time, never committed | it has no licence text; the owner chose to bundle it for 4K-sharp menus |
 | 2026-11-02 | The SilentPatch project's community xdelta patcher is the approved way to remove the disc protection: it turns an official 1.1 executable into the publisher's own DRM-free 1.1 build. No crack of our own; anything it doesn't convert is refused | Windows 10/11 block SecuROM/SafeDisc and Wine can't run it, so the official 1.1 exe can't start at all |
 | — | SilentPatch's Language Pack is never bundled | original game content from regional releases |
+| 2026-11-09 | The Magipack repack v4 (a third-party build) is a supported game source: the launcher unpacks its installer with innoextract, never runs it, and plays from the unpacked folder | the owner has it, it unpacks to the publisher's DRM-free 1.1 (variant B, already a known build), and installing it by hand meant running a repack's setup program; no DRM is removed by us or by the repack beyond what the publisher's own DRM-free build has |
+
+## The Magipack repack v4's installer (2026-11-09)
+
+A third-party repack the owner chose to support (owner decision above):
+Magipack's "Colin McRae Rally 3" repack v4, an Inno Setup installer in
+four files. Its `Repack Notes.txt` lists patch 1.1, SilentPatch 2.1
+(v4's change), and, from v3 on, SilentPatch's Language Pack and the HD
+UI applied on Windows 7 and newer.
+
+| File | Size (bytes) | SHA-256 |
+|---|---|---|
+| `Colin McRae Rally 3_Repack_v4_Setup.exe` | 649 KB | `0966e300f69b0ea0c564fd6626c4147c2691a3fb8e2393d53a8948370dbd1166` |
+| `…_Setup-1.bin` | 735350784 | size only |
+| `…_Setup-2.bin` | 736000000 | size only |
+| `…_Setup-3.bin` | 330889825 | size only |
+
+The launcher identifies it by the setup program's SHA-256 and the parts'
+exact sizes (`crates/cmr3-launcher/src/source.rs`); innoextract checks
+every file's checksum while it unpacks. Unpacked (`app/`, 3398338055
+bytes), its `Rally_3PC.exe` is the DRM-free v1.1 variant B the launcher
+already knew (`c56344b4…`). The repack adds `dinput8.dll` (the ASI
+loader) and `SilentPatchCMR3.asi`, which the launcher bundles itself:
+both are dropped after the unpack. No two components write the same file
+(`prefer` is empty).
+
+**Verified 2026-11-09:** the launcher's own code path
+(`tests/real_installer.rs`, `unpack::unpack` with the bundled innoextract
+1.9 under Wine, no window) unpacked the owner's copy, read-only, into
+`.work/`; the result was compared with `diff -r` against the owner's
+installed copy (`…/games/Colin-McRae-Rally-3`): identical, byte for byte,
+except the launcher's `.rea-unpacked` marker. Details in
+`docs/RUNTIME_NOTES.md`.

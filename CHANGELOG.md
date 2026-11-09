@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+### Added
+
+- Play from the game's installer: a game folder holding the Magipack
+  repack v4's installer (`Colin McRae Rally 3_Repack_v4_Setup.exe` and
+  its three `.bin` files) is accepted. On the first Play the launcher
+  unpacks it once with the bundled innoextract, without running the
+  installer and only reading its files, into `Rally3-game` next to its
+  copy of the game (about 3.7 GB free needed; a progress window with
+  **Stop unpacking**). The game folder setting then points at the
+  unpacked game and the installer files are no longer needed; a folder
+  given with `--game` is kept as typed. The repack's own SilentPatch and
+  ASI loader are left out in favour of the bundled ones.
+- The settings window and `--check` say what a folder holds: an
+  installer it will unpack (and, in `--check`, where to and how much
+  space it needs and has), a game it unpacked, or an installer it doesn't
+  know, which is left alone and reported with its SHA-256.
+- innoextract 1.9 ships in `components/` of the zip and the AppImage,
+  with its licences in `licenses/innoextract/`.
+
+### Changed
+
+- Updated rea-launcher-sdk to v0.5.0 (the installer support).
+- The unknown-edition form asks about installers and the file size.
+
 ## [0.3.4] - 2026-11-07
 
 ### Changed

@@ -64,6 +64,29 @@ official 1.1 patch.** The folder holds `Rally_3PC.exe` next to `Data`,
   executable by itself. It does not crack anything else, and it can't run
   v1.0.
 
+### Or: the game's installer
+
+You can also point the launcher at a folder with the game's **installer**
+instead of an installed game. One installer is supported: the Magipack
+repack v4 (`Colin McRae Rally 3_Repack_v4_Setup.exe` with its three
+`.bin` files next to it). Unpacked, it is the publisher's DRM-free 1.1.
+
+- The installer is **never run**. On the first Play the launcher unpacks
+  it with the bundled innoextract, once, into a folder of its own
+  (`Rally3-game`, next to its copy of the game), with a progress window
+  and a **Stop unpacking** button. It takes a few minutes.
+- It needs about **3.7 GB free** on the drive of the launcher's folder
+  (`%LOCALAPPDATA%` unless you set `runtime`); `--check` says how much is
+  free.
+- The installer folder is **only read**, never changed.
+- After that the game folder setting points at the unpacked game, and
+  the installer files are no longer needed. (A folder given with `--game`
+  on the command line is kept as you typed it; the log says where the
+  game went.)
+- Another installer, or a repack with a different setup program, is left
+  alone and shown with its SHA-256 and the link below, so it can be
+  added. Installed games still work as before.
+
 The launcher knows each supported `Rally_3PC.exe` by its fingerprint
 (SHA-256). Another version is refused with its code and a link to the
 [unknown version](https://github.com/akitaonrails/rea-colin-mcrae-3/issues/new?template=unknown-edition.yml)
@@ -78,8 +101,10 @@ Download from the
 - **Linux:** `CMR3Launcher-<version>-x86_64.AppImage`
 
 The zip holds `CMR3Launcher.exe`, its `thirdparty/` folder (SilentPatch,
-Xidi, the DRM-free patcher, DXVK and the HD UI) and `linux/` (`cmr3-play`,
-the Linux helper). Keep `thirdparty/` next to the launcher.
+Xidi, the DRM-free patcher, DXVK and the HD UI), `components/`
+(innoextract, which unpacks the game's installer if you choose one) and
+`linux/` (`cmr3-play`, the Linux helper). Keep `thirdparty/` and
+`components/` next to the launcher. The AppImage carries the same.
 
 ### Windows
 
@@ -136,7 +161,8 @@ and more: [linux/README.md](linux/README.md).
 ## First run
 
 1. In the window's **Play** tab, press **Browse…** and choose the folder
-   with `Rally_3PC.exe`. Under Wine your Linux files are on drive `Z:`,
+   with `Rally_3PC.exe` (or the folder with the game's installer, see
+   [What you need](#or-the-games-installer)). Under Wine your Linux files are on drive `Z:`,
    for example `Z:\home\you\Games\Colin McRae Rally 3`. The window says
    what it found.
 2. Pick a look: **Enhanced** suits most screens and is picked the first
@@ -261,6 +287,7 @@ and exits 5 too.
 | --- | --- | --- |
 | Settings (`launcher.cfg`) and log (`launcher.log`) | `%LOCALAPPDATA%\CMR3Launcher\` | in the Wine prefix, `drive_c/users/<you>/AppData/Local/CMR3Launcher/` |
 | The launcher's copy of the game | `%LOCALAPPDATA%\CMR3Launcher\Rally3` (the `runtime` option moves it) | the same folder inside the prefix |
+| The game unpacked from its installer (only when you chose an installer) | `%LOCALAPPDATA%\CMR3Launcher\Rally3-game`, next to the launcher's copy | the same folder inside the prefix |
 | Your profile (saves) | `%USERPROFILE%\Saved Games\Colin McRae Rally 3` (or your `saves` folder) | in the prefix, `drive_c/users/<you>/Saved Games/Colin McRae Rally 3` |
 | Wine prefix | — | `~/.local/share/cmr3-launcher/prefix` |
 | `cmr3-play`'s logs (`play.log`, `settings.log`) and lock | — | `~/.config/cmr3-launcher` |
@@ -288,6 +315,16 @@ high-performance GPU (the registry value in the table).
   anyway, open the
   [unknown version](https://github.com/akitaonrails/rea-colin-mcrae-3/issues/new?template=unknown-edition.yml)
   form with the code the message shows and where your copy comes from.
+- **"… is an installer this launcher doesn't know"**: the folder holds an
+  Inno Setup installer other than the supported repack. It was left alone;
+  install the game the usual way and choose the installed folder, or
+  report the SHA-256 the message shows with the
+  [unknown version](https://github.com/akitaonrails/rea-colin-mcrae-3/issues/new?template=unknown-edition.yml)
+  form.
+- **"… is missing" / "has N bytes instead of M"**: one of the installer's
+  `.bin` files is missing or incomplete. Copy or download it again.
+- **Unpacking needs more free space**: free some, or move the launcher's
+  copy with the `runtime` option; the unpacked game goes next to it.
 - **The game crawls at 4K under Wine**: DXVK is off. Turn it on in the
   settings window (Linux), or check that `thirdparty/dxvk/d3d9.dll` is
   next to the launcher.
@@ -318,8 +355,9 @@ high-performance GPU (the registry value in the table).
    inside the Wine prefix (see [Where things live](#where-things-live)),
    so deleting the prefix in step 4 deletes it too.
 2. Delete the folder you unzipped the launcher into (or the AppImage).
-3. Windows: delete `%LOCALAPPDATA%\CMR3Launcher` (settings, log and the
-   launcher's ~3 GB copy of the game). The graphics preference in
+3. Windows: delete `%LOCALAPPDATA%\CMR3Launcher` (settings, log, the
+   launcher's ~3 GB copy of the game and, if you played from an
+   installer, the ~3.4 GB unpacked game). The graphics preference in
    `HKCU\Software\Microsoft\DirectX\UserGpuPreferences` names the copy's
    `Rally_3PC.exe`; you can delete that value too. Nothing else goes in
    the Windows registry.
@@ -385,14 +423,17 @@ notes: [docs/PLAN.md](docs/PLAN.md); community fixes and decisions:
 
 When you press **Play**, the launcher:
 
-1. checks `Rally_3PC.exe` against the builds it knows;
-2. brings its private copy of the game up to date with your folder
+1. if the folder holds the supported installer instead of a game,
+   unpacks it once with innoextract (never running it) into its own
+   folder and plays from there;
+2. checks `Rally_3PC.exe` against the builds it knows;
+3. brings its private copy of the game up to date with your folder
    (hard links where it can);
-3. turns an official 1.1 executable in that copy into the DRM-free one;
-4. installs SilentPatch, Xidi, the HD UI and, under Wine, DXVK into the
+4. turns an official 1.1 executable in that copy into the DRM-free one;
+5. installs SilentPatch, Xidi, the HD UI and, under Wine, DXVK into the
    copy, and writes the settings it owns into `SilentPatchCMR3.ini`;
-5. copies your profile in, starts the game and waits for it;
-6. copies your profile back to your profile folder.
+6. copies your profile in, starts the game and waits for it;
+7. copies your profile back to your profile folder.
 
 ## Built on rea-launcher-sdk
 

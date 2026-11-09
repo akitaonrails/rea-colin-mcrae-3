@@ -530,3 +530,36 @@ throwaway prefix under `.work/`, and the owner's game folder (read-only).
   what the bindings depend on.
 - vkBasalt from its release archive: the same 124 source files as commit
   4f97f09; built both bitnesses in `package.sh`.
+
+## 2026-11-09 — the Magipack repack's installer, unpacked under Wine (gaming box, headless)
+
+SDK v0.5.0's installer support, on the owner's real repack (read-only at
+`…/games/Colin-McRae-Rally-3_Win_EN-FR-DE-IT-ES-PL-CS_Repack/`).
+
+- `cargo test --test smoke identifies_the_real_installer -- --ignored`
+  (host): the folder is the Magipack repack (v4), SHA-256 `0966e300…`,
+  every part at its size.
+- `sdk/scripts/wine-test --test real_installer` with
+  `CMR3_REAL_INSTALLER`, `CMR3_REAL_RUNTIME` (under `.work/installer/`)
+  and `CMR3_REAL_COMPONENTS` (innoextract 1.9 from the pin): the launcher's
+  `unpack::unpack`, no window, unpacked the repack into
+  `.work/installer/home/Rally3-game` and found the DRM-free v1.1 variant
+  B there; the dropped `dinput8.dll` and `SilentPatchCMR3.asi` were gone;
+  a second call reused the folder without running innoextract. The whole
+  test took 84 s (Wine 11.21, NVMe).
+- `diff -rq` of the result against the owner's installed copy: only
+  `.rea-unpacked` differs (the marker). 3395831367 bytes on disk.
+- The built `CMR3Launcher.exe --check --linux` under Wine:
+  - `--game <repack> --runtime …/home/Rally3`: "Already unpacked into
+    …\Rally3-game; Play uses that. The installer files are no longer
+    needed.", then the executable as DRM-free v1.1 variant B.
+  - `--game <repack>` with a runtime that has no unpacked game: "Play
+    unpacks it once into …\Rally3-game, then plays from there; the
+    installer is never run and its files are only read." and "Free space:
+    3.7 GB needed, 1277.0 GB free."; nothing was created.
+  - `--game …\Rally3-game`: the game, as an installed one.
+  - (Xidi read "missing" in these runs only because the `thirdparty/` used
+    was the v0.1.0 package's, without Xidi 5's files.)
+- The installer folder's files kept their dates and sizes.
+- **Pending:** the first-Play unpack with the progress window on Windows
+  and in the AppImage, then a race from the unpacked game.
