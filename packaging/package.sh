@@ -8,7 +8,10 @@
 # are fetched from packaging/third-party.txt and checked by SHA-256 (the
 # SDK's sdk/packaging/pins.sh: the first url that matches wins, later urls
 # are our mirror), then unpacked into thirdparty/. vkBasalt is built from
-# its pinned source (packaging/build-vkbasalt.sh). The result is
+# its pinned source (packaging/build-vkbasalt.sh). innoextract (the SDK's
+# sdk/packaging/innoextract.sh), which unpacks the game's installer, goes
+# to components/ with its licences in licenses/innoextract/, in the zip
+# and the AppImage alike. The result is
 # <out-dir>/CMR3Launcher-<version-name>/ and .zip, and
 # <out-dir>/CMR3Launcher-<version-name>-x86_64.AppImage.
 set -eu
@@ -24,6 +27,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 cd "$ROOT"
 
 . sdk/packaging/pins.sh
+. sdk/packaging/innoextract.sh
 PIN_FILE=packaging/third-party.txt
 PIN_DIR=
 PIN_CACHE=$CACHE/pins
@@ -80,6 +84,9 @@ cp "$RELEASE/CMR3Launcher.exe" README.md CHANGELOG.md THIRD_PARTY.md LICENSE-MIT
 # The settings window's fonts (Barlow, SIL OFL), compiled into the exe.
 mkdir -p "$PKG/licenses"
 cp packaging/licenses/Barlow-OFL.txt "$PKG/licenses/Barlow-OFL.txt"
+# innoextract 1.9: unpacks the game's installer when a player points the
+# launcher at one (components/innoextract.exe, licenses/innoextract/).
+innoextract_bundle "$PKG" "$WORK" || exit 1
 cp -r docs/images "$PKG/docs/images"
 cp docs/ENHANCEMENTS.md "$PKG/docs/"
 cp -r "$TP" "$PKG/thirdparty"
@@ -95,5 +102,6 @@ echo "built $OUT/$NAME.zip"
 sdk/packaging/appimage-wine.sh --app cmr3 --exe CMR3Launcher.exe \
   --icon packaging/appimage/cmr3-launcher.png \
   --desktop packaging/appimage/cmr3-launcher.desktop \
-  --payload thirdparty --env-path CMR3_THIRDPARTY=thirdparty \
+  --payload thirdparty --payload components --payload licenses \
+  --env-path CMR3_THIRDPARTY=thirdparty \
   --cache "$CACHE/appimage" --name "$NAME" "$PKG" "$OUT"

@@ -47,3 +47,8 @@ hd-ui https://github.com/bekoha/bekoha.github.io/releases/download/cmr3-hdui-1.0
 # since 2023 (GitHub's generated tag archives are not byte-stable). It
 # holds the same files as the tagged commit 4f97f09.
 vkbasalt https://github.com/DadSchoorse/vkBasalt/releases/download/v0.3.2.10/vkBasalt-0.3.2.10.tar.gz eb196ff446fa36ec0ca99c4406d753c1fa210afddeec5e7a76e1c2e74ed605e3 mirror https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/vkBasalt-0.3.2.10.tar.gz
+
+# innoextract 1.9 (zlib; Boost, liblzma, libstdc++ runtime exception):
+# innoextract.exe unpacks the game's installer, and its license/ folder ships.
+innoextract https://github.com/dscharrer/innoextract/releases/download/1.9/innoextract-1.9-windows.zip 6989342c9b026a00a72a38f23b62a8e6a22cc5de69805cf47d68ac2fec993065 https://constexpr.org/innoextract/files/innoextract-1.9-windows.zip mirror https://github.com/akitaonrails/rea-colin-mcrae-3/releases/download/thirdparty/innoextract-1.9-windows.zip
+innoextract-exe - 946bd06d8b3722a791fea4d84f496139eef6faef61640924cb72f5f1998a68e1

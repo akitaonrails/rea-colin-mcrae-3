@@ -41,11 +41,17 @@ PCGamingWiki with no stated redistribution terms, so the README points
 players to it and the launcher does not fetch it — pending an owner
 decision).
 
+## Bundled in `components/` (the launcher's own tools, in the zip and the AppImage)
+
+| Component | Licence | Source |
+| --- | --- | --- |
+| innoextract 1.9 by Daniel Scharrer, the official Windows build (`components/innoextract.exe`): unpacks the game's installer (the Magipack repack v4) when a player points the launcher at one, so the installer itself is never run; it only reads the installer's files. Pinned by the shared rea-launcher-sdk packaging (`sdk/packaging/innoextract.sh`) | zlib; the build links Boost (BSL-1.0), liblzma (public domain) and libstdc++ (GPL-3.0 with the GCC runtime library exception): all four texts ship in `licenses/innoextract/` | https://constexpr.org/innoextract/ , https://github.com/dscharrer/innoextract/releases/tag/1.9 |
+
 ## Bundled in the Linux AppImage (`packaging/appimage`)
 
 | Component | Licence | Source |
 | --- | --- | --- |
-| Wine 11.20 (amd64, WoW64), Kron4ek's build of the unmodified WineHQ sources, pinned by the shared rea-launcher-sdk packaging (`sdk/packaging/appimage/tools.pins`); licence and source notes inside the AppImage under `usr/share/doc/wine` | LGPL-2.1-or-later | https://dl.winehq.org/wine/source/11.x/wine-11.20.tar.xz , build scripts https://github.com/Kron4ek/Wine-Builds |
+| Wine 11.21 (amd64, WoW64), Kron4ek's build of the unmodified WineHQ sources, pinned by the shared rea-launcher-sdk packaging (`sdk/packaging/appimage/tools.pins`); licence and source notes inside the AppImage under `usr/share/doc/wine` | LGPL-2.1-or-later | https://dl.winehq.org/wine/source/11.x/wine-11.21.tar.xz , build scripts https://github.com/Kron4ek/Wine-Builds |
 | AppImage type2 runtime 20251108 (pinned by the shared rea-launcher-sdk packaging, packed by `appimagetool` 1.9.1) | MIT | https://github.com/AppImage/type2-runtime/releases/tag/20251108 |
 | The AppImage icon `packaging/appimage/cmr3-launcher.png` | ours (MIT OR Apache-2.0), set in Barlow (OFL) | this repository |
 

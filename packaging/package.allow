@@ -7,6 +7,9 @@ THIRD_PARTY.md
 LICENSE-MIT
 LICENSE-APACHE
 licenses/Barlow-OFL.txt
+# innoextract 1.9 (sdk/packaging/innoextract.sh): unpacks the game's installer.
+components/innoextract.exe
+licenses/innoextract/*.txt
 docs/ENHANCEMENTS.md
 docs/images/*.jpg
 linux/cmr3-play x
