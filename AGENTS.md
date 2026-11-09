@@ -32,6 +32,7 @@ the tag in `sdk/VERSION`.
 | `crates/cmr3-launcher/src/config.rs` | The option table `config::OPTIONS`: `launcher.cfg`, flags, `--help`, template |
 | `crates/cmr3-launcher/src/plan.rs` | What a launch writes (`SilentPatchCMR3.ini`, `Xidi.ini`, overrides); option tests end to end |
 | `crates/cmr3-launcher/src/form.rs`, `window.rs`, `look.rs`, `ui.rs` | The settings window, its looks, palette and text-size tests, headless window tests (`every_option_has_a_control_in_the_window`) |
+| `crates/cmr3-launcher/src/source.rs`, `unpack.rs` | The known installer (Magipack repack v4), what a folder holds, unpacking it with innoextract (SDK `installer`); `tests/real_installer.rs` runs it on a real repack when the environment names it |
 | `crates/cmr3-launcher/src/runtime.rs`, `profile.rs` | The runtime copy's `Policy`, the `CMR3` profile mirror |
 | `crates/cmr3-launcher/src/components.rs`, `sp.rs`, `xidi.rs` | SilentPatch, Xidi, DXVK, the HD UI and the DRM-free patcher |
 | `crates/cmr3-launcher/src/main.rs` | Windows wiring: window, `launcher.log`, the game's process |
@@ -90,6 +91,11 @@ on the desktop, so say so first.
     which turns an official 1.1 executable into the publisher's own
     DRM-free 1.1 build, is the approved way to remove the disc protection
     (also in `THIRD_PARTY.md`). We never write a crack of our own.
+  - **2026-11-09** — the Magipack repack v4 (a third-party build) is a
+    supported game source: its installer is unpacked with the bundled
+    innoextract, never run, and played from the unpacked folder
+    (`docs/RESEARCH.md`). Its own `dinput8.dll` and
+    `SilentPatchCMR3.asi` are dropped for the bundled ones.
   - SilentPatch's Language Pack (original translations and co-driver
     audio from regional releases) is **not** bundled and never will be;
     players may add it to their game folder themselves.
