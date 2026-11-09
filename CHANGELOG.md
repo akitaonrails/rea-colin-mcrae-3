@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.4.0] - 2026-11-09
+
 ### Added
 
 - Play from the game's installer: a game folder holding the Magipack
