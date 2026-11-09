@@ -709,6 +709,21 @@ mod tests {
                 .and_then(|k| k.string(dll).unwrap())
         };
         assert!(wine::is_wine(), "run under Wine");
+        // Wine reuses process ids: a run that stopped half way left its
+        // values under this name, and the player's d3d9 from it would
+        // read as the player's now. Start clean, and leave nothing.
+        let clean = || {
+            for key in [app_defaults_key(&exe), wine::owned_key(&exe)] {
+                if let Some(k) = Key::open_read(Hive::CurrentUser, &key).unwrap() {
+                    drop(k);
+                    let k = Key::create(Hive::CurrentUser, &key).unwrap();
+                    for dll in BUNDLED_DLLS {
+                        k.delete_value(dll).unwrap();
+                    }
+                }
+            }
+        };
+        clean();
         let (on, _) = app_overrides(&BUNDLED_DLLS);
         wine::app_dll_overrides(&exe, &modes(&on)).unwrap();
         for dll in BUNDLED_DLLS {
@@ -726,6 +741,7 @@ mod tests {
         assert_eq!(read("dsound").as_deref(), Some("native,builtin"));
         assert_eq!(read("dinput8"), None);
         assert_eq!(read("d3d9").as_deref(), Some("builtin"));
+        clean();
     }
 
     #[test]
