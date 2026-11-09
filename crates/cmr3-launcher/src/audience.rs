@@ -4,7 +4,7 @@
 //! parsed switches so a value spelled like a flag (`--game --check`) is
 //! never taken for one.
 
-use rea_launcher_win32::report::Run;
+use rea_launcher_win32::report::{Mode, Run};
 
 use crate::config::Settings;
 
@@ -17,6 +17,16 @@ pub fn run(args: &[String]) -> Run {
         Ok((_, switches)) => Run::from_args(&switches, &[]),
         Err(_) => Run::bad_command_line(args),
     }
+}
+
+/// Whether the unpack of an installer shows its progress window: whenever
+/// a player may be watching (`sdk/docs/playbooks/installers.md`). The
+/// Linux helper starts its game run with `--no-window` for a player in
+/// front of the screen, so the flag alone doesn't decide; only a run with
+/// nobody watching (a script, a test: `--no-window` on Windows) waits
+/// without a window.
+pub fn unpack_window(mode: Mode) -> bool {
+    matches!(mode, Mode::Play { interactive: true })
 }
 
 #[cfg(test)]
@@ -184,5 +194,32 @@ mod tests {
         }
         let args = vec!["--no-window".to_string()];
         assert!(report::route_here(report::audience(run(&args)).mode()).dialog);
+    }
+
+    #[test]
+    fn the_helpers_play_run_shows_the_unpack_window() {
+        // cmr3-play and the AppImage: `--no-window` under Wine, a player
+        // watching. A double click and a plain Windows start too.
+        for (args, wine) in [
+            (&["--no-window"][..], true),
+            (&["--no-window", "--linux"], false),
+            (&["--no-window", "--look", "steam_deck"], true),
+            (&[], true),
+            (&[], false),
+        ] {
+            assert!(unpack_window(mode(args, wine)), "{args:?} wine={wine}");
+        }
+    }
+
+    #[test]
+    fn a_run_nobody_watches_unpacks_without_a_window() {
+        // A script on Windows: `--no-window`, no `--linux`.
+        assert!(!unpack_window(mode(&["--no-window"], false)));
+        assert!(!unpack_window(mode(
+            &["--no-window", "--game", r"D:\Repack"],
+            false
+        )));
+        // The helper's settings run never gets to Play's unpack.
+        assert!(!unpack_window(mode(&["--settings", "--linux"], true)));
     }
 }

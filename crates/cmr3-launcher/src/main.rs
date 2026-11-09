@@ -285,11 +285,15 @@ mod app {
             Found::Installer(found) => {
                 paths::check_separate(&chosen, &rt)?;
                 let mut log = |line: &str| log_line(line);
+                // The progress window whenever a player may be watching:
+                // cmr3-play and the AppImage start this run with
+                // --no-window. Only a script waits without one.
+                let window = audience::unpack_window(mode());
                 let watch = |job: &mut dyn installer::UnpackJob| {
-                    if no_window {
-                        Err("--no-window".to_string())
-                    } else {
+                    if window {
                         ui::show_unpack(&found, job)
+                    } else {
+                        Err("nobody is watching (--no-window on Windows)".to_string())
                     }
                 };
                 match unpack::unpack(
