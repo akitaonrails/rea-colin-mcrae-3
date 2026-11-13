@@ -111,8 +111,11 @@ pub static INSTALLERS: &[Known<InstallerBuild>] = &[Known::new(
    ```
 
    `Unpacked::Ready(done)`: the game is in `dest`; `Unpacked::Cancelled`:
-   the player stopped it, exit quietly. With `--no-window`, pass a `watch`
-   that returns `Err(..)`: the unpack is waited for without a window.
+   the player stopped it, exit quietly. Show the window whenever a player
+   may be watching: the Linux helper (`rea-play.sh`) starts game runs with
+   `--no-window`, so that flag alone doesn't mean nobody is there. Only a
+   run with no player (a script, a test) passes a `watch` that returns
+   `Err(..)`: the unpack is then waited for without a window.
 4. **Point the game setting at the unpacked folder.** Play from it, save
    it as `game` in the launcher's settings file (the one the settings
    window writes), and tell the player in `launcher.log` and the window:
@@ -121,7 +124,9 @@ pub static INSTALLERS: &[Known<InstallerBuild>] = &[Known::new(
    from the command line (`--game`), don't save; only say where the game
    is. A player who points at the installer folder again still gets the
    unpacked copy reused (`installer::begin` returns `Begin::Done` when the
-   folder's `.rea-unpacked` marker names this installer's SHA-256).
+   folder's `.rea-unpacked` marker names this installer's SHA-256). When
+   that folder then fails the game check (files deleted), `unpack` unpacks
+   it again (`installer::begin_again`): it is the launcher's own.
 5. Everything after that (runtime copy, fixes, saves) runs on the unpacked
    folder as on an installed game.
 
