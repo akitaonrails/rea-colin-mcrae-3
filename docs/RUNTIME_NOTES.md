@@ -592,3 +592,5 @@ only, and taken out again; the launcher never writes it.
 | Force feedback effects, autocentre | NOT REACHED HEADLESS | the game makes its effects in a stage; Enter reaches the menus only (arrow keys don't move them, 2026-11-02) |
 | Real wheels | NEEDS HARDWARE | force direction and feel, exclusive access with each vendor's driver, Wine's hidraw/SDL wheel backends, separate pedals, Xbox-mode wheels, replugging mid-stage: phase 3 of the wheel plan (Fanatec on Windows and Wine, a Logitech, a Thrustmaster) |
 | Windows | NOT RUN | the ASI loader is the same `dsound.dll` on Windows; check the layer loads there with the hardware pass |
+
+2026-11-13, SDK v0.9.0 pinned (tag c8afb83): the release package through `cmr3-play --play`, headless, wheel support on — `rea_dinput 0.9.0: mode on`, the game's `CreateDevice` of the virtual wheel and `DIPROP_RANGE` on X, Y, Z and Rz all `0x0`, the seeded record kept (player 1 → device 2), and Alt+F4 ended the game (launcher: `game exited with 0`).

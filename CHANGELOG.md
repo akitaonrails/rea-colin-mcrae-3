@@ -26,11 +26,20 @@
   tweaks included) in `CMR3.controllers` next to the profile and puts it
   back.
 - `--check` reports the wheel layer (optional).
+- **Not yet tried on a real wheel.** Everything above was checked with the
+  game and a stand-in wheel, headless; force feedback's feel and each
+  wheel family's driver still need players' wheels. If yours misbehaves,
+  turn on `wheel_log` (`--wheel-log on`), play once, and open a
+  [bug report](https://github.com/akitaonrails/rea-colin-mcrae-3/issues/new?template=bug-report.yml)
+  with `launcher.log` and `rea_wheel.log` (in the launcher's copy of the
+  game, next to `Rally_3PC.exe`), your wheel and pedals' names, and
+  Windows or Linux.
 
 ### Changed
 
-- Updated rea-launcher-sdk to v0.8.2, and to its wheel branch until
-  v0.9.0 is released.
+- Updated rea-launcher-sdk to v0.9.0 (from v0.5.0): the wheel layer,
+  the Wheel tab and its options.
+- The settings window's Controls tab points to the Wheel tab.
 
 ## [0.4.0] - 2026-11-09
 
