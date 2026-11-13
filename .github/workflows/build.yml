@@ -33,6 +33,12 @@ jobs:
       wine-tests: true
       # linux/tests/e2e.sh needs the dev kit and a game (skipped unless CMR3_E2E=1).
       shell-tests: linux/tests/*.sh
+      # The in-game wheel layer (its unwinding `dll` profile), next to the
+      # exe for package.sh, which ships it in components/.
+      extra-build: >-
+        cargo build --locked --profile dll --lib --target "$RUST_TARGET"
+        -p cmr3-launcher -p rea-launcher-dinput --features layer-dlls &&
+        cp "target/$RUST_TARGET/dll/rea_dinput.dll" "$REA_RELEASE_DIR/"
       package-command: |
         packaging/package.sh "$REA_VERSION_NAME" "$REA_RELEASE_DIR" dist "$REA_CACHE"
       package-dir: dist/CMR3Launcher-*/ dist/CMR3Launcher-*.zip

@@ -225,7 +225,8 @@ pub fn draw(
             Tab::Play => play_tab(ui, state, pick),
             Tab::Picture => picture_tab(ui, state),
             Tab::Controls => controls_tab(ui, state),
-            Tab::Wheel => wheel_tab(ui, state, devices),
+            // The SDK's tab; it marks the `wheel_*` options it shows.
+            Tab::Wheel => state.wheel.draw(ui, devices),
         });
     });
     let hint = if !state.ready() {
@@ -553,11 +554,6 @@ fn controls_tab(ui: &mut egui::Ui, state: &mut State) {
         "Racing wheel and pedals: set them up in the Wheel tab. The pad keeps working \
          beside the wheel.",
     );
-}
-
-/// The SDK's Wheel tab (it marks the `wheel_*` options it shows).
-fn wheel_tab(ui: &mut egui::Ui, state: &mut State, devices: &mut dyn WheelDevices) {
-    state.wheel.draw(ui, devices);
 }
 
 #[cfg(test)]

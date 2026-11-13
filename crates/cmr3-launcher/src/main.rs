@@ -37,20 +37,24 @@ mod app {
     use cmr3_launcher::edition;
     use cmr3_launcher::form;
     use cmr3_launcher::instance;
+    use cmr3_launcher::layer;
     use cmr3_launcher::plan::{self, Env};
     use cmr3_launcher::runtime;
     use cmr3_launcher::source::{self, Found};
     use cmr3_launcher::unpack;
+    use cmr3_launcher::wheel;
     use rea_launcher::cfg::ArgError;
     use rea_launcher::installer;
     use rea_launcher::log::Log;
+    use rea_launcher::wheel::dinput::{Mode, Setup};
+    use rea_launcher::wheel::rig;
     use rea_launcher::{cfg, fsx, paths};
-    use rea_launcher_win32::disk;
     use rea_launcher_win32::gpu::{self, Glx};
     use rea_launcher_win32::instance::{self as win32_instance, SecondStart, Window};
     use rea_launcher_win32::process::{self, Launch};
     use rea_launcher_win32::report;
     use rea_launcher_win32::wine::DllMode;
+    use rea_launcher_win32::{dinput, disk};
     use rea_launcher_win32::{display, wine};
 
     use crate::ui;
@@ -394,9 +398,12 @@ mod app {
         // The bundled parts, and the DLL names Wine must then load from
         // the game folder.
         let mut natives = Vec::new();
+        // SilentPatch's ASI loader also loads the wheel layer.
+        let mut asi_loader = false;
         match components::install_silentpatch(&game, &rt, &bundle) {
             Ok(Installed::Done) => {
                 natives.push("dsound");
+                asi_loader = true;
                 log_line("SilentPatch installed")
             }
             Ok(Installed::NotBundled) => log_line(
@@ -429,12 +436,52 @@ mod app {
                 false
             }
         };
+        // The wheel layer, in front of Xidi: its settings (launcher.cfg's
+        // Wheel tab and the pedal calibration beside it) and the DLL, as
+        // an ASI plugin.
+        let calibration = fs::read_to_string(settings_path.with_file_name(wheel::FILE)).ok();
+        let setup = &settings.wheel.setup;
+        let ini = wheel::runtime_ini(setup, calibration.as_deref());
+        let components = components::components_dir();
+        let layer_on = match components::install_layer(&game, &rt, &components, &ini) {
+            Ok(Installed::Done) if asi_loader => true,
+            Ok(Installed::Done) => {
+                log_line(
+                    "warning: the wheel layer needs SilentPatch's ASI loader; wheels as the game sees them",
+                );
+                false
+            }
+            Ok(Installed::NotBundled) => {
+                log_line("warning: the wheel layer is not bundled; wheels as the game sees them");
+                false
+            }
+            Ok(Installed::NotOurs(name)) => {
+                log_line(&not_ours("The wheel layer", name, &rt));
+                false
+            }
+            Err(e) => {
+                log_line(&format!("warning: wheel layer: {e}"));
+                false
+            }
+        };
+        // Decided now, with the devices attached as the game starts: the
+        // layer is told the same (REA_WHEEL_MODE).
+        let wheel_shown = layer_on && virtual_wheel(setup);
+        log_line(&format!(
+            "wheel: {} (wheel support {})",
+            if wheel_shown {
+                "the game sees the virtual wheel"
+            } else {
+                "the game sees its controllers as they are"
+            },
+            setup.mode.key()
+        ));
         // The profile's controller records for the devices the game will
-        // find: a new profile gets Xidi's pad, as the player would pick it
-        // in Options → Controls; records the player set are kept, beside
-        // the profile too (`controllers`).
+        // find: the virtual wheel's, and Xidi's pad as the player would
+        // pick it in Options → Controls; records the player set are kept,
+        // beside the profile too (`controllers`).
         let stash = saves.join(controllers::STASH_FILE);
-        let seats = controllers::lineup(false, xidi && plan.choose_controller);
+        let seats = controllers::lineup(wheel_shown, xidi && plan.choose_controller);
         match controllers::prepare_files(&rt_profile, &stash, &seats) {
             Ok(done) => {
                 for line in done {
@@ -582,6 +629,9 @@ mod app {
         }
         log_line("starting the game");
         let mut launch = Launch::new(rt.join(EXE)).cwd(&rt);
+        if layer_on {
+            launch = launch.env(layer::MODE_ENV, layer::mode_value(wheel_shown));
+        }
         if let Some(o) = overrides {
             launch = launch.env("WINEDLLOVERRIDES", o);
         }
@@ -613,6 +663,18 @@ mod app {
         // profile is saved.
         drop(held);
         Ok(code)
+    }
+
+    /// Whether the game will see the virtual wheel: `auto` asks
+    /// DirectInput which devices are attached now.
+    fn virtual_wheel(setup: &Setup) -> bool {
+        if setup.mode != Mode::Auto {
+            return rig::shows_virtual_wheel(setup, &[]);
+        }
+        let devices = dinput::list();
+        let names: Vec<&str> = devices.iter().map(|d| d.id.name.as_str()).collect();
+        log_line(&format!("controllers: {}", names.join(", ")));
+        rig::shows_virtual_wheel(setup, &devices)
     }
 
     /// The log line for a component left out because the runtime already
@@ -762,6 +824,9 @@ mod app {
         let innoextract = components::components_dir().join(components::INNOEXTRACT);
         let mut parts = components::present(&bundle);
         parts.push(components::innoextract_part(innoextract.is_file(), pending));
+        parts.push(components::layer_part(
+            components::components_dir().join(layer::DLL).is_file(),
+        ));
         let (lines, ok) = check::report(game, unpack.as_ref(), exe, &parts);
         for line in &lines {
             log_line(&format!("check: {line}"));

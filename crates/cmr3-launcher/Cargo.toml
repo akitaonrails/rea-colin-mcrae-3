@@ -7,6 +7,14 @@ rust-version = "1.95"
 license.workspace = true
 description = "Runs the user's own copy of Colin McRae Rally 3 (2003, PC) on modern Windows and under Proton/Wine"
 
+[features]
+# Builds rea_dinput.dll with its DllMain and exports, for the package only
+# (Cargo can't take features for a dependency on the command line):
+#   cargo build --profile dll --lib -p cmr3-launcher -p rea-launcher-dinput
+#     --features layer-dlls --target i686-pc-windows-gnu
+# --lib keeps the launcher exe out of that build.
+layer-dlls = ["rea-launcher-dinput/dll"]
+
 [[bin]]
 name = "CMR3Launcher"
 path = "src/main.rs"
@@ -14,6 +22,7 @@ path = "src/main.rs"
 [dependencies]
 md-5.workspace = true
 rea-launcher.workspace = true
+rea-launcher-dinput.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 rea-launcher-win32.workspace = true

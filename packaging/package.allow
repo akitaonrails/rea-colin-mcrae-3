@@ -9,6 +9,8 @@ LICENSE-APACHE
 licenses/Barlow-OFL.txt
 # innoextract 1.9 (sdk/packaging/innoextract.sh): unpacks the game's installer.
 components/innoextract.exe
+# The SDK's in-game DirectInput wheel layer (rea-launcher-dinput).
+components/rea_dinput.dll
 licenses/innoextract/*.txt
 docs/ENHANCEMENTS.md
 docs/images/*.jpg

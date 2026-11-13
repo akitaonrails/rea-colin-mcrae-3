@@ -22,6 +22,7 @@ pub mod controllers;
 pub mod edition;
 pub mod form;
 pub mod instance;
+pub mod layer;
 #[cfg(any(windows, test))]
 pub mod look;
 pub mod plan;

@@ -4,7 +4,11 @@
 #
 #   packaging/package.sh [--no-appimage] <version-name> <release-dir> <out-dir> [cache-dir]
 #
-# <release-dir> holds the built CMR3Launcher.exe. The bundled components
+# <release-dir> holds the built CMR3Launcher.exe and rea_dinput.dll (the
+# SDK's in-game wheel layer, built with the launcher's `layer-dlls`
+# feature, see crates/cmr3-launcher/Cargo.toml, and copied there from
+# target/i686-pc-windows-gnu/dll/), which goes to components/.
+# The bundled components
 # are fetched from packaging/third-party.txt and checked by SHA-256 (the
 # SDK's sdk/packaging/pins.sh: the first url that matches wins, later urls
 # are our mirror), then unpacked into thirdparty/. vkBasalt is built from
@@ -87,6 +91,8 @@ cp packaging/licenses/Barlow-OFL.txt "$PKG/licenses/Barlow-OFL.txt"
 # innoextract 1.9: unpacks the game's installer when a player points the
 # launcher at one (components/innoextract.exe, licenses/innoextract/).
 innoextract_bundle "$PKG" "$WORK" || exit 1
+# The wheel layer the launcher imports into its copy of the game.
+cp "$RELEASE/rea_dinput.dll" "$PKG/components/rea_dinput.dll"
 cp -r docs/images "$PKG/docs/images"
 cp docs/ENHANCEMENTS.md "$PKG/docs/"
 cp -r "$TP" "$PKG/thirdparty"

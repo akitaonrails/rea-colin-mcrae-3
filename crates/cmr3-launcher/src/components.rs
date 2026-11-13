@@ -32,7 +32,7 @@ use rea_launcher::ledger::{self, Ledger, Outcome};
 use crate::config::{Gamepad, Settings};
 use crate::edition;
 use crate::runtime;
-use crate::xidi;
+use crate::{layer, wheel, xidi};
 
 /// The folder of bundled components next to the launcher (or
 /// `CMR3_THIRDPARTY`).
@@ -95,6 +95,24 @@ pub fn innoextract_part(there: bool, needed: bool) -> crate::check::Part {
         name: "innoextract (unpacks the installer)",
         there,
         optional: !needed,
+    }
+}
+
+/// Checks whether the runtime exe is already DRM-free, so the patcher runs
+/// once, not every launch.
+pub fn runtime_needs_patch(runtime_exe: &Path) -> bool {
+    fs::read(runtime_exe)
+        .map(|bytes| !edition::is_drm_free(&bytes))
+        .unwrap_or(true)
+}
+
+/// The wheel layer as a `--check` part: play works without it (no
+/// virtual wheel).
+pub fn layer_part(there: bool) -> crate::check::Part {
+    crate::check::Part {
+        name: "wheel layer (rea_dinput.dll)",
+        there,
+        optional: true,
     }
 }
 
@@ -408,12 +426,25 @@ pub fn xdelta_args(
     ]
 }
 
-/// Checks whether the runtime exe is already DRM-free, so the patcher runs
-/// once, not every launch.
-pub fn runtime_needs_patch(runtime_exe: &Path) -> bool {
-    fs::read(runtime_exe)
-        .map(|bytes| !edition::is_drm_free(&bytes))
-        .unwrap_or(true)
+/// The wheel layer beside the game (`layer`): `rea_dinput.dll` from the
+/// launcher's `components` folder as `rea_dinput.asi` (SilentPatch's ASI
+/// loader loads it) and the layer's `rea_wheel.ini` (`ini`,
+/// `wheel::runtime_ini`).
+pub fn install_layer(
+    game: &Path,
+    runtime: &Path,
+    components: &Path,
+    ini: &str,
+) -> io::Result<Installed> {
+    let Ok(dll) = fs::read(components.join(layer::DLL)) else {
+        return Ok(Installed::NotBundled);
+    };
+    let mut ledger = ledger(game, runtime);
+    if let Some(refused) = put(&mut ledger, layer::ASI, &dll, &[&dll])? {
+        return Ok(refused);
+    }
+    let ini = ini.as_bytes();
+    Ok(put(&mut ledger, wheel::FILE, ini, &[ini])?.unwrap_or(Installed::Done))
 }
 
 /// Writes the launcher's picture settings into the runtime folder's

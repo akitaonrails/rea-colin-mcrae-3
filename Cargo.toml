@@ -14,12 +14,24 @@ rea-launcher = { git = "https://github.com/akitaonrails/rea-launcher-sdk", tag =
 rea-launcher-win32 = { git = "https://github.com/akitaonrails/rea-launcher-sdk", tag = "v0.8.2" }
 rea-launcher-ui = { git = "https://github.com/akitaonrails/rea-launcher-sdk", tag = "v0.8.2" }
 rea-launcher-build = { git = "https://github.com/akitaonrails/rea-launcher-sdk", tag = "v0.8.2" }
+# The in-game DirectInput wheel layer: its rlib, without the DLL's own
+# DllMain and exports, gives the launcher `import_into` and the names.
+# rea_dinput.dll is built for the package with the launcher's
+# `layer-dlls` feature (crates/cmr3-launcher/Cargo.toml).
+rea-launcher-dinput = { git = "https://github.com/akitaonrails/rea-launcher-sdk", tag = "v0.8.2", default-features = false }
 
 [profile.release]
 panic = "abort"
 opt-level = "s"
 lto = true
 strip = true
+
+# The in-game wheel layer's DLL (rea_dinput.dll): its catch_unwind guards
+# turn a panic into an error code for one DirectInput call, never a crash
+# in the game; that needs unwinding. The launcher exe keeps abort.
+[profile.dll]
+inherits = "release"
+panic = "unwind"
 
 # TEMPORARY: the SDK's feat/dinput-wheel branch (wheel tab, DirectInput
 # devices, the rea_dinput layer) until v0.9.0 is tagged; then delete this
@@ -29,3 +41,4 @@ rea-launcher = { path = "/mnt/data/Projects/rea-launcher-sdk/crates/rea-launcher
 rea-launcher-win32 = { path = "/mnt/data/Projects/rea-launcher-sdk/crates/rea-launcher-win32" }
 rea-launcher-ui = { path = "/mnt/data/Projects/rea-launcher-sdk/crates/rea-launcher-ui" }
 rea-launcher-build = { path = "/mnt/data/Projects/rea-launcher-sdk/crates/rea-launcher-build" }
+rea-launcher-dinput = { path = "/mnt/data/Projects/rea-launcher-sdk/crates/rea-launcher-dinput" }

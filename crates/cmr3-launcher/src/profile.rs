@@ -183,7 +183,7 @@ impl Record {
     pub fn device(&self) -> Option<Device> {
         let pid = u16::try_from(self.word(PID)).ok()?;
         let vid = u16::try_from(self.word(VID)).ok()?;
-        (pid, vid).ne(&(0, 0)).then_some(Device { vid, pid })
+        ((pid, vid) != (0, 0)).then_some(Device { vid, pid })
     }
 
     /// Whether player 1 uses it.
