@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.5.0] - 2026-11-13
+
 ### Added
 
 - Wheels: plug in a wheel and play. The SDK's in-game DirectInput layer
