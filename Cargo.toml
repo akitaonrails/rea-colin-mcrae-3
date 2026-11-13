@@ -20,3 +20,12 @@ panic = "abort"
 opt-level = "s"
 lto = true
 strip = true
+
+# TEMPORARY: the SDK's feat/dinput-wheel branch (wheel tab, DirectInput
+# devices, the rea_dinput layer) until v0.9.0 is tagged; then delete this
+# table and bump the tags above with sdk-bump.
+[patch."https://github.com/akitaonrails/rea-launcher-sdk"]
+rea-launcher = { path = "/mnt/data/Projects/rea-launcher-sdk/crates/rea-launcher" }
+rea-launcher-win32 = { path = "/mnt/data/Projects/rea-launcher-sdk/crates/rea-launcher-win32" }
+rea-launcher-ui = { path = "/mnt/data/Projects/rea-launcher-sdk/crates/rea-launcher-ui" }
+rea-launcher-build = { path = "/mnt/data/Projects/rea-launcher-sdk/crates/rea-launcher-build" }
