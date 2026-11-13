@@ -31,7 +31,8 @@ pub enum Outcome {
 }
 
 /// Shows the window over `settings_path` (its text, or the template for a
-/// first run) and the `rea_wheel.ini` beside it. `linux` adds the
+/// first run) and the pedal calibration (`rea_wheel.ini`) beside it.
+/// `linux` adds the
 /// Linux-only rows. Errors when no window can be made (no OpenGL); the
 /// caller then goes on without it.
 pub fn show(settings_path: &Path, text: &str, linux: bool) -> Result<Outcome, String> {
@@ -47,15 +48,21 @@ pub fn show(settings_path: &Path, text: &str, linux: bool) -> Result<Outcome, St
     let options = fit.native_options(instance::WINDOW_TITLE);
     let path = settings_path.to_path_buf();
     let text = text.to_string();
-    let wheel_path = settings_path.with_file_name(wheel::FILE);
-    let wheel_ini = std::fs::read_to_string(&wheel_path).unwrap_or_default();
+    let calibration_path = settings_path.with_file_name(wheel::FILE);
+    let calibration = std::fs::read_to_string(&calibration_path).ok();
     eframe::run_native(
         instance::WINDOW_TITLE,
         options,
         Box::new(|cc| {
             theme::install_with(&cc.egui_ctx, &PALETTE, &look::METRICS);
             Ok(Box::new(Window {
-                state: State::new(&text, &wheel_ini, linux, screen, xinput::connected()),
+                state: State::new(
+                    &text,
+                    calibration.as_deref(),
+                    linux,
+                    screen,
+                    xinput::connected(),
+                ),
                 devices: DirectInput::start(),
                 portrait: widgets::load_jpeg(
                     &cc.egui_ctx,
@@ -64,8 +71,8 @@ pub fn show(settings_path: &Path, text: &str, linux: bool) -> Result<Outcome, St
                 ),
                 path,
                 text,
-                wheel_path,
-                wheel_ini,
+                calibration_path,
+                calibration: calibration.unwrap_or_default(),
                 fit,
                 pad: PadNav::default(),
                 pending: Vec::new(),
@@ -106,9 +113,10 @@ struct Window<'a> {
     portrait: Option<TextureHandle>,
     path: PathBuf,
     text: String,
-    /// `rea_wheel.ini` beside `launcher.cfg`, and its text when opened.
-    wheel_path: PathBuf,
-    wheel_ini: String,
+    /// The pedal calibration beside `launcher.cfg`, and its text when
+    /// opened.
+    calibration_path: PathBuf,
+    calibration: String,
     /// The controllers the Wheel tab shows (read only while it is open).
     devices: DirectInput,
     fit: WindowFit,
@@ -129,8 +137,11 @@ impl Window<'_> {
             self.state.tab = window::Tab::Wheel;
             return;
         }
-        let (saved, wheel_ini) = self.state.save(&self.text, &self.wheel_ini);
-        let written = rea_launcher::fsx::write_atomic(&self.wheel_path, wheel_ini)
+        let (saved, calibration) = self.state.save(&self.text, &self.calibration);
+        let written = calibration
+            .map_or(Ok(()), |c| {
+                rea_launcher::fsx::write_atomic(&self.calibration_path, c)
+            })
             .and_then(|()| rea_launcher::fsx::write_atomic(&self.path, saved));
         match written {
             Ok(()) => {

@@ -16,8 +16,9 @@ use std::path::PathBuf;
 
 use rea_launcher::cfg::spec::{self, Kind, OptionSpec, Value};
 use rea_launcher::cfg::{self, ArgError, KeyStyle, Rejected, Resolution};
-use rea_launcher::wheel::SteeringLock;
-use rea_launcher::wheel::dinput::Mode;
+use rea_launcher::wheel::dinput::options;
+
+use crate::wheel::Wheel;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Settings {
@@ -63,13 +64,8 @@ pub struct Settings {
     /// colour grading and sharpening, or the same with depth-based
     /// ambient occlusion when the shaders are available. Opt-in.
     pub postfx: Option<Postfx>,
-    /// When the game sees the virtual wheel (the Wheel tab's "Wheel
-    /// support"); unset keeps `rea_wheel.ini`'s.
-    pub wheel: Option<Mode>,
-    /// The virtual wheel's steering lock; unset keeps `rea_wheel.ini`'s.
-    pub wheel_lock: Option<SteeringLock>,
-    /// Force-feedback strength, percent; unset keeps `rea_wheel.ini`'s.
-    pub wheel_ffb: Option<u8>,
+    /// The Wheel tab's settings (the SDK's `wheel_*` rows).
+    pub wheel: Wheel,
 }
 
 /// Post-processing over the finished frame (opt-in; Linux, via
@@ -287,17 +283,6 @@ pub const POSTFXS: &[(&str, &str)] = &[
     ("color", "Colour"),
     ("cinematic", "Cinematic"),
 ];
-pub const WHEEL_MODES: &[(&str, &str)] = &[("auto", "Auto"), ("on", "On"), ("off", "Off")];
-/// `wheel_lock` values: the SDK's steps (`SteeringLock::STEPS`).
-pub const WHEEL_LOCKS: &[(&str, &str)] = &[
-    ("180", "180°"),
-    ("270", "270°"),
-    ("360", "360°"),
-    ("540", "540°"),
-    ("900", "900°"),
-    ("full", "Full"),
-];
-
 /// The window's chip for an unset picture option: the game keeps its own value.
 pub const AS_THE_GAME: &str = "As the game";
 
@@ -437,29 +422,18 @@ pub const OPTIONS: &[OptionSpec] = &[
          fuller contrast and sharpening. Cinematic: a stronger grade.",
     )
     .helper_owned(),
-    // The Wheel tab's main settings; its other ones (which wheel and
-    // pedals, deadzone, curve, calibration) live only in rea_wheel.ini.
-    OptionSpec::new(
-        "wheel",
-        Kind::Choice(WHEEL_MODES),
-        "Wheel support",
-        "Auto: when a wheel is plugged in as the game starts, the game sees one wheel made \
-         from it and your pedals. On: always. Off: the game sees your controllers as they are.",
-    ),
-    OptionSpec::new(
-        "wheel_lock",
-        Kind::Choice(WHEEL_LOCKS),
-        "Steering lock",
-        "How far the wheel turns from full left to full right in the game, in degrees; full: \
-         the wheel's whole rotation.",
-    ),
-    OptionSpec::new(
-        "wheel_ffb",
-        Kind::Range { min: 0, max: 100 },
-        "Force feedback",
-        "The strength of the wheel's force feedback, percent (0: off).",
-    )
-    .with_example("50"),
+    // The Wheel tab: the SDK's rows for the in-game wheel layer.
+    options::WHEEL,
+    options::WHEEL_DEVICE,
+    options::WHEEL_PEDALS,
+    options::WHEEL_LOCK,
+    options::WHEEL_DEADZONE,
+    options::WHEEL_CURVE,
+    options::WHEEL_INVERT_THROTTLE,
+    options::WHEEL_INVERT_BRAKE,
+    options::WHEEL_FFB,
+    options::WHEEL_FFB_INVERT,
+    options::WHEEL_LOG,
 ];
 
 /// The row for `key`; every key the launcher uses has one.
@@ -547,27 +521,14 @@ fn choice<T>(v: Value, from: fn(&str) -> Option<T>) -> Result<T, Rejected> {
     }
 }
 
-/// A steering lock from its `wheel_lock` value.
-fn lock_of(v: &str) -> Option<SteeringLock> {
-    match v {
-        "full" => Some(SteeringLock::Full),
-        degrees => degrees.parse().ok().map(SteeringLock::from_setting),
-    }
-}
-
-/// The `wheel_lock` value of a steering lock.
-pub fn lock_key(lock: SteeringLock) -> String {
-    match lock {
-        SteeringLock::Full => "full".into(),
-        SteeringLock::Degrees(d) => d.to_string(),
-    }
-}
-
 impl Settings {
     /// Sets one value by its `launcher.cfg` key, already checked against
     /// its row in [`OPTIONS`]. The command line's `--some-key` is
     /// `some_key`, so the file and the flags read alike.
     fn apply(&mut self, key: &str, value: Value) -> Result<(), Rejected> {
+        if self.wheel.apply(key, value) {
+            return Ok(());
+        }
         match key {
             "game" => self.game = Some(path(value)?),
             "runtime" => self.runtime = Some(path(value)?),
@@ -610,14 +571,6 @@ impl Settings {
             "dxvk" => self.dxvk = Some(toggle(value)?),
             "postfx" => self.postfx = Some(choice(value, Postfx::from_key)?),
             "scaler" => self.scaler = Some(choice(value, Scaler::from_key)?),
-            "wheel" => self.wheel = Some(choice(value, Mode::parse)?),
-            "wheel_lock" => self.wheel_lock = Some(choice(value, lock_of)?),
-            "wheel_ffb" => {
-                let Value::Number(n) = value else {
-                    return Err(mismatch());
-                };
-                self.wheel_ffb = Some(u8::try_from(n).map_err(|_| mismatch())?);
-            }
             _ => return Err(Rejected::Unknown),
         }
         Ok(())
@@ -656,9 +609,7 @@ impl Settings {
             dxvk: over.dxvk.or(self.dxvk),
             scaler: over.scaler.or(self.scaler),
             postfx: over.postfx.or(self.postfx),
-            wheel: over.wheel.or(self.wheel),
-            wheel_lock: over.wheel_lock.or(self.wheel_lock),
-            wheel_ffb: over.wheel_ffb.or(self.wheel_ffb),
+            wheel: self.wheel.merged(&over.wheel),
         }
     }
 
@@ -837,8 +788,16 @@ mod tests {
         ("scaler", "fsr"),
         ("postfx", "color"),
         ("wheel", "on"),
-        ("wheel_lock", "540"),
+        ("wheel_device", "{a}"),
+        ("wheel_pedals", "{b}"),
+        ("wheel_lock", "900"),
+        ("wheel_deadzone", "4"),
+        ("wheel_curve", "40"),
+        ("wheel_invert_throttle", "on"),
+        ("wheel_invert_brake", "on"),
         ("wheel_ffb", "70"),
+        ("wheel_ffb_invert", "on"),
+        ("wheel_log", "on"),
     ];
 
     fn check_every(s: &Settings) {
@@ -859,17 +818,19 @@ mod tests {
         assert_eq!(s.dxvk, Some(false));
         assert_eq!(s.scaler, Some(Scaler::Fsr));
         assert_eq!(s.postfx, Some(Postfx::Color));
-        assert_eq!(s.wheel, Some(Mode::On));
-        assert_eq!(s.wheel_lock, Some(SteeringLock::Degrees(540)));
-        assert_eq!(s.wheel_ffb, Some(70));
+        let w = &s.wheel.setup;
+        assert_eq!(w.mode, rea_launcher::wheel::dinput::Mode::On);
+        assert_eq!((w.wheel.device.as_str(), w.pedals.as_str()), ("{a}", "{b}"));
+        assert_eq!(
+            w.wheel.lock,
+            rea_launcher::wheel::SteeringLock::Degrees(900)
+        );
+        assert_eq!((w.deadzone, w.linearity, w.ffb.strength), (4, 40, 70));
+        assert!(w.wheel.invert_accel && w.wheel.invert_brake && w.ffb.invert && w.log);
     }
 
     #[test]
-    fn wheel_options_take_the_tabs_values() {
-        let s = args(&["--wheel", "off", "--wheel-lock", "full", "--wheel-ffb", "0"]).unwrap();
-        assert_eq!(s.wheel, Some(Mode::Off));
-        assert_eq!(s.wheel_lock, Some(SteeringLock::Full));
-        assert_eq!(s.wheel_ffb, Some(0));
+    fn bad_wheel_values_say_what_they_need() {
         assert_eq!(
             args(&["--wheel-lock", "450"]).unwrap_err(),
             "--wheel-lock needs 180, 270, 360, 540, 900 or full, not 450"
@@ -878,13 +839,6 @@ mod tests {
             args(&["--wheel-ffb", "101"]).unwrap_err(),
             "--wheel-ffb needs 0 to 100, not 101"
         );
-        assert_eq!(
-            args(&["--wheel", "yes"]).unwrap_err(),
-            "--wheel needs auto, on or off, not yes"
-        );
-        for (key, _) in WHEEL_LOCKS {
-            assert_eq!(lock_key(lock_of(key).unwrap()), *key);
-        }
     }
 
     #[test]

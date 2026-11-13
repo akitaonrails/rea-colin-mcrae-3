@@ -164,14 +164,12 @@ impl Plan {
                 list(&self.app_overrides_off)
             ));
         }
-        let wheel = &self.ini_settings;
-        let or_file = |v: Option<String>| v.unwrap_or_else(|| "rea_wheel.ini's".into());
-        out.push_str(&format!(
-            "wheel: support {}, lock {}, force feedback {}\n",
-            or_file(wheel.wheel.map(|m| m.key().into())),
-            or_file(wheel.wheel_lock.map(crate::config::lock_key)),
-            or_file(wheel.wheel_ffb.map(|f| format!("{f} %"))),
-        ));
+        let wheel = &self.ini_settings.wheel.setup;
+        let keys: Vec<String> = rea_launcher::wheel::dinput::options::OPTIONS
+            .iter()
+            .map(|row| format!("{}={}", row.key, wheel.value(row.key).unwrap_or_default()))
+            .collect();
+        out.push_str(&format!("wheel: {}\n", keys.join(" ")));
         out.push_str("game arguments: (none)\n");
         out.push_str(&format!(
             "cmr3-play (Linux): scaler {}, postfx {}\n",
@@ -327,19 +325,11 @@ mod tests {
         assert_eq!((p.scaler, p.postfx), (Scaler::Pixel, Postfx::Cinematic));
         // The wheel options reach the rea_wheel.ini the in-game layer reads.
         let (s, p, _) = run(&["--wheel", "on", "--wheel-lock", "900", "--wheel-ffb", "30"]);
-        let ini = crate::wheel::runtime_ini("deadzone = 2\n", &s);
-        for want in [
-            "mode = on",
-            "lock = 900",
-            "ffb_strength = 30",
-            "deadzone = 2",
-        ] {
+        let ini = crate::wheel::runtime_ini(&s.wheel.setup, None);
+        for want in ["mode = on", "lock = 900", "ffb_strength = 30"] {
             assert!(ini.contains(want), "{want} in {ini}");
         }
-        assert!(
-            p.describe(b"")
-                .contains("wheel: support on, lock 900, force feedback 30 %")
-        );
+        assert!(p.describe(b"").contains("wheel: wheel=on "));
     }
 
     #[test]

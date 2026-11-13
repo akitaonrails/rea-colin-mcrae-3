@@ -251,6 +251,17 @@ underscores) and on the command line (with hyphens); `CMR3Launcher.exe
 | `postfx` / `--postfx` | Picture: Post-processing, Linux only | `off`, `color`, `cinematic` | off | A colour grade over the finished frame: `color` gives real blacks, fuller contrast and sharpening, `cinematic` a stronger grade (ambient occlusion only if you add the MxAO shader, see [docs/ENHANCEMENTS.md](docs/ENHANCEMENTS.md)). Needs DXVK. Read by `cmr3-play`. |
 | `gamepad` / `--gamepad` | Controls: Gamepad | `rally`, `standard`, `off` | `rally` | Rally: the triggers are the pedals and the d-pad and A work the menus. Standard: the pad as it reports itself. Off: no Xidi. |
 | `gamepad_log` / `--gamepad-log` | Controls: Gamepad log | `on`, `off` | off | Xidi logs what the game asks and what each control sent, for bug reports. |
+| `wheel` / `--wheel` | Wheel: Wheel support | `auto`, `on`, `off` | `auto` | Shows the game one wheel made from your wheel and pedals: always (`on`), or when a wheel is plugged in as the game starts (`auto`). |
+| `wheel_device` / `--wheel-device` | Wheel: Wheel | a DirectInput instance GUID | picked for you | The wheel to drive with, when you have more than one. |
+| `wheel_pedals` / `--wheel-pedals` | Wheel: Pedals | a DirectInput instance GUID | the calibrated pedals, else the wheel's | Pedals on their own USB device. |
+| `wheel_lock` / `--wheel-lock` | Wheel: Steering lock | `180`, `270`, `360`, `540`, `900`, `full` | `540` | How far you turn the wheel for full lock in the game. |
+| `wheel_deadzone` / `--wheel-deadzone` | Wheel: Deadzone | 0–25 (percent) | 0 | A band in the centre that does nothing, for a wheel that drifts. |
+| `wheel_curve` / `--wheel-curve` | Wheel: Curve | 0–100 | 0 (linear) | Softens small turns near the centre. |
+| `wheel_invert_throttle` / `--wheel-invert-throttle` | Wheel: Invert throttle | `on`, `off` | off | For a throttle that reads backwards. |
+| `wheel_invert_brake` / `--wheel-invert-brake` | Wheel: Invert brake | `on`, `off` | off | For a brake that reads backwards. |
+| `wheel_ffb` / `--wheel-ffb` | Wheel: FFB strength | 0–100 (percent) | 50 | How hard the wheel pushes back; lower on a direct-drive wheel. |
+| `wheel_ffb_invert` / `--wheel-ffb-invert` | Wheel: Reverse force feedback | `on`, `off` | off | Only for a wheel that pulls the wrong way. |
+| `wheel_log` / `--wheel-log` | — (file and flag only) | `on`, `off` | off | Writes `rea_wheel.log` next to the game, for bug reports. |
 
 Unset means the game keeps its own value; a value you set and later unset
 goes back to the game's, unless you changed it in the game since.
@@ -289,6 +300,8 @@ and exits 5 too.
 | The launcher's copy of the game | `%LOCALAPPDATA%\CMR3Launcher\Rally3` (the `runtime` option moves it) | the same folder inside the prefix |
 | The game unpacked from its installer (only when you chose an installer) | `%LOCALAPPDATA%\CMR3Launcher\Rally3-game`, next to the launcher's copy | the same folder inside the prefix |
 | Your profile (saves) | `%USERPROFILE%\Saved Games\Colin McRae Rally 3` (or your `saves` folder) | in the prefix, `drive_c/users/<you>/Saved Games/Colin McRae Rally 3` |
+| Your pedal calibration (`rea_wheel.ini`, from the Wheel tab) | next to `launcher.cfg` | next to `launcher.cfg`, in the prefix |
+| Your controller records outside the profile (`CMR3.controllers`: the wheel's and the pad's, kept while the other uses their slot) | next to your profile | next to your profile, in the prefix |
 | Wine prefix | — | `~/.local/share/cmr3-launcher/prefix` |
 | `cmr3-play`'s logs (`play.log`, `settings.log`) and lock | — | `~/.config/cmr3-launcher` |
 | Graphics preference (registry) | `HKCU\Software\Microsoft\DirectX\UserGpuPreferences`, value named after the copy's `Rally_3PC.exe` (`GpuPreference=2;`, the high-performance GPU) | — |

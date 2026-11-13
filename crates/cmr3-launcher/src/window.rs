@@ -8,9 +8,9 @@
 //! the profile folder), Picture, Controls and Wheel. Every control is a row
 //! of [`config::OPTIONS`]: its label, and its one-line description under
 //! it, which is also its accessible description. The Wheel tab is the
-//! SDK's (`rea_launcher_ui::wheel`); its `wheel`, `wheel_lock` and
-//! `wheel_ffb` rows are those options' controls, the rest of it is saved
-//! in `rea_wheel.ini` only (`crate::wheel`).
+//! SDK's (`rea_launcher_ui::wheel`): its controls are the `wheel_*`
+//! options' (saved in `launcher.cfg`); the pedal calibration it makes is
+//! saved in `rea_wheel.ini` (`crate::wheel`).
 
 use std::path::{Path, PathBuf};
 
@@ -27,7 +27,6 @@ use crate::edition;
 use crate::form::{self, Form, Look, Picture};
 use crate::look::{self, ERROR, GOLD, INK, MUTED};
 use crate::source;
-use crate::wheel;
 use crate::xidi;
 
 pub const TITLE: &str = "Colin McRae Rally 3";
@@ -117,25 +116,24 @@ pub struct State {
     /// Shows the Linux-only rows (DXVK, scaler, post-processing).
     pub linux: bool,
     pub error: Option<String>,
-    /// The Wheel tab, over `rea_wheel.ini`.
+    /// The Wheel tab.
     pub wheel: WheelTab,
 }
 
 impl State {
     /// The window over a settings file's text (the template on a first
-    /// run, which picks the recommended look) and `rea_wheel.ini`'s (empty
-    /// when there is none). A `look =` line shows as that look, and the
-    /// window saves its values.
+    /// run, which picks the recommended look) and the pedal calibration's
+    /// (`rea_wheel.ini`; `None`: none yet). A `look =` line shows as that
+    /// look, and the window saves its values.
     pub fn new(
         text: &str,
-        wheel_ini: &str,
+        calibration: Option<&str>,
         linux: bool,
         screen: Option<(u32, u32)>,
         pads: usize,
     ) -> State {
         let settings = form::with_look(Settings::parse_file(text).0, Settings::default(), screen);
-        let mut wheel = WheelTab::open(Some(wheel_ini));
-        wheel.setup = wheel::setup(wheel_ini, &settings);
+        let wheel = WheelTab::new(settings.wheel.setup.clone(), calibration);
         let form = if Form::is_first_run(&settings) {
             Form::first_run(&settings, screen)
         } else {
@@ -161,12 +159,13 @@ impl State {
         self.ready() && !self.wheel.calibrating()
     }
 
-    /// What Play saves: `launcher.cfg`'s new text over `text`, and
-    /// `rea_wheel.ini`'s over `wheel_ini` (both keep every other line).
-    pub fn save(&self, text: &str, wheel_ini: &str) -> (String, String) {
+    /// What Play saves: `launcher.cfg`'s new text over `text`, and the
+    /// calibration's over `calibration` (`None`: nothing to write). Both
+    /// keep every other line.
+    pub fn save(&self, text: &str, calibration: &str) -> (String, Option<String>) {
         (
-            wheel::save_keys(&self.form.save(text), &self.wheel.setup),
-            self.wheel.save(wheel_ini),
+            self.wheel.setup.to_launcher_cfg(&self.form.save(text)),
+            self.wheel.calibration_text(calibration),
         )
     }
 
@@ -556,12 +555,8 @@ fn controls_tab(ui: &mut egui::Ui, state: &mut State) {
     );
 }
 
-/// The SDK's Wheel tab; its wheel support, steering lock and strength
-/// rows are the `wheel`, `wheel_lock` and `wheel_ffb` options' controls.
+/// The SDK's Wheel tab (it marks the `wheel_*` options it shows).
 fn wheel_tab(ui: &mut egui::Ui, state: &mut State, devices: &mut dyn WheelDevices) {
-    for key in ["wheel", "wheel_lock", "wheel_ffb"] {
-        mark_rendered(ui.ctx(), config::option(key).key);
-    }
     state.wheel.draw(ui, devices);
 }
 
@@ -569,7 +564,7 @@ fn wheel_tab(ui: &mut egui::Ui, state: &mut State, devices: &mut dyn WheelDevice
 mod tests {
     use super::*;
     use rea_launcher::cfg::spec;
-    use rea_launcher::wheel::dinput::{Mode, Setup};
+    use rea_launcher::wheel::dinput::{Mode, Profile, Setup};
     use rea_launcher::wheel::rig::{Device, Fixed};
     use rea_launcher::wheel::{DeviceId, DeviceState, Kind, SteeringLock};
     use rea_launcher_ui::egui::accesskit::Role;
@@ -591,19 +586,19 @@ mod tests {
     }
 
     fn open(text: &str, linux: bool) -> Harness<'static, App> {
-        open_with(text, "", linux, Vec::new())
+        open_with(text, None, linux, Vec::new())
     }
 
-    /// The window over `launcher.cfg`'s and `rea_wheel.ini`'s texts, with
+    /// The window over `launcher.cfg`'s and the calibration's texts, with
     /// these controllers attached.
     fn open_with(
         text: &str,
-        wheel_ini: &str,
+        calibration: Option<&str>,
         linux: bool,
         devices: Vec<Device>,
     ) -> Harness<'static, App> {
         let app = App {
-            state: State::new(text, wheel_ini, linux, SCREEN, 0),
+            state: State::new(text, calibration, linux, SCREEN, 0),
             devices: Fixed {
                 devices,
                 ..Fixed::default()
@@ -986,18 +981,17 @@ mod tests {
         assert!(ui.state().cancel);
     }
 
-    /// The window's saved files: `launcher.cfg`'s settings and
-    /// `rea_wheel.ini`'s setup.
-    fn saved_both(ui: &Harness<'static, App>) -> (Settings, Setup, String) {
-        let (cfg, ini) = ui.state().state.save("", "");
+    /// The wheel setup the window saves in `launcher.cfg`.
+    fn saved_wheel(ui: &Harness<'static, App>) -> Setup {
+        let (cfg, _) = ui.state().state.save("", "");
         let (s, warnings) = Settings::parse_file(&cfg);
         assert!(warnings.is_empty(), "{warnings:?}");
-        (s, Setup::from_cfg(&ini), ini)
+        s.wheel.setup
     }
 
     #[test]
-    fn the_wheel_tab_saves_every_control() {
-        let mut ui = open_with("", "", false, vec![csl()]);
+    fn the_wheel_tab_saves_every_control_in_launcher_cfg() {
+        let mut ui = open_with("", None, false, vec![csl()]);
         tab(&mut ui, "Wheel");
         // Wheel support's On is the first "On", at the top of the tab.
         ui.get_all_by_role_and_label(Role::RadioButton, "On")
@@ -1005,55 +999,70 @@ mod tests {
             .unwrap()
             .click();
         ui.run();
+        assert_eq!(saved_wheel(&ui).mode, Mode::On);
         // The tab's own rows (SDK labels).
-        let clicks: [(Role, &str); 7] = [
-            (Role::RadioButton, "540°"),
+        let clicks: [(Role, &str); 6] = [
+            (Role::RadioButton, "900°"),
             (Role::RadioButton, "4 %"),
             (Role::RadioButton, "Mild"),
             (Role::Switch, "Invert brake"),
             (Role::RadioButton, "75 %"),
-            (Role::Switch, "Reverse the force"),
-            (Role::Switch, "Keep a log for bug reports (rea_wheel.log)"),
+            (Role::Switch, "Reverse force feedback"),
         ];
         for (role, label) in clicks {
             press(&mut ui, role, label);
         }
-        let (s, setup, ini) = saved_both(&ui);
-        assert_eq!(s.wheel_lock, Some(SteeringLock::Degrees(540)));
-        assert_eq!(s.wheel_ffb, Some(75));
-        assert_eq!(setup.wheel.lock, SteeringLock::Degrees(540));
-        assert_eq!((setup.deadzone, setup.linearity), (4, 40));
-        assert!(setup.wheel.invert_brake && setup.ffb.invert && setup.log);
-        assert_eq!(setup.ffb.strength, 75);
-        assert!(ini.starts_with(&format!("# {}\n", wheel::HEADER)), "{ini}");
-        let (s, setup, _) = saved_both(&ui);
-        assert_eq!((s.wheel, setup.mode), (Some(Mode::On), Mode::On));
+        let w = saved_wheel(&ui);
+        assert_eq!(w.wheel.lock, SteeringLock::Degrees(900));
+        assert_eq!((w.deadzone, w.linearity, w.ffb.strength), (4, 40, 75));
+        assert!(w.wheel.invert_brake && w.ffb.invert);
         ui.get_by_role_and_label(Role::RadioGroup, "Wheel support")
             .scroll_to_me();
         ui.run();
+        ui.get_all_by_role_and_label(Role::RadioButton, "FANATEC CSL DD")
+            .next()
+            .unwrap()
+            .click();
+        ui.run();
+        assert_eq!(saved_wheel(&ui).wheel.device, "{csl}");
         // Its Off is the first (the strength row has one too).
         ui.get_all_by_role_and_label(Role::RadioButton, "Off")
             .next()
             .unwrap()
             .click();
         ui.run();
-        let (s, setup, _) = saved_both(&ui);
-        assert_eq!((s.wheel, setup.mode), (Some(Mode::Off), Mode::Off));
+        assert_eq!(saved_wheel(&ui).mode, Mode::Off);
+        assert_eq!(ui.state().state.save("", "").1, None, "no calibration yet");
     }
 
     #[test]
-    fn launcher_cfg_wins_over_the_wheel_file_and_other_lines_stay() {
-        let ini = "# mine\nmode = on\nlock = 900\ndeadzone = 6\nwheel_vid = 0x0eb7\n";
-        let ui = open_with("wheel = off\nwheel_lock = 270\n", ini, false, Vec::new());
+    fn the_tab_opens_on_launcher_cfg_and_keeps_the_calibration_file() {
+        let csl = csl();
+        let calibration = Profile::guess(csl.id, &csl.initial, None).to_cfg("# mine\n", "");
+        let calibration = calibration.as_str();
+        let ui = open_with(
+            "wheel = off\nwheel_lock = 270\n",
+            Some(calibration),
+            false,
+            Vec::new(),
+        );
         let setup = &ui.state().state.wheel.setup;
         assert_eq!(setup.mode, Mode::Off);
         assert_eq!(setup.wheel.lock, SteeringLock::Degrees(270));
-        assert_eq!(setup.deadzone, 6);
-        let (_, text) = ui.state().state.save("", ini);
-        assert!(text.starts_with("# mine\n") && text.contains("wheel_vid = 0x0eb7"));
+        assert!(ui.state().state.wheel.profile.is_some());
+        let (cfg, text) = ui.state().state.save("vsync = on\n", calibration);
         assert!(
-            text.contains("mode = off") && text.contains("lock = 270"),
-            "{text}"
+            cfg.contains("vsync = on") && cfg.contains("wheel = off"),
+            "{cfg}"
+        );
+        let text = text.expect("the calibration is saved again");
+        assert!(text.starts_with("# mine\n"), "{text}");
+        assert_eq!(Profile::from_cfg(&text), Profile::from_cfg(calibration));
+        let ui = open("", false);
+        assert_eq!(
+            ui.state().state.wheel.setup.wheel.lock,
+            SteeringLock::Degrees(540),
+            "the rally default"
         );
     }
 
@@ -1080,7 +1089,7 @@ mod tests {
     /// Keyboard and pad focus walk the Wheel tab's controls in order.
     #[test]
     fn the_keyboard_reaches_the_wheel_tabs_controls_in_order() {
-        let mut ui = open_with("", "", false, vec![csl()]);
+        let mut ui = open_with("", None, false, vec![csl()]);
         tab(&mut ui, "Wheel");
         let mut seen: Vec<String> = Vec::new();
         for _ in 0..24 {
@@ -1108,7 +1117,7 @@ mod tests {
         let game = temp("calibrating");
         std::fs::write(game.join("Rally_3PC.exe"), b"x").unwrap();
         let text = format!("game = {}\n", game.display());
-        let mut ui = open_with(&text, "", false, vec![csl()]);
+        let mut ui = open_with(&text, None, false, vec![csl()]);
         tab(&mut ui, "Wheel");
         press(&mut ui, Role::Button, "Calibrate pedals");
         assert!(ui.state().state.wheel.calibrating());

@@ -11,7 +11,7 @@ components:
   profile controller set to the pad when new: on
 patch sets: DRM-free xdelta (efigs, then polish) only for a protected official 1.1 Rally_3PC.exe
 WINEDLLOVERRIDES: (not set: Windows)
-wheel: support rea_wheel.ini's, lock rea_wheel.ini's, force feedback rea_wheel.ini's
+wheel: wheel=auto wheel_device= wheel_pedals= wheel_lock=540 wheel_deadzone=0 wheel_curve=0 wheel_invert_throttle=off wheel_invert_brake=off wheel_ffb=50 wheel_ffb_invert=off wheel_log=off
 game arguments: (none)
 cmr3-play (Linux): scaler linear, postfx off
 ini log: WIDTH=640, HEIGHT=480, DISPLAY_MODE=0
@@ -71,7 +71,7 @@ components:
 patch sets: DRM-free xdelta (efigs, then polish) only for a protected official 1.1 Rally_3PC.exe
 WINEDLLOVERRIDES: dsound,dinput8,msvcp140,msvcp140_atomic_wait,concrt140,vcruntime140,d3d9=n,b;winedbg=d
 app DLL overrides (Rally_3PC.exe, native,builtin): dsound, dinput8, msvcp140, msvcp140_atomic_wait, concrt140, vcruntime140, d3d9; removed: none
-wheel: support rea_wheel.ini's, lock rea_wheel.ini's, force feedback rea_wheel.ini's
+wheel: wheel=auto wheel_device= wheel_pedals= wheel_lock=540 wheel_deadzone=0 wheel_curve=0 wheel_invert_throttle=off wheel_invert_brake=off wheel_ffb=50 wheel_ffb_invert=off wheel_log=off
 game arguments: (none)
 cmr3-play (Linux): scaler linear, postfx off
 ini log: WIDTH=640, HEIGHT=480, DISPLAY_MODE=0
