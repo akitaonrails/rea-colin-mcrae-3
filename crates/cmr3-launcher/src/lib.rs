@@ -18,6 +18,7 @@ pub mod audience;
 pub mod check;
 pub mod components;
 pub mod config;
+pub mod controllers;
 pub mod edition;
 pub mod form;
 pub mod instance;

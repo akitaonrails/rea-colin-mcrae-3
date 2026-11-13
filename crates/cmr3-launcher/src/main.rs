@@ -33,11 +33,11 @@ mod app {
     use cmr3_launcher::check;
     use cmr3_launcher::components::{self, Installed};
     use cmr3_launcher::config::{self, Settings};
+    use cmr3_launcher::controllers;
     use cmr3_launcher::edition;
     use cmr3_launcher::form;
     use cmr3_launcher::instance;
     use cmr3_launcher::plan::{self, Env};
-    use cmr3_launcher::profile;
     use cmr3_launcher::runtime;
     use cmr3_launcher::source::{self, Found};
     use cmr3_launcher::unpack;
@@ -429,14 +429,19 @@ mod app {
                 false
             }
         };
-        // A new profile has no controller chosen: pick Xidi's, as the
-        // player would in Options → Controls (see `profile`).
-        if xidi && plan.choose_controller {
-            match profile::choose_first_controller_in(&rt_profile) {
-                Ok(true) => log_line("profile: controller set to the gamepad"),
-                Ok(false) => {}
-                Err(e) => log_line(&format!("warning: profile controller: {e}")),
+        // The profile's controller records for the devices the game will
+        // find: a new profile gets Xidi's pad, as the player would pick it
+        // in Options → Controls; records the player set are kept, beside
+        // the profile too (`controllers`).
+        let stash = saves.join(controllers::STASH_FILE);
+        let seats = controllers::lineup(false, xidi && plan.choose_controller);
+        match controllers::prepare_files(&rt_profile, &stash, &seats) {
+            Ok(done) => {
+                for line in done {
+                    log_line(&format!("profile: {line}"));
+                }
             }
+            Err(e) => log_line(&format!("warning: profile controllers: {e}")),
         }
         let dxvk_on = plan.dxvk;
         match components::install_dxvk(&game, &rt, &bundle, dxvk_on) {
@@ -590,6 +595,11 @@ mod app {
             ));
         }
         if rt_profile.is_file() {
+            match controllers::keep_files(&rt_profile, &stash) {
+                Ok(true) => log_line("profile: controller records kept"),
+                Ok(false) => {}
+                Err(e) => log_line(&format!("warning: controller records not kept: {e}")),
+            }
             match mirror.after() {
                 Ok(copied) if !copied.is_empty() => log_line("profile: saved"),
                 Ok(_) => {}
