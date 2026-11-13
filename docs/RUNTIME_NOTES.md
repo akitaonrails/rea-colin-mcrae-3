@@ -563,3 +563,32 @@ SDK v0.5.0's installer support, on the owner's real repack (read-only at
 - The installer folder's files kept their dates and sizes.
 - **Pending:** the first-Play unpack with the progress window on Windows
   and in the AppImage, then a race from the unpacked game.
+
+## 2026-11-13 — wheels: the in-game layer, headless (gaming box)
+
+The SDK's DirectInput layer (`rea_dinput.dll`, feat/dinput-wheel) with
+this launcher, against the owner's install (DRM-free 1.1 variant B,
+read-only), in a private prefix, home and runtime under
+`.work/wheel-e2e/` (Wine 11.21, gamescope `--backend headless`, private
+PipeWire). A supervisor (`.work/wheel-e2e/e2e_wheel.py`, not shipped)
+starts every process it stops, finds the game with `pgrep -x` and its
+working folder, reads its memory at the addresses of the SDK's
+`seed-cmr3.md` §5, and presses Enter through the earlier test helper
+`.work/realgame/tools/sendkeys.exe`. The starting profile is one the
+game wrote (`.work/profiles-v011/fresh.CMR3`, never committed). The
+layer's test-only `fake = wheel` (a stand-in Fanatec CSL DD) was added
+by hand to the private runtime's `rea_wheel.ini` for direct game starts
+only, and taken out again; the launcher never writes it.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| The pad seed is byte for byte the game's own Xidi choice | VERIFIED | `controllers::matches_the_games_own_choice` with `fresh.CMR3` and `xidi.CMR3` (the game's own profiles): only vibration, the bindings and the game's counter differ; calibrations stay zero |
+| Launcher: layer, settings, seeding | VERIFIED | launcher.log: `wheel: the game sees the virtual wheel (wheel support on)`, `slot 2: the wheel (seeded, player 1)`, `slot 3: the pad (seeded, no player)`, `controller records kept`; runtime holds `rea_dinput.asi` and `rea_wheel.ini` (`mode = on`, `lock = 540`, `log = on`) |
+| The game lists and binds the virtual wheel | VERIFIED | `rea_wheel.log`: Xidi's pad (0000:0000, listed even with no pad attached) and the fake wheel found, the fake hidden behind the virtual wheel; the game's `CreateDevice` of the virtual wheel, `SetDataFormat` (`c_dfDIJoystick2`: X, Y, Z, Rz, the hat, 32 buttons), `SetCooperativeLevel 0x5` (exclusive, foreground), `DIPROP_RANGE` by object ID on X, Y, Z and Rz, `Acquire` — all `0x0` |
+| The layer chains in front of Xidi | VERIFIED | loader trace: `DINPUT8.dll` (Xidi), `Xidi.32.dll`, `rea_dinput.asi` all native from the runtime; Xidi's pad still listed |
+| The game keeps the seeded wheel record | VERIFIED | through `linux/cmr3-play --play`, wheel support on, from the fresh profile: after Enter the game loads the profile, and in memory record 2 (0x67CADC) is the seed (`ffb 0x90, owner 0, PID 0x5245, VID 0x1209`, functions 8/9 = 34, 22/23 = 36/37, slot 5 `7FFF,0,0,-7FFF,7FFF,0,100,0`, slots 7 and 8 `0,0,0,0,FFFF,0,100,0`); player 1 → device 2 (0x55D300); the game's live bindings for device 2 are steering 34, throttle 36, brake 37 (0x6CC238); the pad's record 3 belongs to nobody (`owner -1`, Xidi's ids). Stable over three menu steps |
+| A record with another device's ids is wiped on load | VERIFIED (the §5 negative control) | the pad's record in slot 2 with the virtual wheel there: in memory `ffb 0x0F, owner -1, PID/VID -1`, and the game binds its own wheel defaults (device 2: steering 34 = X, both pedals 35 = the combined Y) |
+| **Importing the layer into Rally_3PC.exe** | **REFUSED BY SILENTPATCH** | with `rea_dinput.dll` in the executable's imports SilentPatch shows "An unsupported game version was detected!" (its window was the only visible one), and after Enter the game dies on a null Direct3D device (`page fault on read access to 00000000 at 0050B8A5`, `IDirect3DDevice9::BeginScene`), the layer on **or off**; the clean executable with the same layer as `rea_dinput.asi` gets through the title and menus. Hence the ASI plugin (`layer`) |
+| Force feedback effects, autocentre | NOT REACHED HEADLESS | the game makes its effects in a stage; Enter reaches the menus only (arrow keys don't move them, 2026-11-02) |
+| Real wheels | NEEDS HARDWARE | force direction and feel, exclusive access with each vendor's driver, Wine's hidraw/SDL wheel backends, separate pedals, Xbox-mode wheels, replugging mid-stage: phase 3 of the wheel plan (Fanatec on Windows and Wine, a Logitech, a Thrustmaster) |
+| Windows | NOT RUN | the ASI loader is the same `dsound.dll` on Windows; check the layer loads there with the hardware pass |

@@ -225,6 +225,54 @@ arrow keys and Enter.
   (then bind the pedals to the left stick's Y axis in the game's control
   setup) or **Off**.
 
+## Wheels
+
+Plug in your wheel and play: with **Wheel support** on Auto (the
+default) the game sees one wheel, "rea wheel", made from your wheel and,
+when they are a separate USB device, your pedals. The launcher sets the
+game's controls for it, so you don't bind anything in Options → Controls:
+
+| On the wheel | In a race |
+| --- | --- |
+| Turning it | Steer, at the steering lock you picked |
+| Throttle and brake pedals | Throttle and brake, each on its own axis (left-foot braking works) |
+| Its buttons | The game's defaults for a wheel (buttons 1 to 10); rebind them in the game if you like |
+
+Your pad keeps working through Xidi as before. The game lets one
+controller drive player 1, so the wheel drives and the pad waits (choose
+it in Options → Controls, or turn Wheel support off).
+
+**The Wheel tab** in the settings window: which wheel and pedals (picked
+for you, or by hand when you have several), a live check of what the
+game will get, the steering lock, deadzone and curve, pedal inversion
+and a **Calibrate pedals** wizard, force-feedback strength, direction
+and a test. Every setting is also a `launcher.cfg` key and a flag
+(`wheel_*` in [Options](#options)); the pedal calibration is kept in
+`rea_wheel.ini` next to `launcher.cfg`.
+
+- **Steering lock:** set it in the Wheel tab (540° by default, about a
+  rally car's) and leave your wheel's own software at its full rotation
+  (900° or 1080°). The game reads 256 steps of steering whatever the
+  lock; a narrower lock makes each step a smaller turn of the wheel.
+- **Force feedback:** the game's own effects go to your wheel at the
+  Wheel tab's strength. Start lower on a direct-drive base. If the wheel
+  pushes away from the centre, turn on **Reverse force feedback**.
+- **Fanatec pedals on their own USB** (and other separate pedal boxes):
+  pick them in the Wheel tab, or run **Calibrate pedals** once; they are
+  merged into the one wheel the game sees. Pedals plugged into the base
+  need nothing.
+- **Wheels with an Xbox mode** (Logitech G920/G923 Xbox, Thrustmaster
+  T248X and others) can show up as a pad: switch the wheel to its PC
+  mode, or set the Gamepad option to **Off** so Xidi doesn't take it.
+- **Your in-game tweaks stay:** the game keeps one record of controls per
+  controller slot, and the wheel and the pad trade slots when Wheel
+  support changes. The launcher keeps each one's record in
+  `CMR3.controllers` next to your profile and puts it back.
+- **Limits:** one controller per player (the game's rule); the wheel is
+  chosen as the game starts (plug it in first; replugging the same wheel
+  mid-stage is fine); force feedback has been checked without a real
+  wheel only (see [docs/RUNTIME_NOTES.md](docs/RUNTIME_NOTES.md)).
+
 ## Options
 
 Every option has the same name in the window, in `launcher.cfg` (with
@@ -357,6 +405,7 @@ high-performance GPU (the registry value in the table).
 - Only the official 1.1 executables (and the DRM-free ones) are
   supported; v1.0 needs the official patch first.
 - Post-processing is Linux only (`cmr3-play` with DXVK).
+- Wheels were verified headless with the wheel layer's stand-in wheel; real wheels, the force-feedback feel and Wine's wheel backends still need a hardware pass.
 - Not yet tested on native Windows, a Steam Deck, or Proton without
   `cmr3-play`; the full list of what was and wasn't checked is in
   [docs/RUNTIME_NOTES.md](docs/RUNTIME_NOTES.md#platform-matrix).

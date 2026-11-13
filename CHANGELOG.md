@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+### Added
+
+- Wheels: plug in a wheel and play. The SDK's in-game DirectInput layer
+  (`rea_dinput.dll`, in `components/`) shows the game one wheel, "rea
+  wheel", made from your wheel and, on their own USB, your pedals, with
+  a steering lock, deadzone and curve, separate throttle and brake axes,
+  and the game's force feedback at your strength. The launcher puts it in
+  its copy of the game as `rea_dinput.asi`, which SilentPatch's ASI loader
+  loads; the executable is left as it is (SilentPatch refuses a changed
+  one). It sits in front of Xidi, which keeps serving pads.
+- A **Wheel** tab in the settings window: wheel support (Auto, On, Off),
+  which wheel and pedals, a live check of what the game gets, steering
+  lock (540° by default), deadzone, curve, pedal inversion and a pedal
+  calibration wizard, force-feedback strength, direction and a test.
+  Every setting is also a `launcher.cfg` key and a flag (`--wheel`,
+  `--wheel-lock`, `--wheel-ffb` and the other `wheel_*` options); the
+  calibration is kept in `rea_wheel.ini` next to `launcher.cfg`.
+- The game's controls are set for the wheel when the game will see it:
+  steering, separate pedals with a linear calibration, force feedback on.
+  The wheel's and the pad's records trade slots in the profile when
+  Wheel support changes; the launcher keeps each one (your in-game
+  tweaks included) in `CMR3.controllers` next to the profile and puts it
+  back.
+- `--check` reports the wheel layer (optional).
+
+### Changed
+
+- Updated rea-launcher-sdk to v0.8.2, and to its wheel branch until
+  v0.9.0 is released.
+
 ## [0.4.0] - 2026-11-09
 
 ### Added

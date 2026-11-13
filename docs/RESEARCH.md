@@ -20,6 +20,7 @@ longer history (what was tried and why) is in `docs/PLAN.md` and
 | AuToMaNiAk005's widescreen hex patches | widescreen before SilentPatch | none stated | no | not used (superseded by SilentPatch) |
 | dgVoodoo2 | D3D9 → D3D11 for broken drivers | freeware, no redistribution grant | yes | not used (native d3d9 on Windows, DXVK on Linux) |
 | [innoextract](https://constexpr.org/innoextract/) 1.9 (Daniel Scharrer) | unpacks Inno Setup installers without running them | zlib (links Boost, liblzma, libstdc++) | yes (1.9, 2020; packages still maintained) | **bundle** the official Windows build (`components/`), through the SDK's `sdk/packaging/innoextract.sh`; unpacks the Magipack repack (below) |
+| Wheels: community fixes for CMR3 | — | — | — | **none exists** (checked 2026-11-13: PCGamingWiki, GitHub, mod sites). PCGW's "Force Feedback Restore Module" is a Xidi ini that gives pads rumble only. Wheels go through the SDK's own in-game DirectInput layer (`rea-launcher-dinput`), below |
 | PCGamingWiki, ProtonDB, WineHQ AppDB 7563 | known issues, Linux reports | — | — | read; our own Linux findings drafted in `docs/CONTRIBUTIONS.md` |
 
 ## Owner decisions
@@ -66,3 +67,51 @@ both are dropped after the unpack. No two components write the same file
 installed copy (`…/games/Colin-McRae-Rally-3`): identical, byte for byte,
 except the launcher's `.rea-unpacked` marker. Details in
 `docs/RUNTIME_NOTES.md`.
+
+## Wheels (2026-11-13)
+
+No community wheel fix exists for CMR3 (above). What the game does, read
+from Rally_3PC.exe 1.1 by static analysis (the SDK's
+`.work/cmr-wheels-plan.md` and `seed-cmr3.md`; V = seen in the binary):
+
+- It opens up to 16 controllers with `EnumDevices(GAMECTRL)`, forces
+  every axis to `DIPROP_RANGE` 0..255 (256 steering steps) and gives one
+  controller to each player, so a wheel and a separate pedal box can't
+  drive together. No steering lock setting. Force feedback is native
+  (spring, damper, a 10 Hz square, constant force), updated every frame
+  with `DIEP_NORESTART`. (V)
+- **The profile's input records** (save 0x4142B0, load 0x4142F0): 18
+  records of 0x24E0 bytes from 0x191D4 (0 keyboard, 1 mouse, then the
+  controllers in `EnumDevices` order). On load a controller record is
+  kept only when the device in that slot has its USB ids (+0x78 PID,
+  +0x7C VID, from `guidProduct`); any other is wiped (byte 0 0x0F,
+  owner, bindings and ids −1, calibrations 0). +0x04 is the owning
+  player (the launcher earlier called it "device index"); a later
+  record owned by the same player takes the player over. (V)
+- **Control codes:** buttons first, then two per hat, then the axes in
+  `EnumObjects` order: the virtual wheel's X = 34, Y = 35, Z = 36,
+  Rz = 37. (V)
+- **Calibration** (0x50A450): a wheel-type device (`DI8DEVTYPE_DRIVING`)
+  with analogue steering reads calibration slot 5 linearly; with throttle
+  and brake on different codes the pedals read slots 7 and 8 (mode 6).
+  The default ±8000 deadzone (about 24 %) is the game's for anything
+  else. (V)
+- **Force-feedback byte** +0x00: bit 4 on, bits 5–7 the level, gain =
+  level × 20 %; the launcher seeds 0x90 (level 4) and the layer applies
+  the player's strength. Whether the menu offers exactly 5 levels is
+  unverified.
+
+**The seed** (`profile::Controller::Wheel`): owner 0, steering functions
+8–9 on X (34), throttle (22) on Z (36), brake (23) on Rz (37), every
+other function the game's default, slot 5 `7FFF,0,0,-7FFF,7FFF,0,100,0`,
+slots 7 and 8 `0,0,0,0,FFFF,0,100,0`, object calibrations zero (the game
+applies any non-zero one to object 0, a bug at 0x4144D6). The pad seed
+is unchanged; checked against the game's own choice of the Xidi
+controller in a profile it wrote (`controllers::matches_the_games_own_choice`).
+
+**Slots:** the virtual wheel is listed first, so it takes slot 2 and
+Xidi's pad slot 3; without it the pad has slot 2. Because a load wipes a
+mismatched record, the launcher keeps each controller's record in a
+side file (`CMR3.controllers`) and puts the right one in each slot
+before every start; the pad behind the wheel gets owner −1 so it
+doesn't take player 1 over.
