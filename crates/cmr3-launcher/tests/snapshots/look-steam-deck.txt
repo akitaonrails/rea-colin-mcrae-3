@@ -12,6 +12,7 @@ components:
 patch sets: DRM-free xdelta (efigs, then polish) only for a protected official 1.1 Rally_3PC.exe
 WINEDLLOVERRIDES: dsound,dinput8,msvcp140,msvcp140_atomic_wait,concrt140,vcruntime140,d3d9=n,b;winedbg=d
 app DLL overrides (Rally_3PC.exe, native,builtin): dsound, dinput8, msvcp140, msvcp140_atomic_wait, concrt140, vcruntime140, d3d9; removed: none
+wheel: support rea_wheel.ini's, lock rea_wheel.ini's, force feedback rea_wheel.ini's
 game arguments: (none)
 cmr3-play (Linux): scaler linear, postfx off
 ini log: WIDTH=1280, HEIGHT=800, DISPLAY_MODE=0, VSYNC=1, ANISOTROPIC=4, FSAA=0, EXTERIOR_FOV=75, INTERIOR_FOV=75

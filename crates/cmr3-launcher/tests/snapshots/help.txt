@@ -19,6 +19,9 @@ CMR3Launcher [options]
   --dxvk on|off                                  Vulkan (DXVK)
   --scaler nearest|pixel|fsr|linear              Upscaling (Linux helper)
   --postfx off|color|cinematic                   Post-processing (Linux helper)
+  --wheel auto|on|off                            Wheel support
+  --wheel-lock 180|270|360|540|900|full          Steering lock
+  --wheel-ffb <0-100>                            Force feedback
 
 These override launcher.cfg for one run (only --game is remembered);
 every one is also a launcher.cfg key (--hd-ui is hd_ui) and a control

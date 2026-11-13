@@ -30,6 +30,7 @@ pub mod source;
 pub mod sp;
 #[cfg(windows)]
 pub mod unpack;
+pub mod wheel;
 #[cfg(any(windows, test))]
 pub mod window;
 pub mod xidi;

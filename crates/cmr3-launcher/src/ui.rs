@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 use cmr3_launcher::instance;
 use cmr3_launcher::look::{self, PALETTE};
+use cmr3_launcher::wheel;
 use cmr3_launcher::window::{self, State};
 use rea_launcher_ui::eframe;
 use rea_launcher_ui::egui::{self, Key, TextureHandle};
@@ -14,6 +15,7 @@ use rea_launcher_ui::pad::{self, Nav, PadNav};
 use rea_launcher_ui::theme;
 use rea_launcher_ui::widgets;
 use rea_launcher_ui::window::WindowFit;
+use rea_launcher_win32::dinput::DirectInput;
 use rea_launcher_win32::{dialog, display, wine, xinput};
 
 use rea_launcher::installer::{Installer, UnpackJob, UnpackOutcome};
@@ -29,8 +31,9 @@ pub enum Outcome {
 }
 
 /// Shows the window over `settings_path` (its text, or the template for a
-/// first run). `linux` adds the Linux-only rows. Errors when no window
-/// can be made (no OpenGL); the caller then goes on without it.
+/// first run) and the `rea_wheel.ini` beside it. `linux` adds the
+/// Linux-only rows. Errors when no window can be made (no OpenGL); the
+/// caller then goes on without it.
 pub fn show(settings_path: &Path, text: &str, linux: bool) -> Result<Outcome, String> {
     let mut outcome = Outcome::Closed;
     // Under Wine the window is created at its final size, with Wine's own
@@ -44,13 +47,16 @@ pub fn show(settings_path: &Path, text: &str, linux: bool) -> Result<Outcome, St
     let options = fit.native_options(instance::WINDOW_TITLE);
     let path = settings_path.to_path_buf();
     let text = text.to_string();
+    let wheel_path = settings_path.with_file_name(wheel::FILE);
+    let wheel_ini = std::fs::read_to_string(&wheel_path).unwrap_or_default();
     eframe::run_native(
         instance::WINDOW_TITLE,
         options,
         Box::new(|cc| {
             theme::install_with(&cc.egui_ctx, &PALETTE, &look::METRICS);
             Ok(Box::new(Window {
-                state: State::new(&text, linux, screen, xinput::connected()),
+                state: State::new(&text, &wheel_ini, linux, screen, xinput::connected()),
+                devices: DirectInput::start(),
                 portrait: widgets::load_jpeg(
                     &cc.egui_ctx,
                     "portrait",
@@ -58,6 +64,8 @@ pub fn show(settings_path: &Path, text: &str, linux: bool) -> Result<Outcome, St
                 ),
                 path,
                 text,
+                wheel_path,
+                wheel_ini,
                 fit,
                 pad: PadNav::default(),
                 pending: Vec::new(),
@@ -98,6 +106,11 @@ struct Window<'a> {
     portrait: Option<TextureHandle>,
     path: PathBuf,
     text: String,
+    /// `rea_wheel.ini` beside `launcher.cfg`, and its text when opened.
+    wheel_path: PathBuf,
+    wheel_ini: String,
+    /// The controllers the Wheel tab shows (read only while it is open).
+    devices: DirectInput,
     fit: WindowFit,
     /// Gamepad edges, and the launcher's own steps (Play, tabs) waiting
     /// for this frame.
@@ -112,8 +125,14 @@ impl Window<'_> {
             self.state.tab = window::Tab::Play;
             return;
         }
-        let saved = self.state.form.save(&self.text);
-        match rea_launcher::fsx::write_atomic(&self.path, saved) {
+        if !self.state.can_play() {
+            self.state.tab = window::Tab::Wheel;
+            return;
+        }
+        let (saved, wheel_ini) = self.state.save(&self.text, &self.wheel_ini);
+        let written = rea_launcher::fsx::write_atomic(&self.wheel_path, wheel_ini)
+            .and_then(|()| rea_launcher::fsx::write_atomic(&self.path, saved));
+        match written {
             Ok(()) => {
                 *self.outcome = Outcome::Play;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -136,7 +155,14 @@ impl eframe::App for Window<'_> {
         let ctx = ui.ctx().clone();
         self.fit.first_frame(&ctx);
         let mut pick = |title: &str| dialog::pick_folder(title);
-        if window::draw(ui, &mut self.state, self.portrait.as_ref(), &mut pick) {
+        let devices = &mut self.devices;
+        if window::draw(
+            ui,
+            &mut self.state,
+            self.portrait.as_ref(),
+            devices,
+            &mut pick,
+        ) {
             self.play(&ctx);
         }
         if ctx.input(|i| i.key_pressed(Key::Enter)) && !ctx.egui_wants_keyboard_input() {
